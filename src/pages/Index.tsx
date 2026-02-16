@@ -7,12 +7,14 @@ import {
   Download,
   BarChart2,
   Trophy,
+  GitCompareArrows,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanel } from "@/components/StatsPanel";
 import { DeputyCard } from "@/components/DeputyCard";
 import { RankingTable } from "@/components/RankingTable";
 import { PartyChart } from "@/components/PartyChart";
+import { ComparisonView } from "@/components/ComparisonView";
 import { ClassificationFilter } from "@/components/ClassificationFilter";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -111,6 +113,9 @@ const Index = () => {
               <TabsTrigger value="partidos" className="gap-2">
                 <BarChart2 size={14} /> Partidos
               </TabsTrigger>
+              <TabsTrigger value="comparativo" className="gap-2">
+                <GitCompareArrows size={14} /> Comparativo
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="deputados" className="space-y-4 mt-4">
@@ -165,6 +170,10 @@ const Index = () => {
 
             <TabsContent value="partidos" className="mt-4">
               <PartyChart analises={analises} />
+            </TabsContent>
+
+            <TabsContent value="comparativo" className="mt-4">
+              <ComparisonView analises={analises} onDeputyClick={(id) => navigate(`/deputado/${id}`)} />
             </TabsContent>
           </Tabs>
         </section>
