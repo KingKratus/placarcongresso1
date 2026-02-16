@@ -7,10 +7,7 @@ const corsHeaders = {
 };
 
 const BULK_BASE = "https://dadosabertos.camara.leg.br/arquivos";
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const API_BASE = "https://dadosabertos.camara.leg.br/api/v2";
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -34,10 +31,7 @@ Deno.serve(async (req) => {
 
     console.log(`Starting sync for year ${year} using bulk data files`);
 
-    // ──────────────────────────────────────────────
-    // STEP 1: Fetch bulk orientações file
-    // This is a static file, always available (~3-5MB)
-    // ──────────────────────────────────────────────
+    // ── STEP 1: Fetch bulk orientações ──
     const orientUrl = `${BULK_BASE}/votacoesOrientacoes/json/votacoesOrientacoes-${year}.json`;
     console.log(`Fetching orientações: ${orientUrl}`);
     const orientRes = await fetch(orientUrl);
@@ -49,7 +43,6 @@ Deno.serve(async (req) => {
     console.log(`Loaded ${allOrientacoes.length} orientações`);
 
     // Extract government orientations per votação
-    // siglaBancada = "Governo" or "Gov." indicates government leader
     const govOrientByVotacao: Record<string, string> = {};
     const govSiglas = ["governo", "gov.", "líder do governo", "lidgov"];
 
@@ -70,7 +63,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ analyzed: 0, year, message: "Nenhuma votação com orientação do governo encontrada" });
     }
 
-    // Cache orientações in DB (batch upsert)
+    // Cache orientações in DB
     const orientRecords = allOrientacoes.map((o: any) => ({
       id_votacao: String(o.idVotacao),
       sigla_orgao_politico: o.siglaBancada || "",
@@ -82,12 +75,8 @@ Deno.serve(async (req) => {
         { onConflict: "id_votacao,sigla_orgao_politico" }
       );
     }
-    console.log(`Cached ${orientRecords.length} orientações in DB`);
 
-    // ──────────────────────────────────────────────
-    // STEP 2: Fetch bulk votos file
-    // This is a large static file (~50-100MB) with all individual votes
-    // ──────────────────────────────────────────────
+    // ── STEP 2: Fetch bulk votos ──
     const votosUrl = `${BULK_BASE}/votacoesVotos/json/votacoesVotos-${year}.json`;
     console.log(`Fetching votos: ${votosUrl}`);
     const votosRes = await fetch(votosUrl);
@@ -98,9 +87,7 @@ Deno.serve(async (req) => {
     const allVotos = votosJson.dados || [];
     console.log(`Loaded ${allVotos.length} individual votes`);
 
-    // ──────────────────────────────────────────────
-    // STEP 3: Compute alignment scores per deputy
-    // ──────────────────────────────────────────────
+    // ── STEP 3: Compute alignment + store individual votes ──
     const deputyScores: Record<number, {
       aligned: number;
       relevant: number;
@@ -109,6 +96,9 @@ Deno.serve(async (req) => {
       uf: string;
       foto: string;
     }> = {};
+
+    // Collect individual vote records for detail pages
+    const votoRecords: any[] = [];
 
     for (const voto of allVotos) {
       const votacaoId = String(voto.idVotacao);
@@ -130,8 +120,16 @@ Deno.serve(async (req) => {
         };
       }
 
-      // Bulk file uses "voto" field, not "tipoVoto"
       const depVoto = normalizeVoto(voto.voto || voto.tipoVoto);
+
+      // Store all votes (including abstentions) for detail page
+      votoRecords.push({
+        deputado_id: depId,
+        id_votacao: votacaoId,
+        voto: voto.voto || voto.tipoVoto || "",
+        ano: year,
+      });
+
       if (depVoto === "abstencao" || depVoto === "ausente" || depVoto === "obstrucao" || depVoto === "") {
         continue;
       }
@@ -143,13 +141,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Computed scores for ${Object.keys(deputyScores).length} deputies`);
+    console.log(`Computed scores for ${Object.keys(deputyScores).length} deputies, ${votoRecords.length} individual votes`);
 
-    // ──────────────────────────────────────────────
-    // STEP 4: Classify and upsert results
-    // ──────────────────────────────────────────────
+    // ── STEP 4: Classify and upsert deputy analyses ──
     const records: any[] = [];
-
     for (const [depIdStr, data] of Object.entries(deputyScores)) {
       const depId = Number(depIdStr);
       const score = data.relevant > 0 ? (data.aligned / data.relevant) * 100 : 0;
@@ -172,7 +167,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Batch upsert
     let upsertCount = 0;
     for (let i = 0; i < records.length; i += 200) {
       const chunk = records.slice(i, i + 200);
@@ -186,23 +180,41 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Also cache votação metadata
-    const votacaoIds = new Set(votacoesComGov);
-    const votacaoRecords = allOrientacoes
-      .filter((o: any) => votacaoIds.has(o.idVotacao))
-      .reduce((acc: any[], o: any) => {
-        if (!acc.find((r: any) => r.id_votacao === String(o.idVotacao))) {
-          acc.push({
-            id_votacao: String(o.idVotacao),
-            data: null,
-            descricao: o.descricao || null,
-            ano: year,
-            sigla_orgao: o.siglaOrgao || null,
-          });
-        }
-        return acc;
-      }, []);
+    // ── STEP 5: Store individual votes for detail pages ──
+    let votosStored = 0;
+    for (let i = 0; i < votoRecords.length; i += 500) {
+      const chunk = votoRecords.slice(i, i + 500);
+      const { error: votoErr } = await supabase
+        .from("votos_deputados")
+        .upsert(chunk, { onConflict: "deputado_id,id_votacao" });
+      if (votoErr) {
+        console.error(`Voto upsert error at batch ${i}: ${votoErr.message}`);
+      } else {
+        votosStored += chunk.length;
+      }
+    }
+    console.log(`Stored ${votosStored} individual vote records`);
 
+    // ── STEP 6: Cache votação metadata with proposição details ──
+    // Fetch votação details from API to get proposição info
+    const votacaoMeta: Record<string, any> = {};
+    for (const o of allOrientacoes) {
+      const vid = String(o.idVotacao);
+      if (!votacaoMeta[vid] && govOrientByVotacao[vid]) {
+        votacaoMeta[vid] = {
+          id_votacao: vid,
+          data: o.dataHoraVotacao || null,
+          descricao: o.proposicaoObjeto || o.votacao_proposicaoObjeto || null,
+          ano: year,
+          sigla_orgao: o.siglaOrgao || null,
+          proposicao_tipo: o.proposicao_tipo || null,
+          proposicao_numero: o.proposicao_numero || null,
+          proposicao_ementa: o.proposicaoObjeto || o.votacao_proposicaoObjeto || null,
+        };
+      }
+    }
+
+    const votacaoRecords = Object.values(votacaoMeta);
     for (let i = 0; i < votacaoRecords.length; i += 500) {
       await supabase.from("votacoes").upsert(
         votacaoRecords.slice(i, i + 500),
@@ -210,12 +222,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Upserted ${upsertCount} deputy analyses, ${votacaoRecords.length} votações`);
+    console.log(`Upserted ${upsertCount} deputy analyses, ${votacaoRecords.length} votações, ${votosStored} individual votes`);
 
     return jsonResponse({
       analyzed: upsertCount,
       votacoes_with_gov: votacoesComGov.length,
       total_votos_processed: allVotos.length,
+      votos_stored: votosStored,
       year,
     });
   } catch (error) {
