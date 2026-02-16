@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Users,
   Search,
@@ -12,6 +13,7 @@ import { StatsPanel } from "@/components/StatsPanel";
 import { DeputyCard } from "@/components/DeputyCard";
 import { RankingTable } from "@/components/RankingTable";
 import { PartyChart } from "@/components/PartyChart";
+import { ClassificationFilter } from "@/components/ClassificationFilter";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDeputados } from "@/hooks/useDeputados";
@@ -20,6 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 
 const Index = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [ano, setAno] = useState(2025);
@@ -36,7 +39,6 @@ const Index = () => {
   } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
 
-  // Map analysis by deputado_id for quick lookup
   const analiseMap = useMemo(() => {
     const map: Record<number, (typeof analises)[0]> = {};
     analises.forEach((a) => {
@@ -45,7 +47,6 @@ const Index = () => {
     return map;
   }, [analises]);
 
-  // Filter deputies
   const filteredDeputies = useMemo(() => {
     return deputados.filter((d) => {
       const matchName = d.nome.toLowerCase().includes(searchTerm.toLowerCase());
@@ -78,7 +79,6 @@ const Index = () => {
       />
 
       <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
-        {/* Sidebar */}
         <aside className="xl:col-span-3 space-y-4">
           <StatsPanel
             analises={analises}
@@ -99,7 +99,6 @@ const Index = () => {
           )}
         </aside>
 
-        {/* Main content */}
         <section className="xl:col-span-9 space-y-4">
           <Tabs defaultValue="deputados">
             <TabsList>
@@ -122,6 +121,13 @@ const Index = () => {
                 </div>
               )}
 
+              {/* Classification filter with counters */}
+              <ClassificationFilter
+                analises={analises}
+                classFilter={classFilter}
+                onClassFilterChange={setClassFilter}
+              />
+
               <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
                 <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users size={16} className="text-primary" />
@@ -138,6 +144,7 @@ const Index = () => {
                     key={dep.id}
                     deputado={dep}
                     analise={analiseMap[dep.id]}
+                    onClick={() => navigate(`/deputado/${dep.id}`)}
                   />
                 ))}
               </div>

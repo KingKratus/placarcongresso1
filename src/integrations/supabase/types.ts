@@ -150,6 +150,9 @@ export type Database = {
           descricao: string | null
           id: string
           id_votacao: string
+          proposicao_ementa: string | null
+          proposicao_numero: string | null
+          proposicao_tipo: string | null
           sigla_orgao: string | null
         }
         Insert: {
@@ -159,6 +162,9 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao: string
+          proposicao_ementa?: string | null
+          proposicao_numero?: string | null
+          proposicao_tipo?: string | null
           sigla_orgao?: string | null
         }
         Update: {
@@ -168,7 +174,37 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao?: string
+          proposicao_ementa?: string | null
+          proposicao_numero?: string | null
+          proposicao_tipo?: string | null
           sigla_orgao?: string | null
+        }
+        Relationships: []
+      }
+      votos_deputados: {
+        Row: {
+          ano: number
+          created_at: string
+          deputado_id: number
+          id: string
+          id_votacao: string
+          voto: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          deputado_id: number
+          id?: string
+          id_votacao: string
+          voto: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          deputado_id?: number
+          id?: string
+          id_votacao?: string
+          voto?: string
         }
         Relationships: []
       }
