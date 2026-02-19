@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { Users, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_deputados">;
@@ -55,6 +56,13 @@ export function ComparisonView({ analises, onDeputyClick }: ComparisonViewProps)
   const totalOpo = oposicaoPartidos.reduce((s, p) => s + p.deputados.length, 0);
   const totalCen = centroPartidos.reduce((s, p) => s + p.deputados.length, 0);
 
+  const total = totalGov + totalOpo + totalCen;
+  const donutData = [
+    { name: "Governo", value: totalGov, color: "hsl(var(--governo))" },
+    { name: "Centro", value: totalCen, color: "hsl(var(--centro))" },
+    { name: "Oposição", value: totalOpo, color: "hsl(var(--oposicao))" },
+  ].filter((d) => d.value > 0);
+
   return (
     <div className="space-y-6">
       {/* Summary bar */}
@@ -63,6 +71,51 @@ export function ComparisonView({ analises, onDeputyClick }: ComparisonViewProps)
         <SummaryCard label="Centro" count={totalCen} parties={centroPartidos.length} className="border-centro/30 bg-centro/5" badgeClass="bg-centro text-centro-foreground" />
         <SummaryCard label="Oposição" count={totalOpo} parties={oposicaoPartidos.length} className="border-oposicao/30 bg-oposicao/5" badgeClass="bg-oposicao text-oposicao-foreground" />
       </div>
+
+      {/* Donut chart */}
+      {total > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+              Proporção Governo × Centro × Oposição
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={donutData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={100}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {donutData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number, name: string) => [
+                    `${value} dep. (${((value / total) * 100).toFixed(1)}%)`,
+                    name,
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: "12px" }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Side-by-side comparison */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
