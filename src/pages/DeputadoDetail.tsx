@@ -9,6 +9,7 @@ import {
   UserMinus,
   BarChart2,
   Vote,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -333,6 +334,11 @@ export default function DeputadoDetail() {
                 const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
                 const isAligned = depNorm && govNorm && depNorm === govNorm;
 
+                // Build Câmara portal link
+                const camaraUrl = votacao?.proposicao_tipo && votacao?.proposicao_numero
+                  ? `https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=${v.id_votacao}`
+                  : `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
+
                 return (
                   <div
                     key={v.id_votacao}
@@ -364,12 +370,24 @@ export default function DeputadoDetail() {
                             Votação {v.id_votacao}
                           </p>
                         )}
-                        {votacao?.sigla_orgao && (
-                          <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1 inline-block">
-                            {votacao.sigla_orgao}
-                            {votacao?.data && ` • ${new Date(votacao.data).toLocaleDateString("pt-BR")}`}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                          {votacao?.sigla_orgao && (
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase">
+                              {votacao.sigla_orgao}
+                              {votacao?.data && ` • ${new Date(votacao.data).toLocaleDateString("pt-BR")}`}
+                            </span>
+                          )}
+                          <a
+                            href={`https://dadosabertos.camara.leg.br/api/v2/votacoes/${v.id_votacao}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
+                            title="Ver no portal da Câmara"
+                          >
+                            <ExternalLink size={9} />
+                            Portal da Câmara
+                          </a>
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <Badge
