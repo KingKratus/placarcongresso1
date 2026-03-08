@@ -37,8 +37,8 @@ export function PartyChart({ analises }: PartyChartProps) {
     .sort((a, b) => b.media - a.media);
 
   const getBarColor = (score: number) => {
-    if (score >= 70) return "hsl(160, 84%, 39%)"; // governo
-    if (score <= 35) return "hsl(347, 77%, 50%)"; // oposicao
+    if (score >= 50) return "hsl(160, 84%, 39%)"; // governo
+    if (score <= 30) return "hsl(347, 77%, 50%)"; // oposicao
     return "hsl(239, 84%, 67%)"; // centro/primary
   };
 
