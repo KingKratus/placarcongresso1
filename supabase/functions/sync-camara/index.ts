@@ -166,6 +166,7 @@ Deno.serve(async (req) => {
             proposicao_tipo: prop?.siglaTipo || null,
             proposicao_numero: prop?.numero ? String(prop.numero) : null,
             proposicao_ementa: prop?.ementa || null,
+            proposicao_ano: prop?.ano ? Number(prop.ano) : null,
           });
         } else {
           // Fallback: store minimal record so we don't lose the votação

@@ -198,6 +198,7 @@ export type Database = {
           descricao: string | null
           id: string
           id_votacao: string
+          proposicao_ano: number | null
           proposicao_ementa: string | null
           proposicao_numero: string | null
           proposicao_tipo: string | null
@@ -210,6 +211,7 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao: string
+          proposicao_ano?: number | null
           proposicao_ementa?: string | null
           proposicao_numero?: string | null
           proposicao_tipo?: string | null
@@ -222,6 +224,7 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao?: string
+          proposicao_ano?: number | null
           proposicao_ementa?: string | null
           proposicao_numero?: string | null
           proposicao_tipo?: string | null
@@ -238,6 +241,7 @@ export type Database = {
           descricao: string | null
           ementa: string | null
           id: string
+          materia_ano: number | null
           numero_materia: string | null
           resultado: string | null
           sigla_materia: string | null
@@ -250,6 +254,7 @@ export type Database = {
           descricao?: string | null
           ementa?: string | null
           id?: string
+          materia_ano?: number | null
           numero_materia?: string | null
           resultado?: string | null
           sigla_materia?: string | null
@@ -262,6 +267,7 @@ export type Database = {
           descricao?: string | null
           ementa?: string | null
           id?: string
+          materia_ano?: number | null
           numero_materia?: string | null
           resultado?: string | null
           sigla_materia?: string | null
