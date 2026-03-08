@@ -53,7 +53,11 @@ export function Navbar({
   user,
   onSignIn,
   onSignOut,
+  casa = "camara",
 }: NavbarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   return (
     <nav className="bg-card border-b border-border sticky top-0 z-50 px-4 py-3 shadow-sm">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
