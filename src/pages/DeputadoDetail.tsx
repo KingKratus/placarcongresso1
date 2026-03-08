@@ -467,10 +467,11 @@ export default function DeputadoDetail() {
                         {votacao?.proposicao_ementa ? (
                           <p className="text-xs font-semibold text-foreground line-clamp-2">
                             {votacao.proposicao_tipo && votacao.proposicao_numero && (
-                              <span className="font-black text-primary mr-1">
-                                {votacao.proposicao_tipo} {votacao.proposicao_numero}
-                              </span>
-                            )}
+                               <span className="font-black text-primary mr-1">
+                                 {votacao.proposicao_tipo} {votacao.proposicao_numero}
+                                 {(votacao as any).proposicao_ano && `/${(votacao as any).proposicao_ano}`}
+                               </span>
+                             )}
                             {votacao.proposicao_ementa}
                           </p>
                         ) : votacao?.descricao ? (
