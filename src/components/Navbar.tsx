@@ -58,6 +58,8 @@ export function Navbar({
   const navigate = useNavigate();
   const location = useLocation();
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
+  const isInsights = location.pathname === "/insights";
+  const isCamara = !isSenado && !isInsights;
   return (
     <nav className="bg-card border-b border-border sticky top-0 z-50 px-4 py-3 shadow-sm">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -77,7 +79,7 @@ export function Navbar({
             <button
               onClick={() => navigate("/")}
               className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
-                !isSenado
+                isCamara
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
@@ -93,6 +95,16 @@ export function Navbar({
               }`}
             >
               Senado
+            </button>
+            <button
+              onClick={() => navigate("/insights")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                isInsights
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Insights
             </button>
           </div>
         </div>
