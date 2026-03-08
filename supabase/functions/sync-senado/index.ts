@@ -87,34 +87,32 @@ async function fetchGovLeaderIds(): Promise<Set<string>> {
   const json = await safeFetchJson(`${SENADO_API}/composicao/lideranca.json`);
 
   try {
-    const liderancas =
-      json?.LiderancaList?.Liderancas?.Lideranca ||
-      json?.ListaLiderancas?.Liderancas?.Lideranca || [];
-    const arr = Array.isArray(liderancas) ? liderancas : [liderancas];
+    // The API returns a flat array of leadership records
+    const arr = Array.isArray(json) ? json : [];
 
     for (const lid of arr) {
-      const unidade = (lid?.UnidadeLideranca || "").toLowerCase();
-      const nome = (lid?.NomeLideranca || "").toLowerCase();
+      const casa = (lid?.casa || "").toUpperCase();
+      const unidade = (lid?.descricaoTipoUnidadeLideranca || "").toLowerCase();
+      const tipo = (lid?.siglaTipoLideranca || "").toUpperCase();
+
+      // Only Senate government leaders (not vice-leaders, not Câmara, not Congresso)
       if (
-        unidade.includes("governo") ||
-        nome.includes("governo") ||
-        nome.includes("líder do governo")
+        casa === "SF" &&
+        unidade.includes("governo") &&
+        tipo === "L" // L = Líder (not V = Vice-líder)
       ) {
-        // Get the leader's parliamentary code
-        const membros = lid?.MembrosLideranca?.MembroLideranca;
-        if (membros) {
-          const mArr = Array.isArray(membros) ? membros : [membros];
-          for (const m of mArr) {
-            const codigo =
-              m?.CodigoParlamentar ||
-              m?.IdentificacaoParlamentar?.CodigoParlamentar;
-            if (codigo) ids.add(String(codigo));
-          }
-        }
+        const codigo = lid?.codigoParlamentar;
+        if (codigo) ids.add(String(codigo));
       }
     }
   } catch (e) {
     console.error("[sync-senado] Error parsing lideranca:", e);
+  }
+
+  // Fallback: Jaques Wagner (known government leader since 2023)
+  if (ids.size === 0) {
+    ids.add("581");
+    console.log("[sync-senado] Using fallback government leader: Jaques Wagner (581)");
   }
 
   console.log(`[sync-senado] Found ${ids.size} government leader IDs: ${[...ids].join(", ")}`);
