@@ -54,8 +54,31 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // ── Authentication check ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized: missing token" }, 401);
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+
+    if (claimsError || !claimsData?.claims) {
+      return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
+    }
+
+    const role = claimsData.claims.role;
+    if (role !== "authenticated" && role !== "service_role") {
+      return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Safe body parsing — cron may send empty or non-JSON body
     let year = new Date().getFullYear();
