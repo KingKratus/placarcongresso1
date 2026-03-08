@@ -31,13 +31,13 @@ export function useAnalises(ano: number) {
   }, [fetchAnalises]);
 
   const syncDeputados = useCallback(
-    async (limit = 100) => {
+    async () => {
       setSyncing(true);
       setError(null);
       try {
         const { data, error: err } = await supabase.functions.invoke(
           "sync-camara",
-          { body: { ano, limit } }
+          { body: { ano } }
         );
         if (err) throw err;
         if (data?.error) throw new Error(data.error);

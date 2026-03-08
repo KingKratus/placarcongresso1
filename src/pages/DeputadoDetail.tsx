@@ -28,30 +28,9 @@ import {
 } from "recharts";
 
 type Analise = Tables<"analises_deputados">;
-
-interface VotoDeputado {
-  id: string;
-  deputado_id: number;
-  id_votacao: string;
-  voto: string;
-  ano: number;
-}
-
-interface Votacao {
-  id_votacao: string;
-  data: string | null;
-  descricao: string | null;
-  sigla_orgao: string | null;
-  proposicao_tipo: string | null;
-  proposicao_numero: string | null;
-  proposicao_ementa: string | null;
-}
-
-interface Orientacao {
-  id_votacao: string;
-  sigla_orgao_politico: string;
-  orientacao_voto: string;
-}
+type VotoDeputado = Tables<"votos_deputados">;
+type Votacao = Tables<"votacoes">;
+type Orientacao = Tables<"orientacoes">;
 
 const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
   Governo: { color: "text-governo", icon: UserCheck, bg: "bg-governo/10" },
@@ -61,6 +40,26 @@ const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
 };
 
 const ITEMS_PER_PAGE = 20;
+
+/** Fetch all rows bypassing the 1000-row default limit */
+async function fetchAllVotos(depId: number): Promise<VotoDeputado[]> {
+  const all: VotoDeputado[] = [];
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("votos_deputados")
+      .select("*")
+      .eq("deputado_id", depId)
+      .order("id_votacao", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error || !data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
 
 export default function DeputadoDetail() {
   const { id } = useParams<{ id: string }>();
@@ -79,29 +78,22 @@ export default function DeputadoDetail() {
     setLoading(true);
 
     const loadData = async () => {
-      // Fetch all years of analysis for this deputy
-      const [analiseRes, votosRes] = await Promise.all([
+      const [analiseRes, votosData] = await Promise.all([
         supabase
           .from("analises_deputados")
           .select("*")
           .eq("deputado_id", depId)
           .order("ano", { ascending: true }),
-        supabase
-          .from("votos_deputados" as any)
-          .select("*")
-          .eq("deputado_id", depId)
-          .order("id_votacao", { ascending: false }) as any,
+        fetchAllVotos(depId),
       ]);
 
-      const analiseData = (analiseRes.data || []) as Analise[];
-      const votosData = ((votosRes as any).data || []) as VotoDeputado[];
+      const analiseData = analiseRes.data || [];
       setAnalises(analiseData);
       setVotos(votosData);
 
-      // Fetch votação details for these votes
+      // Fetch votação details and orientações in batches
       const votacaoIds = [...new Set(votosData.map((v) => v.id_votacao))];
       if (votacaoIds.length > 0) {
-        // Fetch in batches of 100
         const allVotacoes: Votacao[] = [];
         const allOrientacoes: Orientacao[] = [];
         for (let i = 0; i < votacaoIds.length; i += 100) {
@@ -109,15 +101,15 @@ export default function DeputadoDetail() {
           const [votRes, oriRes] = await Promise.all([
             supabase
               .from("votacoes")
-              .select("id_votacao,data,descricao,sigla_orgao,proposicao_tipo,proposicao_numero,proposicao_ementa")
+              .select("*")
               .in("id_votacao", batch),
             supabase
               .from("orientacoes")
-              .select("id_votacao,sigla_orgao_politico,orientacao_voto")
+              .select("*")
               .in("id_votacao", batch),
           ]);
-          allVotacoes.push(...((votRes.data || []) as Votacao[]));
-          allOrientacoes.push(...((oriRes.data || []) as Orientacao[]));
+          if (votRes.data) allVotacoes.push(...votRes.data);
+          if (oriRes.data) allOrientacoes.push(...oriRes.data);
         }
         setVotacoes(allVotacoes);
         setOrientacoes(allOrientacoes);
@@ -133,14 +125,12 @@ export default function DeputadoDetail() {
   const cfg = currentAnalise ? classConfig[currentAnalise.classificacao] || classConfig["Sem Dados"] : classConfig["Sem Dados"];
   const Icon = cfg.icon;
 
-  // Evolution chart data
   const evolutionData = analises.map((a) => ({
     ano: a.ano,
     score: Number(a.score),
     classificacao: a.classificacao,
   }));
 
-  // Build votação lookup maps
   const votacaoMap = useMemo(() => {
     const m: Record<string, Votacao> = {};
     votacoes.forEach((v) => (m[v.id_votacao] = v));
@@ -158,7 +148,6 @@ export default function DeputadoDetail() {
     return m;
   }, [orientacoes]);
 
-  // Paginated votes
   const totalPages = Math.ceil(votos.length / ITEMS_PER_PAGE);
   const paginatedVotos = votos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
@@ -334,14 +323,12 @@ export default function DeputadoDetail() {
                 const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
                 const isAligned = depNorm && govNorm && depNorm === govNorm;
 
-                // Build Câmara portal link
-                const camaraUrl = votacao?.proposicao_tipo && votacao?.proposicao_numero
-                  ? `https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=${v.id_votacao}`
-                  : `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
+                // Build proper Câmara portal link (human-readable page)
+                const camaraUrl = `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
 
                 return (
                   <div
-                    key={v.id_votacao}
+                    key={v.id}
                     className={`p-3 rounded-lg border ${
                       isAligned
                         ? "border-governo/30 bg-governo/5"
@@ -378,7 +365,7 @@ export default function DeputadoDetail() {
                             </span>
                           )}
                           <a
-                            href={`https://dadosabertos.camara.leg.br/api/v2/votacoes/${v.id_votacao}`}
+                            href={camaraUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
