@@ -31,7 +31,7 @@ export function useAnalises(ano: number) {
   }, [fetchAnalises]);
 
   const syncDeputados = useCallback(
-    async (limit = 100) => {
+    async () => {
       setSyncing(true);
       setError(null);
       try {
