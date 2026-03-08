@@ -517,7 +517,7 @@ export default function DeputadoDetail() {
                           </a>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
                             <a
-                              href={`https://www.google.com/search?q=site:camara.leg.br+${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + ((votacao as any).proposicao_ano ? "/" + (votacao as any).proposicao_ano : ""))}`}
+                              href={`https://www.google.com/search?q=site:camara.leg.br+${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + (votacao.proposicao_ano ? "/" + votacao.proposicao_ano : ""))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-[9px] font-bold text-muted-foreground hover:text-primary hover:underline"
