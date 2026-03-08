@@ -57,35 +57,31 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication check (temporarily skipped for backfill) ──
-    // TODO: restore auth after backfill
-    const skipAuth = true;
-    if (!skipAuth) {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader?.startsWith("Bearer ")) {
-        return jsonResponse({ error: "Unauthorized: missing token" }, 401);
+    // ── Authentication check ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized: missing token" }, 401);
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    // Allow service role key directly (used by cron jobs)
+    if (token === supabaseServiceKey) {
+      // Authorized as service role
+    } else {
+      // Validate as user JWT
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+
+      if (claimsError || !claimsData?.claims) {
+        return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
       }
 
-      const token = authHeader.replace("Bearer ", "");
-
-      // Allow service role key directly (used by cron jobs)
-      if (token === supabaseServiceKey) {
-        // Authorized as service role
-      } else {
-        // Validate as user JWT
-        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-          global: { headers: { Authorization: authHeader } },
-        });
-        const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
-
-        if (claimsError || !claimsData?.claims) {
-          return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
-        }
-
-        const role = claimsData.claims.role;
-        if (role !== "authenticated") {
-          return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
-        }
+      const role = claimsData.claims.role;
+      if (role !== "authenticated") {
+        return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
       }
     }
 
