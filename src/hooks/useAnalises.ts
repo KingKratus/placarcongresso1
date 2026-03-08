@@ -37,7 +37,7 @@ export function useAnalises(ano: number) {
       try {
         const { data, error: err } = await supabase.functions.invoke(
           "sync-camara",
-          { body: { ano, limit } }
+          { body: { ano } }
         );
         if (err) throw err;
         if (data?.error) throw new Error(data.error);

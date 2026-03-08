@@ -86,7 +86,7 @@ const Index = () => {
             analises={analises}
             totalDeputados={deputados.length}
             syncing={syncing}
-            onSync={() => syncDeputados(50)}
+            onSync={() => syncDeputados()}
           />
           {user && (
             <Button
