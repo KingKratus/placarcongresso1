@@ -24,8 +24,8 @@ const CLASS_COLORS: Record<string, string> = {
   "Sem Dados": "hsl(215, 16%, 47%)",
 };
 
-const DEFAULT_GOV = 70;
-const DEFAULT_OPO = 35;
+const DEFAULT_GOV = 50;
+const DEFAULT_OPO = 30;
 
 function classify(score: number, govThreshold: number, opoThreshold: number): string {
   if (score >= govThreshold) return "Governo";

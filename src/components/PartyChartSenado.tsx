@@ -37,8 +37,8 @@ export function PartyChartSenado({ analises }: PartyChartSenadoProps) {
     .sort((a, b) => b.media - a.media);
 
   const getBarColor = (score: number) => {
-    if (score >= 70) return "hsl(160, 84%, 39%)";
-    if (score <= 35) return "hsl(347, 77%, 50%)";
+    if (score >= 50) return "hsl(160, 84%, 39%)";
+    if (score <= 30) return "hsl(347, 77%, 50%)";
     return "hsl(239, 84%, 67%)";
   };
 

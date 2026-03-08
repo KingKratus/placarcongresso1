@@ -36,7 +36,7 @@ export function ComparisonView({ analises, onDeputyClick }: ComparisonViewProps)
 
     const parties: PartyGroup[] = Object.entries(partyMap).map(([partido, { sum, count, deps }]) => {
       const media = sum / count;
-      const classificacao = media >= 70 ? "Governo" : media <= 35 ? "Oposição" : "Centro";
+      const classificacao = media >= 50 ? "Governo" : media <= 30 ? "Oposição" : "Centro";
       return {
         partido,
         media: Math.round(media * 10) / 10,
