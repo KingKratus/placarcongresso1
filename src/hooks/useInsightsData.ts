@@ -21,12 +21,12 @@ export function useInsightsData(ano: number) {
   const fetch = useCallback(async () => {
     setLoading(true);
     const [r1, r2, r3, r4, r5, r6] = await Promise.all([
-      supabase.from("analises_deputados").select("*").eq("ano", ano).order("score", { ascending: false }),
-      supabase.from("analises_senadores").select("*").eq("ano", ano).order("score", { ascending: false }),
-      supabase.from("votacoes").select("data").eq("ano", ano),
-      supabase.from("votacoes_senado").select("data").eq("ano", ano),
-      supabase.from("analises_deputados").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }),
-      supabase.from("analises_senadores").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }),
+      supabase.from("analises_deputados").select("*").eq("ano", ano).order("score", { ascending: false }).limit(2000),
+      supabase.from("analises_senadores").select("*").eq("ano", ano).order("score", { ascending: false }).limit(500),
+      supabase.from("votacoes").select("data").eq("ano", ano).limit(5000),
+      supabase.from("votacoes_senado").select("data").eq("ano", ano).limit(5000),
+      supabase.from("analises_deputados").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }).limit(5000),
+      supabase.from("analises_senadores").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }).limit(2000),
     ]);
     setDeputados(r1.data || []);
     setSenadores(r2.data || []);
