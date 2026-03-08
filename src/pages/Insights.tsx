@@ -233,6 +233,10 @@ export default function Insights() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* 0. Trend + Simulation */}
+            <AlignmentTrendChart allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
+            <AlignmentSimulation allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
+
             {/* 1. Classification Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
