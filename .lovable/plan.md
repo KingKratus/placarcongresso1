@@ -1,40 +1,90 @@
 
 
-# Plan: Add Proposição Year + Fix Links
+# Monitor Legislativo — Plano de Implementação
 
-## Problem
-The `votacoes` table has `proposicao_tipo` and `proposicao_numero` but no `proposicao_ano`. This means:
-- Links like "PL 192" can't find the right bill (there could be PL 192 from different years)
-- The Proposição search link is unreliable without the year
+## Visão Geral
+Um webapp de transparência legislativa que analisa o alinhamento dos deputados federais com a orientação do líder do governo, com backend Supabase para cache, autenticação e histórico.
 
-The Câmara API's `proposicoesAfetadas` response already includes an `ano` field per proposição -- we just aren't extracting it.
+---
 
-## Changes
+## 1. Backend Supabase (Lovable Cloud)
 
-### 1. Database Migration
-Add `proposicao_ano` column to `votacoes` table:
-```sql
-ALTER TABLE votacoes ADD COLUMN proposicao_ano integer;
-```
-Also add to `votacoes_senado` for future Senate support:
-```sql
-ALTER TABLE votacoes_senado ADD COLUMN materia_ano integer;
-```
+### Banco de Dados
+- **Tabela `votacoes`**: Cache das votações buscadas da API da Câmara (id_votacao, data, descrição, ano)
+- **Tabela `orientacoes`**: Orientação do líder do governo por votação (evita re-buscar da API)
+- **Tabela `analises_deputados`**: Score de alinhamento calculado por deputado por ano (deputado_id, ano, score, total_votos, classificação)
+- **Tabela `profiles`**: Perfil dos usuários logados (nome, avatar, favoritos)
+- **Tabela `user_roles`**: Roles de acesso dos usuários
 
-### 2. Update `sync-camara` Edge Function
-Extract `prop?.ano` from `proposicoesAfetadas` and store it as `proposicao_ano` in the votação record (line ~167).
+### Edge Function: Sincronização com API da Câmara
+- Uma edge function que busca votações e orientações da API da Câmara e salva no Supabase
+- Resolve o problema de rate limit (429) centralizando as chamadas no servidor
+- Sempre prioriza buscar a orientação do **líder do governo** (GOV./GOVERNO/LIDGOV)
+- Aceita parâmetro de **ano** para filtrar o período de busca
 
-### 3. Update `DeputadoDetail.tsx`
-- Display year with bill label: "PL 192/2023" instead of "PL 192"
-- Fix Proposição link to include year: `?q=PL+192/2023`
-- Fix Google search link to include year
-- All links now use `proposicao_ano` when available
+### Autenticação
+- Login com Google via Supabase Auth
+- Usuários logados podem salvar deputados favoritos e acessar exportação
 
-### 4. Re-sync to Backfill
-Invoke `sync-camara` for 2023-2026 to populate the new `proposicao_ano` field for existing records.
+---
 
-## Files
-- `supabase/functions/sync-camara/index.ts` -- extract `prop?.ano`
-- `src/pages/DeputadoDetail.tsx` -- display year, fix links
-- DB migration for new columns
+## 2. Página Principal — Dashboard
+
+### Barra Superior
+- Logo e título "Monitor Legislativo"
+- Busca por nome de deputado
+- Filtro por partido (dropdown)
+- **Filtro por ano** (2024, 2025, 2026) — altera o período de consulta
+- **Filtro por classificação**: Governo / Centro / Oposição / Todos
+- Botão de login com Google
+
+### Painel Lateral (Estatísticas)
+- Contadores: Governo, Centro, Oposição, Por Analisar
+- Barra de progresso da análise
+- Botão "Analisar Filtro Atual"
+- Card de Metodologia (critérios de classificação)
+
+### Grid de Deputados
+- Cards com foto, nome, partido, UF e score de alinhamento
+- Cores por classificação (verde/governo, azul/centro, vermelho/oposição)
+- Indicador de loading individual por card durante análise
+- Clique abre página de detalhes
+
+---
+
+## 3. Ranking de Alinhamento
+- Lista ordenada dos deputados mais e menos alinhados com o governo
+- Filtro por ano e partido
+- Top 10 mais alinhados e top 10 mais oposicionistas em destaque
+
+---
+
+## 4. Gráficos por Partido
+- Gráfico de barras com alinhamento médio de cada partido com o governo
+- Comparação visual entre partidos usando Recharts
+- Filtro por ano para ver evolução
+
+---
+
+## 5. Página de Detalhes do Deputado
+- Foto, nome completo, partido, UF
+- Score de alinhamento com barra visual
+- Lista das votações analisadas mostrando: voto do deputado vs. orientação do líder do governo
+- Classificação geral (Governo/Centro/Oposição)
+
+---
+
+## 6. Exportação de Dados
+- Botão para exportar ranking e análises em CSV
+- Disponível para usuários logados
+- Inclui nome, partido, UF, score, classificação, total de votos
+
+---
+
+## 7. Design e UX
+- Design moderno com Tailwind CSS, cards arredondados, sombras sutis
+- Paleta: indigo como cor primária, emerald para governo, rose para oposição
+- Responsivo (mobile e desktop)
+- Modo claro (como no código original)
+- Feedback visual durante processamento (spinners por card e global)
 

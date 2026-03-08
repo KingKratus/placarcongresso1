@@ -62,6 +62,54 @@ export type Database = {
         }
         Relationships: []
       }
+      analises_senadores: {
+        Row: {
+          ano: number
+          classificacao: Database["public"]["Enums"]["classificacao_tipo"]
+          created_at: string
+          id: string
+          score: number
+          senador_foto: string | null
+          senador_id: number
+          senador_nome: string
+          senador_partido: string | null
+          senador_uf: string | null
+          total_votos: number
+          updated_at: string
+          votos_alinhados: number
+        }
+        Insert: {
+          ano: number
+          classificacao?: Database["public"]["Enums"]["classificacao_tipo"]
+          created_at?: string
+          id?: string
+          score?: number
+          senador_foto?: string | null
+          senador_id: number
+          senador_nome: string
+          senador_partido?: string | null
+          senador_uf?: string | null
+          total_votos?: number
+          updated_at?: string
+          votos_alinhados?: number
+        }
+        Update: {
+          ano?: number
+          classificacao?: Database["public"]["Enums"]["classificacao_tipo"]
+          created_at?: string
+          id?: string
+          score?: number
+          senador_foto?: string | null
+          senador_id?: number
+          senador_nome?: string
+          senador_partido?: string | null
+          senador_uf?: string | null
+          total_votos?: number
+          updated_at?: string
+          votos_alinhados?: number
+        }
+        Relationships: []
+      }
       orientacoes: {
         Row: {
           created_at: string
@@ -150,6 +198,7 @@ export type Database = {
           descricao: string | null
           id: string
           id_votacao: string
+          proposicao_ano: number | null
           proposicao_ementa: string | null
           proposicao_numero: string | null
           proposicao_tipo: string | null
@@ -162,6 +211,7 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao: string
+          proposicao_ano?: number | null
           proposicao_ementa?: string | null
           proposicao_numero?: string | null
           proposicao_tipo?: string | null
@@ -174,10 +224,53 @@ export type Database = {
           descricao?: string | null
           id?: string
           id_votacao?: string
+          proposicao_ano?: number | null
           proposicao_ementa?: string | null
           proposicao_numero?: string | null
           proposicao_tipo?: string | null
           sigla_orgao?: string | null
+        }
+        Relationships: []
+      }
+      votacoes_senado: {
+        Row: {
+          ano: number
+          codigo_sessao_votacao: string
+          created_at: string
+          data: string | null
+          descricao: string | null
+          ementa: string | null
+          id: string
+          materia_ano: number | null
+          numero_materia: string | null
+          resultado: string | null
+          sigla_materia: string | null
+        }
+        Insert: {
+          ano: number
+          codigo_sessao_votacao: string
+          created_at?: string
+          data?: string | null
+          descricao?: string | null
+          ementa?: string | null
+          id?: string
+          materia_ano?: number | null
+          numero_materia?: string | null
+          resultado?: string | null
+          sigla_materia?: string | null
+        }
+        Update: {
+          ano?: number
+          codigo_sessao_votacao?: string
+          created_at?: string
+          data?: string | null
+          descricao?: string | null
+          ementa?: string | null
+          id?: string
+          materia_ano?: number | null
+          numero_materia?: string | null
+          resultado?: string | null
+          sigla_materia?: string | null
         }
         Relationships: []
       }
@@ -204,6 +297,33 @@ export type Database = {
           deputado_id?: number
           id?: string
           id_votacao?: string
+          voto?: string
+        }
+        Relationships: []
+      }
+      votos_senadores: {
+        Row: {
+          ano: number
+          codigo_sessao_votacao: string
+          created_at: string
+          id: string
+          senador_id: number
+          voto: string
+        }
+        Insert: {
+          ano: number
+          codigo_sessao_votacao: string
+          created_at?: string
+          id?: string
+          senador_id: number
+          voto: string
+        }
+        Update: {
+          ano?: number
+          codigo_sessao_votacao?: string
+          created_at?: string
+          id?: string
+          senador_id?: number
           voto?: string
         }
         Relationships: []

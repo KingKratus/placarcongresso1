@@ -467,10 +467,11 @@ export default function DeputadoDetail() {
                         {votacao?.proposicao_ementa ? (
                           <p className="text-xs font-semibold text-foreground line-clamp-2">
                             {votacao.proposicao_tipo && votacao.proposicao_numero && (
-                              <span className="font-black text-primary mr-1">
-                                {votacao.proposicao_tipo} {votacao.proposicao_numero}
-                              </span>
-                            )}
+                               <span className="font-black text-primary mr-1">
+                                 {votacao.proposicao_tipo} {votacao.proposicao_numero}
+                                 {(votacao as any).proposicao_ano && `/${(votacao as any).proposicao_ano}`}
+                               </span>
+                             )}
                             {votacao.proposicao_ementa}
                           </p>
                         ) : votacao?.descricao ? (
@@ -493,8 +494,8 @@ export default function DeputadoDetail() {
                             {v.ano}
                           </Badge>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
-                            <a
-                              href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero)}`}
+                             <a
+                               href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + ((votacao as any).proposicao_ano ? "/" + (votacao as any).proposicao_ano : ""))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
@@ -516,7 +517,7 @@ export default function DeputadoDetail() {
                           </a>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
                             <a
-                              href={`https://www.google.com/search?q=site:camara.leg.br+${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero)}`}
+                              href={`https://www.google.com/search?q=site:camara.leg.br+${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + ((votacao as any).proposicao_ano ? "/" + (votacao as any).proposicao_ano : ""))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-[9px] font-bold text-muted-foreground hover:text-primary hover:underline"
