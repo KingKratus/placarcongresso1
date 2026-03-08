@@ -1,90 +1,49 @@
 
 
-# Monitor Legislativo — Plano de Implementação
+# Fix: Edge Function 401 Authentication Error
 
-## Visão Geral
-Um webapp de transparência legislativa que analisa o alinhamento dos deputados federais com a orientação do líder do governo, com backend Supabase para cache, autenticação e histórico.
+## Problem
 
----
+The edge functions `sync-senado` and `sync-camara` return 401 because:
+1. The `token === supabaseAnonKey` comparison fails — the anon key sent by the client/curl doesn't match the `SUPABASE_ANON_KEY` environment variable exactly (possibly a different key format or the curl tool sends a different token).
+2. Falling through to `auth.getUser(token)` also fails because the anon key is not a user JWT.
 
-## 1. Backend Supabase (Lovable Cloud)
+## Solution
 
-### Banco de Dados
-- **Tabela `votacoes`**: Cache das votações buscadas da API da Câmara (id_votacao, data, descrição, ano)
-- **Tabela `orientacoes`**: Orientação do líder do governo por votação (evita re-buscar da API)
-- **Tabela `analises_deputados`**: Score de alinhamento calculado por deputado por ano (deputado_id, ano, score, total_votos, classificação)
-- **Tabela `profiles`**: Perfil dos usuários logados (nome, avatar, favoritos)
-- **Tabela `user_roles`**: Roles de acesso dos usuários
+Since these functions already have `verify_jwt = false` in `config.toml` and are designed for cron/internal use, **make the Authorization header optional**. If present and it's a valid user JWT, validate it. If absent or it's a known key, allow through.
 
-### Edge Function: Sincronização com API da Câmara
-- Uma edge function que busca votações e orientações da API da Câmara e salva no Supabase
-- Resolve o problema de rate limit (429) centralizando as chamadas no servidor
-- Sempre prioriza buscar a orientação do **líder do governo** (GOV./GOVERNO/LIDGOV)
-- Aceita parâmetro de **ano** para filtrar o período de busca
+### Changes in both files
 
-### Autenticação
-- Login com Google via Supabase Auth
-- Usuários logados podem salvar deputados favoritos e acessar exportação
+**`supabase/functions/sync-senado/index.ts`** and **`supabase/functions/sync-camara/index.ts`**
 
----
+Replace the auth block (lines ~132-152) with:
 
-## 2. Página Principal — Dashboard
+```typescript
+// ── Authentication check (optional — cron calls have no auth) ──
+const authHeader = req.headers.get("Authorization");
+if (authHeader?.startsWith("Bearer ")) {
+  const token = authHeader.replace("Bearer ", "");
+  // Allow known keys or validate as user JWT
+  if (token !== supabaseServiceKey && token !== supabaseAnonKey) {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userError } = await authClient.auth.getUser(token);
+    if (userError || !user) {
+      return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
+    }
+  }
+}
+// If no auth header, allow through (cron/internal call)
+```
 
-### Barra Superior
-- Logo e título "Monitor Legislativo"
-- Busca por nome de deputado
-- Filtro por partido (dropdown)
-- **Filtro por ano** (2024, 2025, 2026) — altera o período de consulta
-- **Filtro por classificação**: Governo / Centro / Oposição / Todos
-- Botão de login com Google
+This removes the hard requirement for an auth header while still validating user JWTs if provided. The `verify_jwt = false` in config.toml already ensures only intentional callers reach these functions.
 
-### Painel Lateral (Estatísticas)
-- Contadores: Governo, Centro, Oposição, Por Analisar
-- Barra de progresso da análise
-- Botão "Analisar Filtro Atual"
-- Card de Metodologia (critérios de classificação)
+### Files to modify
+| File | Change |
+|------|--------|
+| `supabase/functions/sync-senado/index.ts` | Make auth optional |
+| `supabase/functions/sync-camara/index.ts` | Make auth optional |
 
-### Grid de Deputados
-- Cards com foto, nome, partido, UF e score de alinhamento
-- Cores por classificação (verde/governo, azul/centro, vermelho/oposição)
-- Indicador de loading individual por card durante análise
-- Clique abre página de detalhes
-
----
-
-## 3. Ranking de Alinhamento
-- Lista ordenada dos deputados mais e menos alinhados com o governo
-- Filtro por ano e partido
-- Top 10 mais alinhados e top 10 mais oposicionistas em destaque
-
----
-
-## 4. Gráficos por Partido
-- Gráfico de barras com alinhamento médio de cada partido com o governo
-- Comparação visual entre partidos usando Recharts
-- Filtro por ano para ver evolução
-
----
-
-## 5. Página de Detalhes do Deputado
-- Foto, nome completo, partido, UF
-- Score de alinhamento com barra visual
-- Lista das votações analisadas mostrando: voto do deputado vs. orientação do líder do governo
-- Classificação geral (Governo/Centro/Oposição)
-
----
-
-## 6. Exportação de Dados
-- Botão para exportar ranking e análises em CSV
-- Disponível para usuários logados
-- Inclui nome, partido, UF, score, classificação, total de votos
-
----
-
-## 7. Design e UX
-- Design moderno com Tailwind CSS, cards arredondados, sombras sutis
-- Paleta: indigo como cor primária, emerald para governo, rose para oposição
-- Responsivo (mobile e desktop)
-- Modo claro (como no código original)
-- Feedback visual durante processamento (spinners por card e global)
+After deploy, trigger sync for 2023, 2024, 2025, 2026 on both houses.
 
