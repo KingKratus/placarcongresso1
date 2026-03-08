@@ -137,8 +137,8 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
 
-    if (token === supabaseServiceKey) {
-      // Authorized as service role
+    if (token === supabaseServiceKey || token === supabaseAnonKey) {
+      // Authorized
     } else {
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
