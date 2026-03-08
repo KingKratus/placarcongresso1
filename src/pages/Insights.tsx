@@ -50,8 +50,8 @@ export default function Insights() {
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [senadores]);
 
-  // 2. Average alignment by party (both houses)
-  const partyComparison = useMemo(() => {
+  // Shared party aggregation (used by comparison + divergence)
+  const partyAggregation = useMemo(() => {
     const camMap: Record<string, { sum: number; count: number }> = {};
     const senMap: Record<string, { sum: number; count: number }> = {};
     deputados.forEach((d) => {
@@ -68,6 +68,12 @@ export default function Insights() {
       senMap[p].sum += Number(s.score);
       senMap[p].count++;
     });
+    return { camMap, senMap };
+  }, [deputados, senadores]);
+
+  // 2. Average alignment by party (both houses)
+  const partyComparison = useMemo(() => {
+    const { camMap, senMap } = partyAggregation;
     const allParties = new Set([...Object.keys(camMap), ...Object.keys(senMap)]);
     return Array.from(allParties)
       .map((p) => ({
@@ -79,7 +85,7 @@ export default function Insights() {
       .filter((p) => p.hasBoth)
       .sort((a, b) => b.camara - a.camara)
       .slice(0, 15);
-  }, [deputados, senadores]);
+  }, [partyAggregation]);
 
   // 3. Top/Bottom 10
   const topBottom = useMemo(() => {
@@ -135,22 +141,9 @@ export default function Insights() {
     })).filter((x) => x.camara !== null || x.senado !== null);
   }, [deputados, senadores]);
 
-  // 6. Party divergence
+  // 6. Party divergence (reuses shared aggregation)
   const partyDivergence = useMemo(() => {
-    const camMap: Record<string, { sum: number; count: number }> = {};
-    const senMap: Record<string, { sum: number; count: number }> = {};
-    deputados.forEach((d) => {
-      if (!d.deputado_partido) return;
-      camMap[d.deputado_partido] = camMap[d.deputado_partido] || { sum: 0, count: 0 };
-      camMap[d.deputado_partido].sum += Number(d.score);
-      camMap[d.deputado_partido].count++;
-    });
-    senadores.forEach((s) => {
-      if (!s.senador_partido) return;
-      senMap[s.senador_partido] = senMap[s.senador_partido] || { sum: 0, count: 0 };
-      senMap[s.senador_partido].sum += Number(s.score);
-      senMap[s.senador_partido].count++;
-    });
+    const { camMap, senMap } = partyAggregation;
     const parties = Object.keys(camMap).filter((p) => senMap[p]);
     return parties
       .map((p) => {
@@ -160,7 +153,7 @@ export default function Insights() {
       })
       .sort((a, b) => b.divergencia - a.divergencia)
       .slice(0, 10);
-  }, [deputados, senadores]);
+  }, [partyAggregation]);
 
   // 7. Volume by month
   const volumeByMonth = useMemo(() => {

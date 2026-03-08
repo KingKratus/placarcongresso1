@@ -10,8 +10,8 @@ interface RankingTableSenadoProps {
 
 export function RankingTableSenado({ analises }: RankingTableSenadoProps) {
   const sorted = [...analises].filter((a) => a.classificacao !== "Sem Dados");
-  const top10 = sorted.sort((a, b) => Number(b.score) - Number(a.score)).slice(0, 10);
-  const bottom10 = sorted.sort((a, b) => Number(a.score) - Number(b.score)).slice(0, 10);
+  const top10 = [...sorted].sort((a, b) => Number(b.score) - Number(a.score)).slice(0, 10);
+  const bottom10 = [...sorted].sort((a, b) => Number(a.score) - Number(b.score)).slice(0, 10);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
