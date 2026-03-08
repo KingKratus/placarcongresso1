@@ -27,7 +27,7 @@ interface NavbarProps {
   onSignOut: () => void;
 }
 
-const ANOS = [2024, 2025, 2026];
+const ANOS = [2023, 2024, 2025, 2026];
 const CLASSES = [
   { value: "", label: "Todos" },
   { value: "Governo", label: "Governo" },

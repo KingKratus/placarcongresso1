@@ -10,11 +10,21 @@ import {
   BarChart2,
   Vote,
   ExternalLink,
+  Search,
+  Filter,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Tables } from "@/integrations/supabase/types";
 import {
   BarChart,
@@ -41,7 +51,6 @@ const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
 
 const ITEMS_PER_PAGE = 20;
 
-/** Fetch all rows bypassing the 1000-row default limit */
 async function fetchAllVotos(depId: number): Promise<VotoDeputado[]> {
   const all: VotoDeputado[] = [];
   const PAGE_SIZE = 1000;
@@ -61,6 +70,13 @@ async function fetchAllVotos(depId: number): Promise<VotoDeputado[]> {
   return all;
 }
 
+function normalizeVotoLabel(voto: string): string {
+  const v = voto.trim().toLowerCase();
+  if (v === "sim" || v === "yes") return "sim";
+  if (v === "não" || v === "nao" || v === "no") return "não";
+  return v;
+}
+
 export default function DeputadoDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -72,6 +88,12 @@ export default function DeputadoDetail() {
   const [orientacoes, setOrientacoes] = useState<Orientacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+
+  // Filters
+  const [yearFilter, setYearFilter] = useState("all");
+  const [voteTypeFilter, setVoteTypeFilter] = useState("all");
+  const [alignmentFilter, setAlignmentFilter] = useState("all");
+  const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
     if (!depId) return;
@@ -91,7 +113,6 @@ export default function DeputadoDetail() {
       setAnalises(analiseData);
       setVotos(votosData);
 
-      // Fetch votação details and orientações in batches
       const votacaoIds = [...new Set(votosData.map((v) => v.id_votacao))];
       if (votacaoIds.length > 0) {
         const allVotacoes: Votacao[] = [];
@@ -99,14 +120,8 @@ export default function DeputadoDetail() {
         for (let i = 0; i < votacaoIds.length; i += 100) {
           const batch = votacaoIds.slice(i, i + 100);
           const [votRes, oriRes] = await Promise.all([
-            supabase
-              .from("votacoes")
-              .select("*")
-              .in("id_votacao", batch),
-            supabase
-              .from("orientacoes")
-              .select("*")
-              .in("id_votacao", batch),
+            supabase.from("votacoes").select("*").in("id_votacao", batch),
+            supabase.from("orientacoes").select("*").in("id_votacao", batch),
           ]);
           if (votRes.data) allVotacoes.push(...votRes.data);
           if (oriRes.data) allOrientacoes.push(...oriRes.data);
@@ -148,8 +163,61 @@ export default function DeputadoDetail() {
     return m;
   }, [orientacoes]);
 
-  const totalPages = Math.ceil(votos.length / ITEMS_PER_PAGE);
-  const paginatedVotos = votos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+  // Apply filters
+  const filteredVotos = useMemo(() => {
+    return votos.filter((v) => {
+      // Year filter
+      if (yearFilter !== "all" && v.ano !== Number(yearFilter)) return false;
+
+      // Vote type filter
+      if (voteTypeFilter !== "all") {
+        const norm = normalizeVotoLabel(v.voto);
+        if (voteTypeFilter === "sim" && norm !== "sim") return false;
+        if (voteTypeFilter === "nao" && norm !== "não") return false;
+      }
+
+      // Alignment filter
+      if (alignmentFilter !== "all") {
+        const depNorm = normalizeVotoLabel(v.voto);
+        const govOrient = govOrientMap[v.id_votacao];
+        const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
+        const isAligned = depNorm && govNorm && depNorm === govNorm;
+        if (alignmentFilter === "alinhado" && !isAligned) return false;
+        if (alignmentFilter === "desalinhado" && (isAligned || !govNorm)) return false;
+      }
+
+      // Search text
+      if (searchText.trim()) {
+        const votacao = votacaoMap[v.id_votacao];
+        const haystack = [
+          votacao?.proposicao_ementa,
+          votacao?.proposicao_tipo,
+          votacao?.proposicao_numero,
+          votacao?.descricao,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(searchText.trim().toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }, [votos, yearFilter, voteTypeFilter, alignmentFilter, searchText, govOrientMap, votacaoMap]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [yearFilter, voteTypeFilter, alignmentFilter, searchText]);
+
+  const totalPages = Math.ceil(filteredVotos.length / ITEMS_PER_PAGE);
+  const paginatedVotos = filteredVotos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+
+  // Available years from votos
+  const availableYears = useMemo(() => {
+    const years = [...new Set(votos.map((v) => v.ano))].sort((a, b) => b - a);
+    return years;
+  }, [votos]);
 
   if (loading) {
     return (
@@ -280,12 +348,70 @@ export default function DeputadoDetail() {
           </Card>
         )}
 
+        {/* Filters */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+              <Filter size={14} /> Filtros
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-3 top-2.5 text-muted-foreground" size={14} />
+                <Input
+                  placeholder="Buscar proposição..."
+                  className="pl-9 h-9 text-xs"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
+              </div>
+
+              <Select value={yearFilter} onValueChange={setYearFilter}>
+                <SelectTrigger className="w-24 h-9 text-xs">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {availableYears.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={voteTypeFilter} onValueChange={setVoteTypeFilter}>
+                <SelectTrigger className="w-24 h-9 text-xs">
+                  <SelectValue placeholder="Voto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={alignmentFilter} onValueChange={setAlignmentFilter}>
+                <SelectTrigger className="w-32 h-9 text-xs">
+                  <SelectValue placeholder="Alinhamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="alinhado">Alinhado</SelectItem>
+                  <SelectItem value="desalinhado">Desalinhado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Voting list with pagination */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                <Vote size={14} /> Votações ({votos.length})
+                <Vote size={14} /> Votações ({filteredVotos.length})
               </CardTitle>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
@@ -323,7 +449,6 @@ export default function DeputadoDetail() {
                 const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
                 const isAligned = depNorm && govNorm && depNorm === govNorm;
 
-                // Build proper Câmara portal link (human-readable page)
                 const camaraUrl = `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
 
                 return (
@@ -364,6 +489,9 @@ export default function DeputadoDetail() {
                               {votacao?.data && ` • ${new Date(votacao.data).toLocaleDateString("pt-BR")}`}
                             </span>
                           )}
+                          <Badge variant="outline" className="text-[8px] px-1 py-0">
+                            {v.ano}
+                          </Badge>
                           <a
                             href={camaraUrl}
                             target="_blank"
@@ -372,7 +500,7 @@ export default function DeputadoDetail() {
                             title="Ver no portal da Câmara"
                           >
                             <ExternalLink size={9} />
-                            Portal da Câmara
+                            Portal
                           </a>
                         </div>
                       </div>
@@ -399,9 +527,9 @@ export default function DeputadoDetail() {
                   </div>
                 );
               })}
-              {votos.length === 0 && (
+              {filteredVotos.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  Nenhuma votação registrada para este deputado.
+                  Nenhuma votação encontrada com os filtros selecionados.
                 </p>
               )}
             </div>
@@ -410,11 +538,4 @@ export default function DeputadoDetail() {
       </main>
     </div>
   );
-}
-
-function normalizeVotoLabel(voto: string): string {
-  const v = voto.trim().toLowerCase();
-  if (v === "sim" || v === "yes") return "sim";
-  if (v === "não" || v === "nao" || v === "no") return "não";
-  return v;
 }
