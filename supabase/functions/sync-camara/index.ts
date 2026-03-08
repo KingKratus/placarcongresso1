@@ -205,7 +205,9 @@ Deno.serve(async (req) => {
             ano: year,
           });
 
-          if (depVoto === "abstencao" || depVoto === "ausente" || depVoto === "obstrucao" || depVoto === "") continue;
+          // Radar methodology: any vote different from gov orientation = not aligned
+          // Abstention, absence, obstruction = counts AGAINST alignment
+          if (depVoto === "" || depVoto === "presidente") continue; // skip only if no vote data
 
           const govNorm = normalizeVoto(govOrient);
           deputyScores[depId].relevant++;
