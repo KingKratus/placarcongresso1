@@ -200,7 +200,7 @@ export default function Insights() {
         loading={loading}
         onRefresh={() => {}}
         user={user}
-        onSignIn={signIn}
+        onSignIn={signInWithGoogle}
         onSignOut={signOut}
         casa="camara"
       />
