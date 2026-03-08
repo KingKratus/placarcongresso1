@@ -1,1 +1,4 @@
 project_id = "pyacnmungdtsnntvtsxx"
+
+[functions.sync-camara]
+verify_jwt = false
