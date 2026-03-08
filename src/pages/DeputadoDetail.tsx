@@ -492,16 +492,40 @@ export default function DeputadoDetail() {
                           <Badge variant="outline" className="text-[8px] px-1 py-0">
                             {v.ano}
                           </Badge>
+                          {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
+                            <a
+                              href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + "/" + v.ano)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
+                              title="Buscar proposição no portal da Câmara"
+                            >
+                              <ExternalLink size={9} />
+                              Proposição
+                            </a>
+                          )}
                           <a
-                            href={camaraUrl}
+                            href={`https://dadosabertos.camara.leg.br/api/v2/votacoes/${v.id_votacao}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
-                            title="Ver no portal da Câmara"
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-muted-foreground hover:text-primary hover:underline"
+                            title="Ver dados da votação na API"
                           >
                             <ExternalLink size={9} />
-                            Portal
+                            API
                           </a>
+                          {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
+                            <a
+                              href={`https://www.google.com/search?q=site:camara.leg.br+${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-muted-foreground hover:text-primary hover:underline"
+                              title="Buscar no Google"
+                            >
+                              <Search size={9} />
+                              Buscar
+                            </a>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
