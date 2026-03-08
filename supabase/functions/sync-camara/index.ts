@@ -64,18 +64,25 @@ Deno.serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
 
-    if (claimsError || !claimsData?.claims) {
-      return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
-    }
+    // Allow service role key directly (used by cron jobs)
+    if (token === supabaseServiceKey) {
+      // Authorized as service role
+    } else {
+      // Validate as user JWT
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
 
-    const role = claimsData.claims.role;
-    if (role !== "authenticated" && role !== "service_role") {
-      return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
+      if (claimsError || !claimsData?.claims) {
+        return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
+      }
+
+      const role = claimsData.claims.role;
+      if (role !== "authenticated") {
+        return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
+      }
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
