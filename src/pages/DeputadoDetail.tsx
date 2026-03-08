@@ -494,8 +494,8 @@ export default function DeputadoDetail() {
                             {v.ano}
                           </Badge>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
-                            <a
-                              href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero)}`}
+                             <a
+                               href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + ((votacao as any).proposicao_ano ? "/" + (votacao as any).proposicao_ano : ""))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-[9px] font-bold text-primary hover:underline"
