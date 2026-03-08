@@ -234,8 +234,8 @@ Deno.serve(async (req) => {
       const score = data.relevant > 0 ? (data.aligned / data.relevant) * 100 : 0;
       let classificacao = "Centro";
       if (data.relevant === 0) classificacao = "Sem Dados";
-      else if (score >= 50) classificacao = "Governo";
-      else if (score <= 30) classificacao = "Oposição";
+      else if (score >= 70) classificacao = "Governo";
+      else if (score <= 35) classificacao = "Oposição";
 
       records.push({
         deputado_id: Number(depIdStr),
