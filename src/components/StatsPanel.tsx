@@ -132,10 +132,13 @@ export function StatsPanel({
           </h4>
           <div className="space-y-2 text-[11px] font-semibold">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento {"> "}70%
+              <div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento {"> "}50%
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento {"< "}35%
+              <div className="w-2 h-2 rounded-full bg-centro" /> CENTRÃO: Alinhamento 30–50%
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento {"≤ "}30%
             </div>
           </div>
           <p className="text-[10px] mt-3 leading-relaxed opacity-70">
