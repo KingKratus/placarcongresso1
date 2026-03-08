@@ -1,4 +1,5 @@
 import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +26,7 @@ interface NavbarProps {
   user: any;
   onSignIn: () => void;
   onSignOut: () => void;
+  casa?: "camara" | "senado";
 }
 
 const ANOS = [2023, 2024, 2025, 2026];
