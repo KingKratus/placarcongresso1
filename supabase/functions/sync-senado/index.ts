@@ -138,20 +138,16 @@ Deno.serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
 
     if (token === supabaseServiceKey || token === supabaseAnonKey) {
-      // Authorized
+      // Authorized via known key
     } else {
+      // Validate as user JWT
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: claimsData, error: claimsError } =
-        await authClient.auth.getClaims(token);
+      const { data: { user }, error: userError } = await authClient.auth.getUser(token);
 
-      if (claimsError || !claimsData?.claims) {
+      if (userError || !user) {
         return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
-      }
-
-      if (claimsData.claims.role !== "authenticated") {
-        return jsonResponse({ error: "Unauthorized: insufficient permissions" }, 403);
       }
     }
 
