@@ -33,7 +33,7 @@ const UFS = [
 export default function Insights() {
   const [ano, setAno] = useState(2025);
   const { deputados, senadores, votacoesCamara, votacoesSenado, loading } = useInsightsData(ano);
-  const { user, signIn, signOut } = useAuth();
+  const { user, signInWithGoogle, signOut } = useAuth();
 
   // 1. Classification distribution
   const classDistCamara = useMemo(() => {
