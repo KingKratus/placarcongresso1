@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useAuth } from "@/hooks/useAuth";
+import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
+import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -32,7 +34,7 @@ const UFS = [
 
 export default function Insights() {
   const [ano, setAno] = useState(2025);
-  const { deputados, senadores, votacoesCamara, votacoesSenado, loading } = useInsightsData(ano);
+  const { deputados, senadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
 
   // 1. Classification distribution
@@ -231,6 +233,10 @@ export default function Insights() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* 0. Trend + Simulation */}
+            <AlignmentTrendChart allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
+            <AlignmentSimulation allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
+
             {/* 1. Classification Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
