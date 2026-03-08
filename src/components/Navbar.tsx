@@ -1,4 +1,5 @@
 import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +26,7 @@ interface NavbarProps {
   user: any;
   onSignIn: () => void;
   onSignOut: () => void;
+  casa?: "camara" | "senado";
 }
 
 const ANOS = [2023, 2024, 2025, 2026];
@@ -51,7 +53,11 @@ export function Navbar({
   user,
   onSignIn,
   onSignOut,
+  casa = "camara",
 }: NavbarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   return (
     <nav className="bg-card border-b border-border sticky top-0 z-50 px-4 py-3 shadow-sm">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -66,6 +72,28 @@ export function Navbar({
             <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mt-0.5">
               Alinhamento com o Líder do Governo
             </p>
+          </div>
+          <div className="flex ml-4 bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => navigate("/")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                !isSenado
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Câmara
+            </button>
+            <button
+              onClick={() => navigate("/senado")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                isSenado
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Senado
+            </button>
           </div>
         </div>
 
