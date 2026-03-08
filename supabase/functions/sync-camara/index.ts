@@ -65,9 +65,9 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
 
-    // Allow service role key directly (used by cron jobs)
-    if (token === supabaseServiceKey) {
-      // Authorized as service role
+    // Allow service role key or anon key directly
+    if (token === supabaseServiceKey || token === supabaseAnonKey) {
+      // Authorized
     } else {
       // Validate as user JWT
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
