@@ -57,26 +57,18 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication check ──
+    // ── Authentication check (optional — cron calls have no auth) ──
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ error: "Unauthorized: missing token" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    // Allow service role key or anon key directly
-    if (token === supabaseServiceKey || token === supabaseAnonKey) {
-      // Authorized
-    } else {
-      // Validate as user JWT
-      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user }, error: userError } = await authClient.auth.getUser(token);
-
-      if (userError || !user) {
-        return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      if (token !== supabaseServiceKey && token !== supabaseAnonKey) {
+        const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: { user }, error: userError } = await authClient.auth.getUser(token);
+        if (userError || !user) {
+          return jsonResponse({ error: "Unauthorized: invalid token" }, 401);
+        }
       }
     }
 
