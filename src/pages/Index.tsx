@@ -27,7 +27,7 @@ const Index = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
-  const [ano, setAno] = useState(2025);
+  const [ano, setAno] = useState(new Date().getFullYear());
   const [classFilter, setClassFilter] = useState("all");
 
   const { deputados, partidos, loading: depLoading } = useDeputados();
