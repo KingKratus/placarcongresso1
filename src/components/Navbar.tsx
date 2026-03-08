@@ -73,6 +73,28 @@ export function Navbar({
               Alinhamento com o Líder do Governo
             </p>
           </div>
+          <div className="flex ml-4 bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => navigate("/")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                !isSenado
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Câmara
+            </button>
+            <button
+              onClick={() => navigate("/senado")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                isSenado
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Senado
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
