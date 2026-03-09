@@ -574,7 +574,7 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
 
 function buildBreakdown(votos: { voto: string; partido: string }[]): VoteBreakdown {
   let sim = 0, nao = 0, abstencao = 0, outros = 0;
-  const partyMap: Record<string, { sim: number; nao: number; abstencao: number; total: number }> = {};
+  const partyMap: Record<string, { sim: number; nao: number; abstencao: number; outros: number; total: number }> = {};
 
   votos.forEach(({ voto, partido }) => {
     const cls = classifyVote(voto);
@@ -583,13 +583,17 @@ function buildBreakdown(votos: { voto: string; partido: string }[]): VoteBreakdo
     else if (cls === "abstencao") abstencao++;
     else outros++;
 
-    if (!partyMap[partido]) partyMap[partido] = { sim: 0, nao: 0, abstencao: 0, total: 0 };
-    partyMap[partido][cls === "outros" ? "abstencao" : cls]++;
+    if (!partyMap[partido]) partyMap[partido] = { sim: 0, nao: 0, abstencao: 0, outros: 0, total: 0 };
+    // Bug fix: properly count each category without merging "outros" into "abstencao"
+    if (cls === "sim") partyMap[partido].sim++;
+    else if (cls === "nao") partyMap[partido].nao++;
+    else if (cls === "abstencao") partyMap[partido].abstencao++;
+    else partyMap[partido].outros++;
     partyMap[partido].total++;
   });
 
   const byParty = Object.entries(partyMap)
-    .map(([partido, v]) => ({ partido, ...v }))
+    .map(([partido, v]) => ({ partido, sim: v.sim, nao: v.nao, abstencao: v.abstencao, total: v.total }))
     .sort((a, b) => b.total - a.total);
 
   return { sim, nao, abstencao, outros, total: votos.length, byParty };
