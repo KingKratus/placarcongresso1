@@ -15,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText } from "lucide-react";
 
 const ANOS = [2023, 2024, 2025, 2026];
 const CLASS_COLORS: Record<string, string> = {
