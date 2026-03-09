@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
 
         votacaoRecords.push({
           codigo_sessao_votacao: String(codigo),
-          data: votacao.dataInicioVotacao || null,
+          data: votacao.dataInicioVotacao ? parseDate(votacao.dataInicioVotacao) : null,
           descricao: votacao.descricaoVotacao || null,
           resultado: votacao.tipoSessao || null,
           ano: year,
