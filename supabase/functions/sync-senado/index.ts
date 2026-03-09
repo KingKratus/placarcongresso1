@@ -77,6 +77,19 @@ async function fetchVotacoesWithOrientacoes(year: number): Promise<any[]> {
   return allVotacoes;
 }
 
+/** Parse BR date format "DD/MM/YYYY HH:MM:SS" to ISO string */
+function parseDate(dateStr: string): string | null {
+  if (!dateStr) return null;
+  // Try ISO format first
+  if (dateStr.includes("-")) return dateStr;
+  // BR format: "24/02/2026 17:58:50"
+  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    return `${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}:${match[6]}`;
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
