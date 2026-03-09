@@ -1,0 +1,353 @@
+import { useMemo } from "react";
+import { TrendingUp, TrendingDown, ArrowRight, Target, Users } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell,
+} from "recharts";
+import type { Tables } from "@/integrations/supabase/types";
+
+type Analise = Tables<"analises_senadores">;
+
+interface CentroTrendsSenadoProps {
+  analises: Analise[];
+  onSenadorClick?: (id: number) => void;
+}
+
+// Centro range: 35% < score < 70%
+// Midpoint = 52.5%
+// Lean governo: score > 52.5 (closer to 70)
+// Lean oposição: score < 52.5 (closer to 35)
+const CENTRO_MIN = 35;
+const CENTRO_MAX = 70;
+const CENTRO_MID = (CENTRO_MIN + CENTRO_MAX) / 2;
+
+function getTendency(score: number): "governo" | "oposicao" | "neutro" {
+  if (score >= CENTRO_MID + 3) return "governo";
+  if (score <= CENTRO_MID - 3) return "oposicao";
+  return "neutro";
+}
+
+function getTendencyLabel(t: "governo" | "oposicao" | "neutro") {
+  if (t === "governo") return "→ Governo";
+  if (t === "oposicao") return "→ Oposição";
+  return "Neutro";
+}
+
+export function CentroTrendsSenado({ analises, onSenadorClick }: CentroTrendsSenadoProps) {
+  const centroSenadores = useMemo(
+    () =>
+      analises
+        .filter((a) => a.classificacao === "Centro")
+        .sort((a, b) => Number(b.score) - Number(a.score)),
+    [analises]
+  );
+
+  const { leanGov, leanOpo, neutro, chartData, avgScore } = useMemo(() => {
+    const lg = centroSenadores.filter((s) => getTendency(Number(s.score)) === "governo");
+    const lo = centroSenadores.filter((s) => getTendency(Number(s.score)) === "oposicao");
+    const n = centroSenadores.filter((s) => getTendency(Number(s.score)) === "neutro");
+
+    const avg =
+      centroSenadores.length > 0
+        ? centroSenadores.reduce((sum, s) => sum + Number(s.score), 0) / centroSenadores.length
+        : 0;
+
+    const chart = centroSenadores.map((s) => ({
+      name: s.senador_nome.split(" ").slice(0, 2).join(" "),
+      fullName: s.senador_nome,
+      score: Number(s.score),
+      partido: s.senador_partido,
+      id: s.senador_id,
+      tendency: getTendency(Number(s.score)),
+    }));
+
+    return { leanGov: lg, leanOpo: lo, neutro: n, chartData: chart, avgScore: avg };
+  }, [centroSenadores]);
+
+  if (centroSenadores.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <Target size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-semibold text-muted-foreground">
+            Nenhum senador classificado como Centro
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const govPct = Math.round((leanGov.length / centroSenadores.length) * 100);
+  const opoPct = Math.round((leanOpo.length / centroSenadores.length) * 100);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="border-governo/30 bg-governo/5">
+          <CardContent className="p-4 text-center">
+            <TrendingUp size={18} className="mx-auto text-governo mb-1" />
+            <p className="text-2xl font-black text-foreground">{leanGov.length}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Tendência Governo
+            </p>
+            <Badge className="bg-governo text-governo-foreground mt-1 text-[10px]">{govPct}%</Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-centro/30 bg-centro/5">
+          <CardContent className="p-4 text-center">
+            <ArrowRight size={18} className="mx-auto text-centro mb-1" />
+            <p className="text-2xl font-black text-foreground">{neutro.length}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Neutro
+            </p>
+            <Badge className="bg-centro text-centro-foreground mt-1 text-[10px]">
+              {Math.round((neutro.length / centroSenadores.length) * 100)}%
+            </Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-oposicao/30 bg-oposicao/5">
+          <CardContent className="p-4 text-center">
+            <TrendingDown size={18} className="mx-auto text-oposicao mb-1" />
+            <p className="text-2xl font-black text-foreground">{leanOpo.length}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Tendência Oposição
+            </p>
+            <Badge className="bg-oposicao text-oposicao-foreground mt-1 text-[10px]">{opoPct}%</Badge>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tendency bar */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+            <Target size={14} />
+            Barra de Tendência do Centro
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="text-oposicao">Oposição</span>
+            <div className="flex-1 h-4 rounded-full overflow-hidden flex bg-muted">
+              <div
+                className="bg-oposicao/70 transition-all"
+                style={{ width: `${opoPct}%` }}
+              />
+              <div
+                className="bg-centro/70 transition-all"
+                style={{
+                  width: `${Math.round((neutro.length / centroSenadores.length) * 100)}%`,
+                }}
+              />
+              <div
+                className="bg-governo/70 transition-all"
+                style={{ width: `${govPct}%` }}
+              />
+            </div>
+            <span className="text-governo">Governo</span>
+          </div>
+          <p className="text-xs text-center text-muted-foreground">
+            Média do Centro:{" "}
+            <span className="font-black text-foreground">{avgScore.toFixed(1)}%</span>
+            {avgScore > CENTRO_MID + 2 && (
+              <span className="text-governo ml-1">— inclinação pró-governo</span>
+            )}
+            {avgScore < CENTRO_MID - 2 && (
+              <span className="text-oposicao ml-1">— inclinação pró-oposição</span>
+            )}
+            {avgScore >= CENTRO_MID - 2 && avgScore <= CENTRO_MID + 2 && (
+              <span className="text-centro ml-1">— equilibrado</span>
+            )}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Distribuição dos Scores no Centro
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 28)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+              <XAxis
+                type="number"
+                domain={[CENTRO_MIN, CENTRO_MAX]}
+                ticks={[35, 45, 52.5, 60, 70]}
+                tick={{ fontSize: 10 }}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={100}
+                tick={{ fontSize: 10, fontWeight: 600 }}
+              />
+              <ReferenceLine
+                x={CENTRO_MID}
+                stroke="hsl(var(--muted-foreground))"
+                strokeDasharray="4 4"
+                label={{
+                  value: "Ponto médio",
+                  position: "top",
+                  style: { fontSize: 9, fill: "hsl(var(--muted-foreground))" },
+                }}
+              />
+              <Tooltip
+                cursor={{ fill: "hsl(var(--muted) / 0.3)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.[0]) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-card border border-border rounded-lg p-2 shadow-lg text-xs">
+                      <p className="font-black">{d.fullName}</p>
+                      <p className="text-muted-foreground">{d.partido}</p>
+                      <p className="font-bold mt-1">
+                        Score: {d.score.toFixed(1)}% —{" "}
+                        <span
+                          className={
+                            d.tendency === "governo"
+                              ? "text-governo"
+                              : d.tendency === "oposicao"
+                                ? "text-oposicao"
+                                : "text-centro"
+                          }
+                        >
+                          {getTendencyLabel(d.tendency)}
+                        </span>
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar
+                dataKey="score"
+                radius={[0, 4, 4, 0]}
+                onClick={(data) => onSenadorClick?.(data.id)}
+                className="cursor-pointer"
+              >
+                {chartData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={
+                      entry.tendency === "governo"
+                        ? "hsl(var(--governo))"
+                        : entry.tendency === "oposicao"
+                          ? "hsl(var(--oposicao))"
+                          : "hsl(var(--centro))"
+                    }
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Detailed lists */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TendencyList
+          title="Tendência Governo"
+          icon={<TrendingUp size={14} className="text-governo" />}
+          senadores={leanGov}
+          accentClass="governo"
+          onSenadorClick={onSenadorClick}
+        />
+        <TendencyList
+          title="Tendência Oposição"
+          icon={<TrendingDown size={14} className="text-oposicao" />}
+          senadores={leanOpo}
+          accentClass="oposicao"
+          onSenadorClick={onSenadorClick}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TendencyList({
+  title,
+  icon,
+  senadores,
+  accentClass,
+  onSenadorClick,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  senadores: Analise[];
+  accentClass: string;
+  onSenadorClick?: (id: number) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {icon} {title}
+          <Badge variant="secondary" className="ml-auto text-[10px]">
+            {senadores.length} sen.
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ScrollArea className="max-h-[40vh]">
+          <div className="px-4 pb-4 space-y-2">
+            {senadores.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                Nenhum senador nesta tendência
+              </p>
+            )}
+            {senadores.map((sen) => {
+              const score = Number(sen.score);
+              // Normalize to 0-100 within Centro range for the progress bar
+              const normalized = ((score - CENTRO_MIN) / (CENTRO_MAX - CENTRO_MIN)) * 100;
+              return (
+                <button
+                  key={sen.senador_id}
+                  onClick={() => onSenadorClick?.(sen.senador_id)}
+                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-accent transition-colors text-left"
+                >
+                  {sen.senador_foto && (
+                    <img
+                      src={sen.senador_foto}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground truncate">
+                        {sen.senador_nome}
+                      </span>
+                      <Badge variant="outline" className="text-[8px] flex-shrink-0">
+                        {sen.senador_partido}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Progress value={normalized} className="h-1.5 flex-1" />
+                      <span className={`text-[10px] font-black text-${accentClass} flex-shrink-0`}>
+                        {score.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}

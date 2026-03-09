@@ -8,6 +8,7 @@ import {
   BarChart2,
   Trophy,
   GitCompareArrows,
+  Target,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanelSenado } from "@/components/StatsPanelSenado";
@@ -16,6 +17,7 @@ import { RankingTableSenado } from "@/components/RankingTableSenado";
 import { PartyChartSenado } from "@/components/PartyChartSenado";
 import { ComparisonViewSenado } from "@/components/ComparisonViewSenado";
 import { ClassificationFilterSenado } from "@/components/ClassificationFilterSenado";
+import { CentroTrendsSenado } from "@/components/CentroTrendsSenado";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSenadores } from "@/hooks/useSenadores";
@@ -120,6 +122,9 @@ const Senado = () => {
               <TabsTrigger value="comparativo" className="gap-2">
                 <GitCompareArrows size={14} /> Comparativo
               </TabsTrigger>
+              <TabsTrigger value="tendencias" className="gap-2">
+                <Target size={14} /> Tendências
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="senadores" className="space-y-4 mt-4">
@@ -177,6 +182,9 @@ const Senado = () => {
 
             <TabsContent value="comparativo" className="mt-4">
               <ComparisonViewSenado analises={analises} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
+            </TabsContent>
+            <TabsContent value="tendencias" className="mt-4">
+              <CentroTrendsSenado analises={analises} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
             </TabsContent>
           </Tabs>
         </section>
