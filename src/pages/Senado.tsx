@@ -17,6 +17,7 @@ import { RankingTableSenado } from "@/components/RankingTableSenado";
 import { PartyChartSenado } from "@/components/PartyChartSenado";
 import { ComparisonViewSenado } from "@/components/ComparisonViewSenado";
 import { ClassificationFilterSenado } from "@/components/ClassificationFilterSenado";
+import { CentroTrendsSenado } from "@/components/CentroTrendsSenado";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSenadores } from "@/hooks/useSenadores";
