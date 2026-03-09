@@ -112,20 +112,38 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication: require a valid JWT ──
+    // ── Authentication: require service-role key or an authenticated admin user ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsError || !claimsData?.claims) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
+    const token = authHeader.replace("Bearer ", "");
+
+    // Allow service-role token directly (used by cron via vault secret)
+    const isServiceRole = token === supabaseServiceKey;
+
+    if (!isServiceRole) {
+      // Validate as a regular JWT and check it belongs to an authenticated admin user
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+
+      // Reject anon role — only real authenticated users with admin role may proceed
+      if (claimsError || !claimsData?.claims || claimsData.claims.role === "anon") {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      // Check admin role in DB
+      const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: hasAdmin } = await adminClient.rpc("has_role", {
+        _user_id: claimsData.claims.sub,
+        _role: "admin",
+      });
+      if (!hasAdmin) {
+        return jsonResponse({ error: "Forbidden: admin role required" }, 403);
+      }
     }
 
     // Use service role for data operations
