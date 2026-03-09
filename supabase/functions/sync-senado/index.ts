@@ -52,10 +52,6 @@ function parseDate(dateStr: string): string | null {
   return null;
 }
 
-/**
- * Normalize a senator name by removing common prefixes and accent differences.
- * Used to match names from the voting API to the senator list API.
- */
 function normalizeName(name: string): string {
   return name
     .trim()
@@ -66,10 +62,6 @@ function normalizeName(name: string): string {
     .replace(/\s+/g, " ");
 }
 
-/**
- * Known name aliases: votação API name → senator list API name
- * Add entries here when the voting API uses a different name variant.
- */
 const NAME_ALIASES: Record<string, string> = {
   "Astr. Marcos Pontes": "Astronauta Marcos Pontes",
   "Rogério Marinho": "Rogerio Marinho",
@@ -78,9 +70,6 @@ const NAME_ALIASES: Record<string, string> = {
   "Ivete da Silveira": "Ivete da Silveira Caldas",
 };
 
-/**
- * Fetch votações WITH orientação de bancada from the Senate API in 60-day windows.
- */
 async function fetchVotacoesWithOrientacoes(year: number): Promise<any[]> {
   const allVotacoes: any[] = [];
   const startDate = new Date(year, 0, 1);
@@ -121,17 +110,45 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // ── Authentication: require a valid JWT ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(
+      authHeader.replace("Bearer ", "")
+    );
+    if (claimsError || !claimsData?.claims) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    // Use service role for data operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ── Input validation ──
     let year = new Date().getFullYear();
     try {
       const text = await req.text();
       if (text) {
         const body = JSON.parse(text);
-        if (body?.ano) year = body.ano;
+        if (body?.ano !== undefined) {
+          const inputYear = Number(body.ano);
+          if (!Number.isInteger(inputYear) || inputYear < 2000 || inputYear > 2030) {
+            return jsonResponse({ error: "Ano inválido. Deve ser entre 2000 e 2030." }, 400);
+          }
+          year = inputYear;
+        }
       }
-    } catch {
-      // fallback to current year
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        return jsonResponse({ error: "JSON inválido no body." }, 400);
+      }
     }
 
     console.log(`[sync-senado] Starting sync for year ${year}`);
@@ -144,7 +161,6 @@ Deno.serve(async (req) => {
     const senadoresJson = await safeFetchJson(`${SENADO_API}/senador/lista/atual.json`);
     const senadorList = senadoresJson?.ListaParlamentarEmExercicio?.Parlamentares?.Parlamentar || [];
 
-    // Map: exact name → {id, foto}, normalized name → {id, foto}
     const nameToId: Record<string, { id: number; foto: string }> = {};
     const normalizedNameToId: Record<string, { id: number; foto: string; original: string }> = {};
 
@@ -165,7 +181,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Also load existing DB records for ID mapping (for former senators)
     const { data: existingAnalises } = await supabase
       .from("analises_senadores")
       .select("senador_id, senador_nome, senador_foto")
@@ -182,43 +197,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    /**
-     * Resolve a senator name to an ID using multiple strategies:
-     * 1. Exact match
-     * 2. Known alias lookup
-     * 3. Normalized (no accents, no prefix) match
-     * 4. Partial match (last resort)
-     */
     function resolveId(voteName: string): { id: number; foto: string } | null {
-      // 1. Exact match
       if (nameToId[voteName]) return nameToId[voteName];
-
-      // 2. Known alias
       const alias = NAME_ALIASES[voteName] || NAME_ALIASES[voteName.trim()];
       if (alias && nameToId[alias]) return nameToId[alias];
-
-      // 3. Normalized match
       const norm = normalizeName(voteName);
       if (normalizedNameToId[norm]) return normalizedNameToId[norm];
-
-      // 4. Partial: check if normalized vote name is contained in any normalized DB name or vice versa
       for (const [dbNorm, entry] of Object.entries(normalizedNameToId)) {
         if (dbNorm.includes(norm) || norm.includes(dbNorm)) {
-          // Cache for future lookups
           nameToId[voteName] = { id: entry.id, foto: entry.foto };
           return { id: entry.id, foto: entry.foto };
         }
       }
-
       return null;
     }
 
     // ── STEP 3: Process votações ──
-    // Methodology: Radar do Congresso
-    // - Only count votações where gov AND opposition diverge (skip consensus)
-    // - A vote matching gov orientation = aligned
-    // - Any other vote (abstention, absence, different) = NOT aligned
-
     const senatorScores: Record<string, {
       aligned: number;
       total: number;
@@ -252,7 +246,6 @@ Deno.serve(async (req) => {
           ementa: votacao.descricaoMateria || votacao.descricaoVotacao || null,
         });
 
-        // Extract gov and opposition orientations
         const orientacoes = votacao.orientacoesLideranca || [];
         let govOrient: string | null = null;
         let opoOrient: string | null = null;
@@ -272,14 +265,12 @@ Deno.serve(async (req) => {
 
         if (!govOrient) continue;
 
-        // Skip consensus: gov and opposition orient the same way
         if (opoOrient && govOrient === opoOrient) {
           consensusSkipped++;
           continue;
         }
         votacoesWithGovOrient++;
 
-        // Process individual votes
         const parlamentares = votacao.votosParlamentar || [];
         for (const voto of parlamentares) {
           const nome = (voto.nomeParlamentar || "").trim();
@@ -300,7 +291,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Upsert votações
       if (votacaoRecords.length > 0) {
         const { error: vErr } = await supabase
           .from("votacoes_senado")
@@ -371,6 +361,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("[sync-senado] Fatal error:", error.message, error.stack);
-    return jsonResponse({ error: error.message }, 500);
+    return jsonResponse({ error: "Erro interno do servidor." }, 500);
   }
 });
