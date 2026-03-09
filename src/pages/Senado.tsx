@@ -122,6 +122,9 @@ const Senado = () => {
               <TabsTrigger value="comparativo" className="gap-2">
                 <GitCompareArrows size={14} /> Comparativo
               </TabsTrigger>
+              <TabsTrigger value="tendencias" className="gap-2">
+                <Target size={14} /> Tendências
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="senadores" className="space-y-4 mt-4">
