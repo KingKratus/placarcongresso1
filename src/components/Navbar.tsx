@@ -3,11 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { Partido } from "@/hooks/useDeputados";
 
@@ -39,27 +35,18 @@ const CLASSES = [
 ];
 
 export function Navbar({
-  searchTerm,
-  onSearchChange,
-  partyFilter,
-  onPartyFilterChange,
-  ano,
-  onAnoChange,
-  classFilter,
-  onClassFilterChange,
-  partidos,
-  loading,
-  onRefresh,
-  user,
-  onSignIn,
-  onSignOut,
-  casa = "camara",
+  searchTerm, onSearchChange, partyFilter, onPartyFilterChange,
+  ano, onAnoChange, classFilter, onClassFilterChange,
+  partidos, loading, onRefresh, user, onSignIn, onSignOut, casa = "camara",
 }: NavbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   const isInsights = location.pathname === "/insights";
   const isCamara = !isSenado && !isInsights;
+
+  const searchPlaceholder = isSenado ? "Buscar senador..." : isInsights ? "Buscar..." : "Buscar deputado...";
+
   return (
     <nav className="bg-card border-b border-border sticky top-0 z-50 px-4 py-3 shadow-sm">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -76,34 +63,19 @@ export function Navbar({
             </p>
           </div>
           <div className="flex ml-4 bg-muted rounded-lg p-0.5">
-            <button
-              onClick={() => navigate("/")}
+            <button onClick={() => navigate("/")}
               className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
-                isCamara
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+                isCamara ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               Câmara
             </button>
-            <button
-              onClick={() => navigate("/senado")}
+            <button onClick={() => navigate("/senado")}
               className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
-                isSenado
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+                isSenado ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               Senado
             </button>
-            <button
-              onClick={() => navigate("/insights")}
+            <button onClick={() => navigate("/insights")}
               className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
-                isInsights
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+                isInsights ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               Insights
             </button>
           </div>
@@ -112,51 +84,28 @@ export function Navbar({
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-56">
             <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
-            <Input
-              placeholder="Buscar deputado..."
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-            />
+            <Input placeholder={searchPlaceholder} className="pl-10" value={searchTerm} onChange={(e) => onSearchChange(e.target.value)} />
           </div>
 
           <Select value={String(ano)} onValueChange={(v) => onAnoChange(Number(v))}>
-            <SelectTrigger className="w-24">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {ANOS.map((a) => (
-                <SelectItem key={a} value={String(a)}>
-                  {a}
-                </SelectItem>
-              ))}
+              {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
             </SelectContent>
           </Select>
 
           <Select value={partyFilter} onValueChange={onPartyFilterChange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Partido" />
-            </SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Partido" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {partidos.map((p) => (
-                <SelectItem key={p.id} value={p.sigla}>
-                  {p.sigla}
-                </SelectItem>
-              ))}
+              {partidos.map((p) => <SelectItem key={p.id} value={p.sigla}>{p.sigla}</SelectItem>)}
             </SelectContent>
           </Select>
 
           <Select value={classFilter} onValueChange={onClassFilterChange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Classificação" />
-            </SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue placeholder="Classificação" /></SelectTrigger>
             <SelectContent>
-              {CLASSES.map((c) => (
-                <SelectItem key={c.value || "all"} value={c.value || "all"}>
-                  {c.label}
-                </SelectItem>
-              ))}
+              {CLASSES.map((c) => <SelectItem key={c.value || "all"} value={c.value || "all"}>{c.label}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -166,13 +115,11 @@ export function Navbar({
 
           {user ? (
             <Button variant="ghost" size="sm" onClick={onSignOut} className="gap-2">
-              <User size={16} />
-              <span className="hidden sm:inline text-xs">Sair</span>
+              <User size={16} /><span className="hidden sm:inline text-xs">Sair</span>
             </Button>
           ) : (
             <Button variant="outline" size="sm" onClick={onSignIn} className="gap-2">
-              <LogIn size={16} />
-              <span className="hidden sm:inline text-xs">Login</span>
+              <LogIn size={16} /><span className="hidden sm:inline text-xs">Login</span>
             </Button>
           )}
         </div>
