@@ -79,6 +79,11 @@ export function Navbar({
                 isInsights ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               Insights
             </button>
+            <button onClick={() => navigate("/documentacao")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                isDocs ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              Docs
+            </button>
           </div>
         </div>
 
