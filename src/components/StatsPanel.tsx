@@ -51,6 +51,7 @@ export function StatsPanel({
   totalDeputados,
   syncing,
   onSync,
+  user,
 }: StatsPanelProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
