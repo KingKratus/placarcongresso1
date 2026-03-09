@@ -43,7 +43,8 @@ export function Navbar({
   const location = useLocation();
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   const isInsights = location.pathname === "/insights";
-  const isCamara = !isSenado && !isInsights;
+  const isDocs = location.pathname === "/documentacao";
+  const isCamara = !isSenado && !isInsights && !isDocs;
 
   const searchPlaceholder = isSenado ? "Buscar senador..." : isInsights ? "Buscar..." : "Buscar deputado...";
 
