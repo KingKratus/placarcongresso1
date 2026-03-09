@@ -415,6 +415,11 @@ export default function Insights() {
             <TabsContent value="simulacao">
               <AlignmentSimulation allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
             </TabsContent>
+
+            {/* Projetos */}
+            <TabsContent value="projetos">
+              <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} />
+            </TabsContent>
           </Tabs>
         )}
       </main>
