@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
         console.log(`[sync-senado] Processed ${i}/${votacoes.length} votações`);
     }
 
-    console.log(`[sync-senado] ${votacoesStored} votações, ${votacoesWithGovOrient} with gov orientation`);
+    console.log(`[sync-senado] ${votacoesStored} votações, ${votacoesWithGovOrient} with gov orientation, ${consensusSkipped} consensus skipped`);
 
     // ── STEP 3: Resolve senator IDs from existing data or current senator list ──
     // Fetch current senators to map names to IDs
