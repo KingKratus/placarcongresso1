@@ -9,6 +9,7 @@ import Insights from "./pages/Insights";
 import DeputadoDetail from "./pages/DeputadoDetail";
 import SenadorDetail from "./pages/SenadorDetail";
 import NotFound from "./pages/NotFound";
+import Documentacao from "./pages/Documentacao";
 
 const queryClient = new QueryClient();
 
