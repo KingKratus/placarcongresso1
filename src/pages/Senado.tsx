@@ -183,6 +183,9 @@ const Senado = () => {
             <TabsContent value="comparativo" className="mt-4">
               <ComparisonViewSenado analises={analises} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
             </TabsContent>
+            <TabsContent value="tendencias" className="mt-4">
+              <CentroTrendsSenado analises={analises} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
+            </TabsContent>
           </Tabs>
         </section>
       </main>
