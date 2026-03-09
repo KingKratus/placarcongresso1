@@ -19,6 +19,7 @@ interface StatsPanelProps {
   totalDeputados: number;
   syncing: boolean;
   onSync: () => void;
+  user?: any;
 }
 
 function StatItem({
