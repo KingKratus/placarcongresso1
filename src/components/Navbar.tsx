@@ -43,7 +43,8 @@ export function Navbar({
   const location = useLocation();
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   const isInsights = location.pathname === "/insights";
-  const isCamara = !isSenado && !isInsights;
+  const isDocs = location.pathname === "/documentacao";
+  const isCamara = !isSenado && !isInsights && !isDocs;
 
   const searchPlaceholder = isSenado ? "Buscar senador..." : isInsights ? "Buscar..." : "Buscar deputado...";
 
@@ -77,6 +78,11 @@ export function Navbar({
               className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
                 isInsights ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               Insights
+            </button>
+            <button onClick={() => navigate("/documentacao")}
+              className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-colors ${
+                isDocs ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              Docs
             </button>
           </div>
         </div>

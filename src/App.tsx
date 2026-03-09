@@ -9,6 +9,7 @@ import Insights from "./pages/Insights";
 import DeputadoDetail from "./pages/DeputadoDetail";
 import SenadorDetail from "./pages/SenadorDetail";
 import NotFound from "./pages/NotFound";
+import Documentacao from "./pages/Documentacao";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/senado" element={<Senado />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/documentacao" element={<Documentacao />} />
           <Route path="/deputado/:id" element={<DeputadoDetail />} />
           <Route path="/senador/:id" element={<SenadorDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
