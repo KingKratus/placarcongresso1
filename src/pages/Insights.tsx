@@ -418,7 +418,7 @@ export default function Insights() {
 
             {/* Projetos */}
             <TabsContent value="projetos">
-              <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} />
+              <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} ano={ano} />
             </TabsContent>
           </Tabs>
         )}
