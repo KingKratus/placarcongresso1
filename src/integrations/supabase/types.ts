@@ -172,6 +172,27 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_logs: {
+        Row: {
+          casa: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          casa: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          casa?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
