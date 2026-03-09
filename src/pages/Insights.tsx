@@ -4,6 +4,7 @@ import { useInsightsData } from "@/hooks/useInsightsData";
 import { useAuth } from "@/hooks/useAuth";
 import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
+import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
