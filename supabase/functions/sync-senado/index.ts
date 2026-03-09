@@ -151,9 +151,10 @@ Deno.serve(async (req) => {
           ementa: votacao.descricaoMateria || votacao.descricaoVotacao || null,
         });
 
-        // Find government orientation from bancada orientations
+        // Find government AND opposition orientations from bancada orientations
         const orientacoes = votacao.orientacoesLideranca || [];
         let govOrient: string | null = null;
+        let opoOrient: string | null = null;
 
         for (const orient of orientacoes) {
           const partido = (orient.partido || "").trim().toLowerCase();
@@ -162,11 +163,22 @@ Deno.serve(async (req) => {
             if (norm === "sim" || norm === "não") {
               govOrient = norm;
             }
-            break;
+          }
+          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" || partido === "líder da oposição" || partido === "lider da oposicao" || partido === "bloco oposição") {
+            const norm = normalizeVoto(orient.voto);
+            if (norm === "sim" || norm === "não") {
+              opoOrient = norm;
+            }
           }
         }
 
         if (!govOrient) continue; // Skip votações without explicit gov orientation or "liberado"
+
+        // Skip consensus votes: when gov and opposition orient the same way
+        if (opoOrient && govOrient === opoOrient) {
+          consensusSkipped++;
+          continue;
+        }
         votacoesWithGovOrient++;
 
         const parlamentares = votacao.votosParlamentar || [];
