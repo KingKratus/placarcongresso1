@@ -171,10 +171,8 @@ Deno.serve(async (req) => {
         let opoOrient: string | null = null;
 
         // Log all orientation party names for first votação for debugging
-        if (i === 0 && votacao === batch[0]) {
-          const partyNames = orientacoes.map((o: any) => `${o.partido}=${o.voto}`).join(", ");
-          console.log(`[sync-senado] DEBUG orientações: ${partyNames}`);
-        }
+
+
 
         for (const orient of orientacoes) {
           const partido = (orient.partido || "").trim().toLowerCase();
