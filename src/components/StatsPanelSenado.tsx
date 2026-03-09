@@ -19,6 +19,7 @@ interface StatsPanelSenadoProps {
   totalSenadores: number;
   syncing: boolean;
   onSync: () => void;
+  user?: any;
 }
 
 function StatItem({
