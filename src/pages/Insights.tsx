@@ -233,6 +233,7 @@ export default function Insights() {
               <TabsTrigger value="divergencia" className="gap-2"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
+              <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
