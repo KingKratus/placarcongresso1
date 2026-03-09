@@ -41,9 +41,45 @@ async function safeFetchJson(url: string): Promise<any> {
   }
 }
 
+/** Parse BR date format "DD/MM/YYYY HH:MM:SS" to ISO string */
+function parseDate(dateStr: string): string | null {
+  if (!dateStr) return null;
+  if (dateStr.includes("-")) return dateStr;
+  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    return `${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}:${match[6]}`;
+  }
+  return null;
+}
+
+/**
+ * Normalize a senator name by removing common prefixes and accent differences.
+ * Used to match names from the voting API to the senator list API.
+ */
+function normalizeName(name: string): string {
+  return name
+    .trim()
+    .replace(/^(Astr\.\s*|Prof\.\s*|Dr\.\s*|Dra\.\s*|Sen\.\s*|Dep\.\s*)/i, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Known name aliases: votação API name → senator list API name
+ * Add entries here when the voting API uses a different name variant.
+ */
+const NAME_ALIASES: Record<string, string> = {
+  "Astr. Marcos Pontes": "Astronauta Marcos Pontes",
+  "Rogério Marinho": "Rogerio Marinho",
+  "Prof. Dorinha Seabra": "Professora Dorinha Seabra Rezende",
+  "Ivete da Silveira ": "Ivete da Silveira",
+  "Ivete da Silveira": "Ivete da Silveira Caldas",
+};
+
 /**
  * Fetch votações WITH orientação de bancada from the Senate API in 60-day windows.
- * Uses the new orientacaoBancada endpoint which includes both orientations AND individual votes.
  */
 async function fetchVotacoesWithOrientacoes(year: number): Promise<any[]> {
   const allVotacoes: any[] = [];
@@ -77,19 +113,6 @@ async function fetchVotacoesWithOrientacoes(year: number): Promise<any[]> {
   return allVotacoes;
 }
 
-/** Parse BR date format "DD/MM/YYYY HH:MM:SS" to ISO string */
-function parseDate(dateStr: string): string | null {
-  if (!dateStr) return null;
-  // Try ISO format first
-  if (dateStr.includes("-")) return dateStr;
-  // BR format: "24/02/2026 17:58:50"
-  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
-  if (match) {
-    return `${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}:${match[6]}`;
-  }
-  return null;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -98,8 +121,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Auth is handled by verify_jwt = false in config.toml
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     let year = new Date().getFullYear();
@@ -117,37 +138,103 @@ Deno.serve(async (req) => {
 
     // ── STEP 1: Fetch all votações with orientações de bancada ──
     const votacoes = await fetchVotacoesWithOrientacoes(year);
-    console.log(`[sync-senado] ${votacoes.length} votações fetched with orientações`);
+    console.log(`[sync-senado] ${votacoes.length} votações fetched`);
 
-    // ── STEP 2: Process votações and votes ──
-    // Methodology: follows Radar do Congresso / Placar do Congresso
-    // - Use explicit "Governo" orientation from bancada orientations
-    // - A vote counts as aligned ONLY if it matches the government orientation (sim/não)
-    // - Abstention, absence, obstruction = counts AGAINST alignment (reduces index)
-    // - Only votações where governo gave "sim" or "não" (not "liberado") are counted
+    // ── STEP 2: Build senator name → ID map (fuzzy matching) ──
+    const senadoresJson = await safeFetchJson(`${SENADO_API}/senador/lista/atual.json`);
+    const senadorList = senadoresJson?.ListaParlamentarEmExercicio?.Parlamentares?.Parlamentar || [];
 
-    const senatorScores: Record<
-      number,
-      {
-        aligned: number;
-        total: number; // total votações where senator was expected to vote
-        nome: string;
-        partido: string;
-        uf: string;
-        foto: string;
+    // Map: exact name → {id, foto}, normalized name → {id, foto}
+    const nameToId: Record<string, { id: number; foto: string }> = {};
+    const normalizedNameToId: Record<string, { id: number; foto: string; original: string }> = {};
+
+    for (const sen of senadorList) {
+      const ident = sen.IdentificacaoParlamentar;
+      if (!ident) continue;
+      const nome = (ident.NomeParlamentar || "").trim();
+      const nomeCompleto = (ident.NomeCompletoParlamentar || "").trim();
+      const id = Number(ident.CodigoParlamentar);
+      const foto = ident.UrlFotoParlamentar || "";
+      const entry = { id, foto };
+
+      nameToId[nome] = entry;
+      if (nomeCompleto) nameToId[nomeCompleto] = entry;
+      normalizedNameToId[normalizeName(nome)] = { ...entry, original: nome };
+      if (nomeCompleto) {
+        normalizedNameToId[normalizeName(nomeCompleto)] = { ...entry, original: nomeCompleto };
       }
-    > = {};
+    }
+
+    // Also load existing DB records for ID mapping (for former senators)
+    const { data: existingAnalises } = await supabase
+      .from("analises_senadores")
+      .select("senador_id, senador_nome, senador_foto")
+      .limit(1000);
+
+    if (existingAnalises) {
+      for (const a of existingAnalises) {
+        if (!nameToId[a.senador_nome]) {
+          nameToId[a.senador_nome] = { id: a.senador_id, foto: a.senador_foto || "" };
+          normalizedNameToId[normalizeName(a.senador_nome)] = {
+            id: a.senador_id, foto: a.senador_foto || "", original: a.senador_nome,
+          };
+        }
+      }
+    }
+
+    /**
+     * Resolve a senator name to an ID using multiple strategies:
+     * 1. Exact match
+     * 2. Known alias lookup
+     * 3. Normalized (no accents, no prefix) match
+     * 4. Partial match (last resort)
+     */
+    function resolveId(voteName: string): { id: number; foto: string } | null {
+      // 1. Exact match
+      if (nameToId[voteName]) return nameToId[voteName];
+
+      // 2. Known alias
+      const alias = NAME_ALIASES[voteName] || NAME_ALIASES[voteName.trim()];
+      if (alias && nameToId[alias]) return nameToId[alias];
+
+      // 3. Normalized match
+      const norm = normalizeName(voteName);
+      if (normalizedNameToId[norm]) return normalizedNameToId[norm];
+
+      // 4. Partial: check if normalized vote name is contained in any normalized DB name or vice versa
+      for (const [dbNorm, entry] of Object.entries(normalizedNameToId)) {
+        if (dbNorm.includes(norm) || norm.includes(dbNorm)) {
+          // Cache for future lookups
+          nameToId[voteName] = { id: entry.id, foto: entry.foto };
+          return { id: entry.id, foto: entry.foto };
+        }
+      }
+
+      return null;
+    }
+
+    // ── STEP 3: Process votações ──
+    // Methodology: Radar do Congresso
+    // - Only count votações where gov AND opposition diverge (skip consensus)
+    // - A vote matching gov orientation = aligned
+    // - Any other vote (abstention, absence, different) = NOT aligned
+
+    const senatorScores: Record<string, {
+      aligned: number;
+      total: number;
+      nome: string;
+      partido: string;
+      uf: string;
+    }> = {};
 
     let votacoesStored = 0;
-    let votosStored = 0;
     let votacoesWithGovOrient = 0;
     let consensusSkipped = 0;
+    const unresolvedNames = new Set<string>();
 
     for (let i = 0; i < votacoes.length; i += 10) {
       const batch = votacoes.slice(i, i + 10);
-
       const votacaoRecords: any[] = [];
-      const votoBatch: any[] = [];
 
       for (const votacao of batch) {
         const codigo = votacao.codigoVotacaoSve;
@@ -165,85 +252,51 @@ Deno.serve(async (req) => {
           ementa: votacao.descricaoMateria || votacao.descricaoVotacao || null,
         });
 
-        // Find government AND opposition orientations from bancada orientations
+        // Extract gov and opposition orientations
         const orientacoes = votacao.orientacoesLideranca || [];
         let govOrient: string | null = null;
         let opoOrient: string | null = null;
-
-        // Log all orientation party names for first votação for debugging
-
-
 
         for (const orient of orientacoes) {
           const partido = (orient.partido || "").trim().toLowerCase();
           if (partido === "governo" || partido === "gov." || partido === "líder do governo") {
             const norm = normalizeVoto(orient.voto);
-            if (norm === "sim" || norm === "não") {
-              govOrient = norm;
-            }
+            if (norm === "sim" || norm === "não") govOrient = norm;
           }
-          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" || 
-              partido === "líder da oposição" || partido === "lider da oposicao" || 
-              partido === "bloco oposição" || partido === "bloco da oposição" ||
+          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" ||
               partido.includes("oposição") || partido.includes("minoria")) {
             const norm = normalizeVoto(orient.voto);
-            if (norm === "sim" || norm === "não") {
-              opoOrient = norm;
-            }
+            if (norm === "sim" || norm === "não") opoOrient = norm;
           }
         }
 
-        if (!govOrient) continue; // Skip votações without explicit gov orientation or "liberado"
+        if (!govOrient) continue;
 
-        // Skip consensus votes: when gov and opposition orient the same way
+        // Skip consensus: gov and opposition orient the same way
         if (opoOrient && govOrient === opoOrient) {
           consensusSkipped++;
           continue;
         }
         votacoesWithGovOrient++;
 
+        // Process individual votes
         const parlamentares = votacao.votosParlamentar || [];
-
         for (const voto of parlamentares) {
-          const nome = voto.nomeParlamentar || "";
+          const nome = (voto.nomeParlamentar || "").trim();
           const partido = voto.partido || "";
           const uf = voto.uf || "";
           const votoStr = voto.voto || "";
-
-          // Use a hash of name+uf as ID since this API doesn't provide CodigoParlamentar
-          // We'll need to match later or use a generated ID
           const senKey = `${nome}|${uf}`;
 
-          if (!senatorScores[senKey as any]) {
-            (senatorScores as any)[senKey] = {
-              aligned: 0,
-              total: 0,
-              nome,
-              partido,
-              uf,
-              foto: "",
-            };
+          if (!senatorScores[senKey]) {
+            senatorScores[senKey] = { aligned: 0, total: 0, nome, partido, uf };
           }
 
-          votoBatch.push({
-            senador_id: 0, // placeholder, will resolve below
-            codigo_sessao_votacao: String(codigo),
-            voto: votoStr,
-            ano: year,
-            _nome: nome,
-            _uf: uf,
-          });
-
-          // Radar methodology: senator participated in this votação
-          // Any vote different from gov orientation = not aligned
           const depNorm = normalizeVoto(votoStr);
-          const data = (senatorScores as any)[senKey];
-          data.total++;
-
+          senatorScores[senKey].total++;
           if (depNorm === govOrient) {
-            data.aligned++;
+            senatorScores[senKey].aligned++;
           }
-          // abstention, absence, different vote = NOT aligned (reduces index)
         }
       }
 
@@ -260,73 +313,39 @@ Deno.serve(async (req) => {
         console.log(`[sync-senado] Processed ${i}/${votacoes.length} votações`);
     }
 
-    console.log(`[sync-senado] ${votacoesStored} votações, ${votacoesWithGovOrient} with gov orientation, ${consensusSkipped} consensus skipped`);
+    console.log(`[sync-senado] ${votacoesStored} votações stored, ${votacoesWithGovOrient} effective, ${consensusSkipped} consensus skipped`);
 
-    // ── STEP 3: Resolve senator IDs from existing data or current senator list ──
-    // Fetch current senators to map names to IDs
-    const senadoresJson = await safeFetchJson(`${SENADO_API}/senador/lista/atual.json`);
-    const senadorList = senadoresJson?.ListaParlamentarEmExercicio?.Parlamentares?.Parlamentar || [];
-
-    const nameToId: Record<string, { id: number; foto: string }> = {};
-    for (const sen of senadorList) {
-      const ident = sen.IdentificacaoParlamentar;
-      if (ident) {
-        const nome = ident.NomeParlamentar || "";
-        const id = Number(ident.CodigoParlamentar);
-        const foto = ident.UrlFotoParlamentar || "";
-        nameToId[nome] = { id, foto };
-      }
-    }
-
-    // Also check existing DB records for ID mapping
-    const { data: existingAnalises } = await supabase
-      .from("analises_senadores")
-      .select("senador_id, senador_nome, senador_foto")
-      .limit(500);
-
-    if (existingAnalises) {
-      for (const a of existingAnalises) {
-        if (!nameToId[a.senador_nome]) {
-          nameToId[a.senador_nome] = { id: a.senador_id, foto: a.senador_foto || "" };
-        }
-      }
-    }
-
-    // ── STEP 4: Upsert votes with resolved IDs ──
-    // We need to re-process votes now that we have ID mappings
-    // For efficiency, we'll do this from the scores data
-
-    // ── STEP 5: Classify and upsert senator analyses ──
+    // ── STEP 4: Classify and upsert senator analyses ──
     const records: any[] = [];
-    for (const [senKey, data] of Object.entries(senatorScores as any)) {
-      const nome = (data as any).nome;
-      const mapping = nameToId[nome];
+    for (const [_senKey, data] of Object.entries(senatorScores)) {
+      const mapping = resolveId(data.nome);
       if (!mapping) {
-        console.log(`[sync-senado] Could not resolve ID for: ${nome}`);
+        unresolvedNames.add(data.nome);
         continue;
       }
 
-      const senId = mapping.id;
-      const foto = mapping.foto || (data as any).foto;
-      const score = (data as any).total > 0 ? ((data as any).aligned / (data as any).total) * 100 : 0;
-
+      const score = data.total > 0 ? (data.aligned / data.total) * 100 : 0;
       let classificacao = "Centro";
-      if ((data as any).total === 0) classificacao = "Sem Dados";
+      if (data.total === 0) classificacao = "Sem Dados";
       else if (score >= 70) classificacao = "Governo";
       else if (score <= 35) classificacao = "Oposição";
 
       records.push({
-        senador_id: senId,
-        senador_nome: nome,
-        senador_partido: (data as any).partido || null,
-        senador_uf: (data as any).uf || null,
-        senador_foto: foto || null,
+        senador_id: mapping.id,
+        senador_nome: data.nome,
+        senador_partido: data.partido || null,
+        senador_uf: data.uf || null,
+        senador_foto: mapping.foto || null,
         ano: year,
         score: Math.round(score * 100) / 100,
-        total_votos: (data as any).total,
-        votos_alinhados: (data as any).aligned,
+        total_votos: data.total,
+        votos_alinhados: data.aligned,
         classificacao,
       });
+    }
+
+    if (unresolvedNames.size > 0) {
+      console.log(`[sync-senado] Unresolved names (${unresolvedNames.size}): ${[...unresolvedNames].join(", ")}`);
     }
 
     let upsertCount = 0;
@@ -339,9 +358,7 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
-    console.log(
-      `[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} with gov, ${consensusSkipped} consensus skipped`
-    );
+    console.log(`[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} effective, ${consensusSkipped} consensus`);
 
     return jsonResponse({
       analyzed: upsertCount,
@@ -349,6 +366,7 @@ Deno.serve(async (req) => {
       votacoes_with_gov: votacoesWithGovOrient,
       votacoes_consensus_skipped: consensusSkipped,
       votacoes_stored: votacoesStored,
+      unresolved_names: [...unresolvedNames],
       year,
     });
   } catch (error) {
