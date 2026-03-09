@@ -128,6 +128,7 @@ Deno.serve(async (req) => {
     let votacoesStored = 0;
     let votosStored = 0;
     let votacoesWithGovOrient = 0;
+    let consensusSkipped = 0;
 
     for (let i = 0; i < votacoes.length; i += 10) {
       const batch = votacoes.slice(i, i + 10);
