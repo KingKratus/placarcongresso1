@@ -4,6 +4,7 @@ import { useInsightsData } from "@/hooks/useInsightsData";
 import { useAuth } from "@/hooks/useAuth";
 import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
+import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText } from "lucide-react";
 
 const ANOS = [2023, 2024, 2025, 2026];
 const CLASS_COLORS: Record<string, string> = {
@@ -232,6 +233,7 @@ export default function Insights() {
               <TabsTrigger value="divergencia" className="gap-2"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
+              <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
@@ -412,6 +414,11 @@ export default function Insights() {
             {/* Simulação */}
             <TabsContent value="simulacao">
               <AlignmentSimulation allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
+            </TabsContent>
+
+            {/* Projetos */}
+            <TabsContent value="projetos">
+              <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} />
             </TabsContent>
           </Tabs>
         )}
