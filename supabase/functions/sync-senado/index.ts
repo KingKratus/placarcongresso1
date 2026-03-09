@@ -128,6 +128,7 @@ Deno.serve(async (req) => {
     let votacoesStored = 0;
     let votosStored = 0;
     let votacoesWithGovOrient = 0;
+    let consensusSkipped = 0;
 
     for (let i = 0; i < votacoes.length; i += 10) {
       const batch = votacoes.slice(i, i + 10);
@@ -151,9 +152,10 @@ Deno.serve(async (req) => {
           ementa: votacao.descricaoMateria || votacao.descricaoVotacao || null,
         });
 
-        // Find government orientation from bancada orientations
+        // Find government AND opposition orientations from bancada orientations
         const orientacoes = votacao.orientacoesLideranca || [];
         let govOrient: string | null = null;
+        let opoOrient: string | null = null;
 
         for (const orient of orientacoes) {
           const partido = (orient.partido || "").trim().toLowerCase();
@@ -162,11 +164,22 @@ Deno.serve(async (req) => {
             if (norm === "sim" || norm === "não") {
               govOrient = norm;
             }
-            break;
+          }
+          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" || partido === "líder da oposição" || partido === "lider da oposicao" || partido === "bloco oposição") {
+            const norm = normalizeVoto(orient.voto);
+            if (norm === "sim" || norm === "não") {
+              opoOrient = norm;
+            }
           }
         }
 
         if (!govOrient) continue; // Skip votações without explicit gov orientation or "liberado"
+
+        // Skip consensus votes: when gov and opposition orient the same way
+        if (opoOrient && govOrient === opoOrient) {
+          consensusSkipped++;
+          continue;
+        }
         votacoesWithGovOrient++;
 
         const parlamentares = votacao.votosParlamentar || [];
@@ -227,7 +240,7 @@ Deno.serve(async (req) => {
         console.log(`[sync-senado] Processed ${i}/${votacoes.length} votações`);
     }
 
-    console.log(`[sync-senado] ${votacoesStored} votações, ${votacoesWithGovOrient} with gov orientation`);
+    console.log(`[sync-senado] ${votacoesStored} votações, ${votacoesWithGovOrient} with gov orientation, ${consensusSkipped} consensus skipped`);
 
     // ── STEP 3: Resolve senator IDs from existing data or current senator list ──
     // Fetch current senators to map names to IDs
@@ -307,13 +320,14 @@ Deno.serve(async (req) => {
     }
 
     console.log(
-      `[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} with gov`
+      `[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} with gov, ${consensusSkipped} consensus skipped`
     );
 
     return jsonResponse({
       analyzed: upsertCount,
       votacoes_total: votacoes.length,
       votacoes_with_gov: votacoesWithGovOrient,
+      votacoes_consensus_skipped: consensusSkipped,
       votacoes_stored: votacoesStored,
       year,
     });

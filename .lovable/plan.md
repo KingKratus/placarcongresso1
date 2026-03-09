@@ -1,52 +1,90 @@
 
 
-# Corrigir Classificação de Senadores — Filtrar Votações Consensuais
+# Monitor Legislativo — Plano de Implementação
 
-## Problema Identificado
+## Visão Geral
+Um webapp de transparência legislativa que analisa o alinhamento dos deputados federais com a orientação do líder do governo, com backend Supabase para cache, autenticação e histórico.
 
-A raiz do problema **não é o endpoint** — o endpoint `orientacaoBancada` está correto e retorna os dados esperados. O problema está na **metodologia de cálculo**.
+---
 
-Analisando os dados reais da API, vi que na maioria das votações, tanto "Governo" quanto "Oposição" orientam **a mesma coisa** (ex: ambos orientam "SIM"). Isso são votações consensuais. Como o código atual conta TODAS as votações onde o governo orientou "sim" ou "não", senadores de oposição como Flávio Bolsonaro, Rogério Marinho, Damares Alves (PL) acabam com scores altos (70-88%) porque votaram igual ao governo nessas votações consensuais.
+## 1. Backend Supabase (Lovable Cloud)
 
-Exemplos concretos no banco:
-- Marcos Rogério (PL): 70.59% → classificado como "Governo"
-- Cleitinho (Republicanos): 70.27% → classificado como "Governo"  
-- Dra. Eudócia (PL): 87.88% → classificado como "Governo"
+### Banco de Dados
+- **Tabela `votacoes`**: Cache das votações buscadas da API da Câmara (id_votacao, data, descrição, ano)
+- **Tabela `orientacoes`**: Orientação do líder do governo por votação (evita re-buscar da API)
+- **Tabela `analises_deputados`**: Score de alinhamento calculado por deputado por ano (deputado_id, ano, score, total_votos, classificação)
+- **Tabela `profiles`**: Perfil dos usuários logados (nome, avatar, favoritos)
+- **Tabela `user_roles`**: Roles de acesso dos usuários
 
-## Solução
+### Edge Function: Sincronização com API da Câmara
+- Uma edge function que busca votações e orientações da API da Câmara e salva no Supabase
+- Resolve o problema de rate limit (429) centralizando as chamadas no servidor
+- Sempre prioriza buscar a orientação do **líder do governo** (GOV./GOVERNO/LIDGOV)
+- Aceita parâmetro de **ano** para filtrar o período de busca
 
-Filtrar votações onde **governo e oposição divergem**. Somente votações onde a orientação do "Governo" é diferente da orientação da "Oposição" devem contar para o cálculo de alinhamento. Votações consensuais (governo e oposição orientam igual) não discriminam posição política e devem ser excluídas.
+### Autenticação
+- Login com Google via Supabase Auth
+- Usuários logados podem salvar deputados favoritos e acessar exportação
 
-Esta é a mesma abordagem do Radar do Congresso / Estadão Dados para evitar inflação de scores.
+---
 
-## Alterações Técnicas
+## 2. Página Principal — Dashboard
 
-### 1. Edge Function `sync-senado/index.ts`
+### Barra Superior
+- Logo e título "Monitor Legislativo"
+- Busca por nome de deputado
+- Filtro por partido (dropdown)
+- **Filtro por ano** (2024, 2025, 2026) — altera o período de consulta
+- **Filtro por classificação**: Governo / Centro / Oposição / Todos
+- Botão de login com Google
 
-Modificar a lógica de filtragem de votações (linhas ~154-170):
+### Painel Lateral (Estatísticas)
+- Contadores: Governo, Centro, Oposição, Por Analisar
+- Barra de progresso da análise
+- Botão "Analisar Filtro Atual"
+- Card de Metodologia (critérios de classificação)
 
-- Além de extrair `govOrient`, também extrair a orientação da "Oposição" do array `orientacoesLideranca`
-- Adicionar condição: **pular votações onde `govOrient === opoOrient`** (ambos "sim" ou ambos "não")
-- Manter a condição existente de pular quando governo orienta "liberado"
-- Adicionar logging de quantas votações foram filtradas por consenso
+### Grid de Deputados
+- Cards com foto, nome, partido, UF e score de alinhamento
+- Cores por classificação (verde/governo, azul/centro, vermelho/oposição)
+- Indicador de loading individual por card durante análise
+- Clique abre página de detalhes
 
-Pseudocódigo:
-```text
-Para cada votação:
-  1. Buscar orientação "Governo" → govOrient
-  2. Buscar orientação "Oposição" → opoOrient  
-  3. Se govOrient == null ou não é "sim"/"não" → pular
-  4. Se opoOrient existe e govOrient == opoOrient → pular (consenso)
-  5. Caso contrário → contar para alinhamento
-```
+---
 
-### 2. Re-sincronizar dados
+## 3. Ranking de Alinhamento
+- Lista ordenada dos deputados mais e menos alinhados com o governo
+- Filtro por ano e partido
+- Top 10 mais alinhados e top 10 mais oposicionistas em destaque
 
-Após deploy da edge function corrigida, será necessário rodar uma nova sincronização para recalcular os scores de todos os senadores.
+---
 
-## Impacto Esperado
+## 4. Gráficos por Partido
+- Gráfico de barras com alinhamento médio de cada partido com o governo
+- Comparação visual entre partidos usando Recharts
+- Filtro por ano para ver evolução
 
-- Senadores de oposição (PL, NOVO) que votam contra o governo nas votações divergentes terão scores mais baixos e serão corretamente classificados como "Oposição" ou "Centro"
-- Senadores da base (PT, MDB, PSD) que votam com o governo nas votações divergentes manterão scores altos
-- O número de votações consideradas será menor, mas muito mais significativo
+---
+
+## 5. Página de Detalhes do Deputado
+- Foto, nome completo, partido, UF
+- Score de alinhamento com barra visual
+- Lista das votações analisadas mostrando: voto do deputado vs. orientação do líder do governo
+- Classificação geral (Governo/Centro/Oposição)
+
+---
+
+## 6. Exportação de Dados
+- Botão para exportar ranking e análises em CSV
+- Disponível para usuários logados
+- Inclui nome, partido, UF, score, classificação, total de votos
+
+---
+
+## 7. Design e UX
+- Design moderno com Tailwind CSS, cards arredondados, sombras sutis
+- Paleta: indigo como cor primária, emerald para governo, rose para oposição
+- Responsivo (mobile e desktop)
+- Modo claro (como no código original)
+- Feedback visual durante processamento (spinners por card e global)
 
