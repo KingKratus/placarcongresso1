@@ -237,7 +237,7 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[2024, 2025, 2026].filter((y) => y !== ano).map((y) => (
+                {[2023, 2024, 2025, 2026].filter((y) => y !== ano).map((y) => (
                   <SelectItem key={y} value={String(y)} className="text-xs">{y} → {ano}</SelectItem>
                 ))}
               </SelectContent>
