@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication: require service-role key or an authenticated admin user ──
+    // ── Authentication: require service-role key or any authenticated user (1 sync/day) ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
@@ -69,26 +69,38 @@ Deno.serve(async (req) => {
     const isServiceRole = token === supabaseServiceKey;
 
     if (!isServiceRole) {
-      // Validate as a regular JWT and check it belongs to an authenticated admin user
+      // Validate as a regular JWT
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
       const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
 
-      // Reject anon role — only real authenticated users with admin role may proceed
+      // Reject anon role — only real authenticated users may proceed
       if (claimsError || !claimsData?.claims || claimsData.claims.role === "anon") {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
-      // Check admin role in DB
+      const userId = claimsData.claims.sub;
+
+      // Check daily limit: 1 sync per day per user for this casa
       const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: hasAdmin } = await adminClient.rpc("has_role", {
-        _user_id: claimsData.claims.sub,
-        _role: "admin",
-      });
-      if (!hasAdmin) {
-        return jsonResponse({ error: "Forbidden: admin role required" }, 403);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data: recentSyncs } = await adminClient
+        .from("sync_logs")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("casa", "camara")
+        .gte("created_at", todayStart.toISOString())
+        .limit(1);
+
+      if (recentSyncs && recentSyncs.length > 0) {
+        return jsonResponse({ error: "Limite atingido: você já sincronizou a Câmara hoje. Tente novamente amanhã." }, 429);
       }
+
+      // Log this sync
+      await adminClient.from("sync_logs").insert({ user_id: userId, casa: "camara" });
     }
 
     // Use service role for data operations
