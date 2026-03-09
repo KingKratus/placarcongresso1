@@ -8,6 +8,7 @@ import {
   BarChart2,
   Trophy,
   GitCompareArrows,
+  Target,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanelSenado } from "@/components/StatsPanelSenado";
