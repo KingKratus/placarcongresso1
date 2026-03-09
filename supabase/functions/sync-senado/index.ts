@@ -320,13 +320,14 @@ Deno.serve(async (req) => {
     }
 
     console.log(
-      `[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} with gov`
+      `[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} with gov, ${consensusSkipped} consensus skipped`
     );
 
     return jsonResponse({
       analyzed: upsertCount,
       votacoes_total: votacoes.length,
       votacoes_with_gov: votacoesWithGovOrient,
+      votacoes_consensus_skipped: consensusSkipped,
       votacoes_stored: votacoesStored,
       year,
     });
