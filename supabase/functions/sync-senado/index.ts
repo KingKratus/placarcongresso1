@@ -170,6 +170,12 @@ Deno.serve(async (req) => {
         let govOrient: string | null = null;
         let opoOrient: string | null = null;
 
+        // Log all orientation party names for first votação for debugging
+        if (i === 0 && votacao === batch[0]) {
+          const partyNames = orientacoes.map((o: any) => `${o.partido}=${o.voto}`).join(", ");
+          console.log(`[sync-senado] DEBUG orientações: ${partyNames}`);
+        }
+
         for (const orient of orientacoes) {
           const partido = (orient.partido || "").trim().toLowerCase();
           if (partido === "governo" || partido === "gov." || partido === "líder do governo") {
@@ -178,7 +184,10 @@ Deno.serve(async (req) => {
               govOrient = norm;
             }
           }
-          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" || partido === "líder da oposição" || partido === "lider da oposicao" || partido === "bloco oposição") {
+          if (partido === "oposição" || partido === "oposicao" || partido === "minoria" || 
+              partido === "líder da oposição" || partido === "lider da oposicao" || 
+              partido === "bloco oposição" || partido === "bloco da oposição" ||
+              partido.includes("oposição") || partido.includes("minoria")) {
             const norm = normalizeVoto(orient.voto);
             if (norm === "sim" || norm === "não") {
               opoOrient = norm;
