@@ -55,21 +55,45 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Auth is handled by verify_jwt = false in config.toml
-    // This function is intended for cron/internal/manual calls only
+    // ── Authentication: require a valid JWT ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(
+      authHeader.replace("Bearer ", "")
+    );
+    if (claimsError || !claimsData?.claims) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    // Use service role for data operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Safe body parsing — cron may send empty or non-JSON body
+    // ── Input validation ──
     let year = new Date().getFullYear();
     try {
       const text = await req.text();
       if (text) {
         const body = JSON.parse(text);
-        if (body?.ano) year = body.ano;
+        if (body?.ano !== undefined) {
+          const inputYear = Number(body.ano);
+          if (!Number.isInteger(inputYear) || inputYear < 2000 || inputYear > 2030) {
+            return jsonResponse({ error: "Ano inválido. Deve ser entre 2000 e 2030." }, 400);
+          }
+          year = inputYear;
+        }
       }
-    } catch {
-      // fallback to current year
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        return jsonResponse({ error: "JSON inválido no body." }, 400);
+      }
     }
 
     console.log(`[sync-camara] Starting sync for year ${year}`);
@@ -78,7 +102,7 @@ Deno.serve(async (req) => {
     const orientUrl = `${BULK_BASE}/votacoesOrientacoes/json/votacoesOrientacoes-${year}.json`;
     const orientRes = await fetch(orientUrl);
     if (!orientRes.ok) {
-      return jsonResponse({ error: `Não foi possível baixar orientações para ${year} (${orientRes.status})` }, 400);
+      return jsonResponse({ error: `Não foi possível baixar orientações para ${year}` }, 400);
     }
     const orientJson = await orientRes.json();
     const allOrientacoes: any[] = orientJson.dados || [];
@@ -114,7 +138,7 @@ Deno.serve(async (req) => {
     const votacaoIds = Object.keys(govOrientByVotacao);
     console.log(`[sync-camara] ${votacaoIds.length} votações with gov orientation`);
 
-    // ── STEP 2: Fetch votação metadata from API (bulk file lacks this) ──
+    // ── STEP 2: Fetch votação metadata from API ──
     const META_BATCH = 10;
     let metaFetched = 0;
     for (let i = 0; i < votacaoIds.length; i += META_BATCH) {
@@ -126,7 +150,6 @@ Deno.serve(async (req) => {
         const meta = metaResults[j];
         const vid = batch[j];
         if (meta) {
-          // Extract proposição info from the API response
           const proposicoes = meta.proposicoesAfetadas || [];
           const prop = proposicoes.length > 0 ? proposicoes[0] : null;
 
@@ -142,11 +165,7 @@ Deno.serve(async (req) => {
             proposicao_ano: prop?.ano ? Number(prop.ano) : null,
           });
         } else {
-          // Fallback: store minimal record so we don't lose the votação
-          votacaoRecords.push({
-            id_votacao: vid,
-            ano: year,
-          });
+          votacaoRecords.push({ id_votacao: vid, ano: year });
         }
       }
 
@@ -205,9 +224,7 @@ Deno.serve(async (req) => {
             ano: year,
           });
 
-          // Radar methodology: any vote different from gov orientation = not aligned
-          // Abstention, absence, obstruction = counts AGAINST alignment
-          if (depVoto === "" || depVoto === "presidente") continue; // skip only if no vote data
+          if (depVoto === "" || depVoto === "presidente") continue;
 
           const govNorm = normalizeVoto(govOrient);
           deputyScores[depId].relevant++;
@@ -215,7 +232,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Upsert votes
       for (let j = 0; j < votoBatch.length; j += 500) {
         const slice = votoBatch.slice(j, j + 500);
         const { error: votoErr } = await supabase
@@ -274,6 +290,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("[sync-camara] Fatal error:", error.message, error.stack);
-    return jsonResponse({ error: error.message }, 500);
+    return jsonResponse({ error: "Erro interno do servidor." }, 500);
   }
 });

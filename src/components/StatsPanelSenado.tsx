@@ -19,6 +19,7 @@ interface StatsPanelSenadoProps {
   totalSenadores: number;
   syncing: boolean;
   onSync: () => void;
+  user?: any;
 }
 
 function StatItem({
@@ -50,6 +51,7 @@ export function StatsPanelSenado({
   totalSenadores,
   syncing,
   onSync,
+  user,
 }: StatsPanelSenadoProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
@@ -107,21 +109,25 @@ export function StatsPanelSenado({
             <Progress value={progress} className="h-2" />
           </div>
 
-          <Button
-            className="w-full mt-3"
-            onClick={onSync}
-            disabled={syncing}
-          >
-            {syncing ? (
-              <Loader2 className="animate-spin mr-2" size={14} />
-            ) : (
-              <BarChart2 className="mr-2" size={14} />
-            )}
-            {syncing ? "Sincronizando..." : "Sincronizar via Backend"}
-          </Button>
-          <p className="text-[9px] text-center text-muted-foreground font-bold uppercase">
-            Busca votações do plenário → voto do Líder do Governo → votos dos senadores
-          </p>
+          {user && (
+            <>
+              <Button
+                className="w-full mt-3"
+                onClick={onSync}
+                disabled={syncing}
+              >
+                {syncing ? (
+                  <Loader2 className="animate-spin mr-2" size={14} />
+                ) : (
+                  <BarChart2 className="mr-2" size={14} />
+                )}
+                {syncing ? "Sincronizando..." : "Sincronizar via Backend"}
+              </Button>
+              <p className="text-[9px] text-center text-muted-foreground font-bold uppercase">
+                Busca votações do plenário → voto do Líder do Governo → votos dos senadores
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 

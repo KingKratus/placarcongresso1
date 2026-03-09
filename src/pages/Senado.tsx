@@ -93,6 +93,7 @@ const Senado = () => {
             totalSenadores={senadores.length}
             syncing={syncing}
             onSync={() => syncSenadores()}
+            user={user}
           />
           {user && (
             <Button
