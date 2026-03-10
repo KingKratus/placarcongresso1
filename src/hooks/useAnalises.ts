@@ -39,7 +39,19 @@ export function useAnalises(ano: number) {
           "sync-camara",
           { body: { ano } }
         );
-        if (err) throw err;
+        if (err) {
+          // Extract message from edge function HTTP error response
+          let msg = err.message || "Erro ao sincronizar com a API da Câmara.";
+          try {
+            if (err.context?.body) {
+              const reader = err.context.body.getReader();
+              const { value } = await reader.read();
+              const body = JSON.parse(new TextDecoder().decode(value));
+              if (body?.error) msg = body.error;
+            }
+          } catch {}
+          throw new Error(msg);
+        }
         if (data?.error) throw new Error(data.error);
         await fetchAnalises();
         return data;
