@@ -16,6 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDeputados } from "@/hooks/useDeputados";
 import { useAnalises } from "@/hooks/useAnalises";
 import { useAuth } from "@/hooks/useAuth";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
+import { useFavoritos } from "@/hooks/useFavoritos";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 
 const Index = () => {
@@ -28,6 +30,13 @@ const Index = () => {
   const { deputados, partidos, loading: depLoading } = useDeputados();
   const { analises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
+  const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
+  const { toggleFavorito, isFavorito } = useFavoritos(user?.id);
+
+  const handleSync = async () => {
+    await syncDeputados();
+    refetchStatus();
+  };
 
   const analiseMap = useMemo(() => {
     const map: Record<number, (typeof analises)[0]> = {};
@@ -58,7 +67,11 @@ const Index = () => {
 
       <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
         <aside className="xl:col-span-3 space-y-4">
-          <StatsPanel analises={analises} totalDeputados={deputados.length} syncing={syncing} onSync={() => syncDeputados()} user={user} />
+          <StatsPanel
+            analises={analises} totalDeputados={deputados.length}
+            syncing={syncing} onSync={handleSync} user={user}
+            lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
+          />
           {user && (
             <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>
               <Download size={14} className="mr-2" /> Exportar CSV
@@ -92,7 +105,12 @@ const Index = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-10 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar">
                 {filteredDeputies.map((dep) => (
-                  <DeputyCard key={dep.id} deputado={dep} analise={analiseMap[dep.id]} onClick={() => navigate(`/deputado/${dep.id}`)} />
+                  <DeputyCard
+                    key={dep.id} deputado={dep} analise={analiseMap[dep.id]}
+                    onClick={() => navigate(`/deputado/${dep.id}`)}
+                    isFavorito={isFavorito(dep.id)}
+                    onToggleFavorito={user ? toggleFavorito : undefined}
+                  />
                 ))}
               </div>
               {!depLoading && filteredDeputies.length === 0 && (

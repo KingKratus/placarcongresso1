@@ -1,4 +1,4 @@
-import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User } from "lucide-react";
+import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User, Heart } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +44,8 @@ export function Navbar({
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   const isInsights = location.pathname === "/insights";
   const isDocs = location.pathname === "/documentacao";
-  const isCamara = !isSenado && !isInsights && !isDocs;
+  const isPerfil = location.pathname === "/perfil";
+  const isCamara = !isSenado && !isInsights && !isDocs && !isPerfil;
 
   const searchPlaceholder = isSenado ? "Buscar senador..." : isInsights ? "Buscar..." : "Buscar deputado...";
 
@@ -120,9 +121,14 @@ export function Navbar({
           </Button>
 
           {user ? (
-            <Button variant="ghost" size="sm" onClick={onSignOut} className="gap-2">
-              <User size={16} /><span className="hidden sm:inline text-xs">Sair</span>
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")} title="Meu Perfil">
+                <Heart size={16} className={isPerfil ? "fill-destructive text-destructive" : ""} />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onSignOut} className="gap-2">
+                <User size={16} /><span className="hidden sm:inline text-xs">Sair</span>
+              </Button>
+            </div>
           ) : (
             <Button variant="outline" size="sm" onClick={onSignIn} className="gap-2">
               <LogIn size={16} /><span className="hidden sm:inline text-xs">Login</span>
