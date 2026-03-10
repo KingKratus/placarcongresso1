@@ -8,6 +8,7 @@ import Senado from "./pages/Senado";
 import Insights from "./pages/Insights";
 import DeputadoDetail from "./pages/DeputadoDetail";
 import SenadorDetail from "./pages/SenadorDetail";
+import Perfil from "./pages/Perfil";
 import NotFound from "./pages/NotFound";
 import Documentacao from "./pages/Documentacao";
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/documentacao" element={<Documentacao />} />
           <Route path="/deputado/:id" element={<DeputadoDetail />} />
           <Route path="/senador/:id" element={<SenadorDetail />} />
+          <Route path="/perfil" element={<Perfil />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

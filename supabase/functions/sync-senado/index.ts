@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication: require service-role key or any authenticated user (1 sync/day) ──
+    // ── Authentication: require service-role key or any authenticated user (1 sync/10min) ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
@@ -128,30 +128,37 @@ Deno.serve(async (req) => {
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+      const { data: userData, error: userError } = await authClient.auth.getUser();
 
       // Reject anon role — only real authenticated users may proceed
-      if (claimsError || !claimsData?.claims || claimsData.claims.role === "anon") {
+      if (userError || !userData?.user) {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
-      const userId = claimsData.claims.sub;
+      const userId = userData.user.id;
 
-      // Check daily limit: 1 sync per day per user for this casa
+      // Check rate limit: 1 sync per 10 minutes per user for this casa
       const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
       const { data: recentSyncs } = await adminClient
         .from("sync_logs")
-        .select("id")
+        .select("id, created_at")
         .eq("user_id", userId)
         .eq("casa", "senado")
-        .gte("created_at", todayStart.toISOString())
+        .gte("created_at", tenMinAgo)
+        .order("created_at", { ascending: false })
         .limit(1);
 
       if (recentSyncs && recentSyncs.length > 0) {
-        return jsonResponse({ error: "Limite atingido: você já sincronizou o Senado hoje. Tente novamente amanhã." }, 429);
+        const lastSync = new Date(recentSyncs[0].created_at);
+        const nextAvailable = new Date(lastSync.getTime() + 10 * 60 * 1000);
+        const remainingSec = Math.ceil((nextAvailable.getTime() - Date.now()) / 1000);
+        return jsonResponse({
+          error: `Aguarde ${Math.ceil(remainingSec / 60)} minuto(s) para sincronizar novamente.`,
+          next_available: nextAvailable.toISOString(),
+          remaining_seconds: remainingSec,
+        }, 429);
       }
 
       // Log this sync
