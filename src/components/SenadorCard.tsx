@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Heart } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { Senador } from "@/hooks/useSenadores";
 import type { Tables } from "@/integrations/supabase/types";
@@ -9,6 +9,8 @@ interface SenadorCardProps {
   senador: Senador;
   analise?: Analise;
   onClick?: () => void;
+  isFavorito?: boolean;
+  onToggleFavorito?: (id: number) => void;
 }
 
 const classColors: Record<string, string> = {
@@ -31,7 +33,7 @@ const classBadgeColors: Record<string, string> = {
   Oposição: "bg-oposicao",
 };
 
-export function SenadorCard({ senador, analise, onClick }: SenadorCardProps) {
+export function SenadorCard({ senador, analise, onClick, isFavorito, onToggleFavorito }: SenadorCardProps) {
   return (
     <Card
       onClick={onClick}
@@ -75,6 +77,19 @@ export function SenadorCard({ senador, analise, onClick }: SenadorCardProps) {
           </div>
         </div>
 
+        {onToggleFavorito && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleFavorito(senador.id); }}
+            className="shrink-0 p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
+            title={isFavorito ? "Remover favorito" : "Favoritar"}
+          >
+            <Heart
+              size={16}
+              className={isFavorito ? "fill-destructive text-destructive" : "text-muted-foreground hover:text-destructive"}
+            />
+          </button>
+        )}
+
         <ChevronRight
           size={18}
           className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors"
@@ -83,11 +98,7 @@ export function SenadorCard({ senador, analise, onClick }: SenadorCardProps) {
 
       {analise ? (
         <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
-          <span
-            className={`text-[10px] font-black uppercase tracking-widest ${
-              classTextColors[analise.classificacao]
-            }`}
-          >
+          <span className={`text-[10px] font-black uppercase tracking-widest ${classTextColors[analise.classificacao]}`}>
             {analise.classificacao}
           </span>
           <span className="text-[9px] font-medium text-muted-foreground">
