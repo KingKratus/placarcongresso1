@@ -42,9 +42,13 @@ async function fetchVotosForVotacao(votacaoId: string): Promise<any[]> {
   return json?.dados || [];
 }
 
-async function fetchVotacaoMetadata(votacaoId: string): Promise<any | null> {
-  const json = await safeFetchJson(`${API_BASE}/votacoes/${votacaoId}`);
-  return json?.dados || null;
+function parseProposicaoObjeto(obj: string | null | undefined): { tipo: string | null; numero: string | null; ano: number | null } {
+  if (!obj) return { tipo: null, numero: null, ano: null };
+  const match = obj.match(/^(\w+)\s+(\d+)\/(\d{4})$/);
+  if (match) return { tipo: match[1], numero: match[2], ano: Number(match[3]) };
+  const match2 = obj.match(/^(\w+)\s+(\d+)$/);
+  if (match2) return { tipo: match2[1], numero: match2[2], ano: null };
+  return { tipo: null, numero: null, ano: null };
 }
 
 Deno.serve(async (req) => {
@@ -57,32 +61,28 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication: require service-role key or any authenticated user (1 sync/10min) ──
+    // ── Authentication ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-
-    // Allow service-role token directly (used by cron via vault secret)
     const isServiceRole = token === supabaseServiceKey;
 
+    // Buffer body before auth to avoid stream consumption issues
+    const bodyText = await req.text();
+
     if (!isServiceRole) {
-      // Validate as a regular JWT
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
       const { data: userData, error: userError } = await authClient.auth.getUser();
-
-      // Reject anon role — only real authenticated users may proceed
       if (userError || !userData?.user) {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
       const userId = userData.user.id;
-
-      // Check rate limit: 1 sync per 10 minutes per user for this casa
       const adminClient = createClient(supabaseUrl, supabaseServiceKey);
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
@@ -106,19 +106,16 @@ Deno.serve(async (req) => {
         }, 429);
       }
 
-      // Log this sync
       await adminClient.from("sync_logs").insert({ user_id: userId, casa: "camara" });
     }
 
-    // Use service role for data operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── Input validation ──
     let year = new Date().getFullYear();
     try {
-      const text = await req.text();
-      if (text) {
-        const body = JSON.parse(text);
+      if (bodyText) {
+        const body = JSON.parse(bodyText);
         if (body?.ano !== undefined) {
           const inputYear = Number(body.ano);
           if (!Number.isInteger(inputYear) || inputYear < 2000 || inputYear > 2030) {
@@ -145,7 +142,7 @@ Deno.serve(async (req) => {
     const allOrientacoes: any[] = orientJson.dados || [];
     console.log(`[sync-camara] ${allOrientacoes.length} orientações loaded`);
 
-    // Identify votações where government gave a non-"liberado" orientation
+    // Identify gov-oriented votações
     const govOrientByVotacao: Record<string, string> = {};
     const govSiglas = ["governo", "gov.", "líder do governo", "lidgov"];
 
@@ -159,7 +156,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Store orientações in batches
+    // Store orientações
     const orientRecords = allOrientacoes.map((o: any) => ({
       id_votacao: String(o.idVotacao),
       sigla_orgao_politico: o.siglaBancada || "",
@@ -172,53 +169,92 @@ Deno.serve(async (req) => {
       );
     }
 
-    const votacaoIds = Object.keys(govOrientByVotacao);
-    console.log(`[sync-camara] ${votacaoIds.length} votações with gov orientation`);
+    // ── STEP 2: Fetch bulk votações file for ALL metadata ──
+    const votacoesUrl = `${BULK_BASE}/votacoes/json/votacoes-${year}.json`;
+    console.log(`[sync-camara] Fetching bulk votações: ${votacoesUrl}`);
+    const votacoesRes = await fetch(votacoesUrl);
+    let allBulkVotacoes: any[] = [];
+    if (votacoesRes.ok) {
+      const votacoesJson = await votacoesRes.json();
+      allBulkVotacoes = votacoesJson.dados || [];
+      console.log(`[sync-camara] ${allBulkVotacoes.length} votações from bulk file`);
 
-    // ── STEP 2: Fetch votação metadata from API ──
-    const META_BATCH = 10;
-    let metaFetched = 0;
-    for (let i = 0; i < votacaoIds.length; i += META_BATCH) {
-      const batch = votacaoIds.slice(i, i + META_BATCH);
-      const metaResults = await Promise.all(batch.map(fetchVotacaoMetadata));
+      // Store ALL votação metadata from bulk file
+      const bulkRecords: any[] = [];
+      for (const v of allBulkVotacoes) {
+        const vid = String(v.id);
+        const prop = parseProposicaoObjeto(v.proposicaoObjeto);
+        bulkRecords.push({
+          id_votacao: vid,
+          data: v.dataHoraRegistro || v.data || null,
+          descricao: v.descricao || v.descUltimaAberturaVotacao || null,
+          ano: year,
+          sigla_orgao: v.siglaOrgao || null,
+          proposicao_tipo: prop.tipo,
+          proposicao_numero: prop.numero,
+          proposicao_ementa: v.ementa || null,
+          proposicao_ano: prop.ano,
+        });
+      }
 
-      const votacaoRecords: any[] = [];
-      for (let j = 0; j < batch.length; j++) {
-        const meta = metaResults[j];
-        const vid = batch[j];
-        if (meta) {
-          const proposicoes = meta.proposicoesAfetadas || [];
-          const prop = proposicoes.length > 0 ? proposicoes[0] : null;
+      for (let i = 0; i < bulkRecords.length; i += 500) {
+        const { error: bErr } = await supabase
+          .from("votacoes")
+          .upsert(bulkRecords.slice(i, i + 500), { onConflict: "id_votacao" });
+        if (bErr) console.error(`[sync-camara] Bulk votação upsert error: ${bErr.message}`);
+      }
+      console.log(`[sync-camara] ${bulkRecords.length} bulk votação records stored`);
+    } else {
+      console.log(`[sync-camara] Bulk votações file not available, falling back to API`);
+    }
 
-          votacaoRecords.push({
-            id_votacao: vid,
-            data: meta.dataHoraRegistro || meta.data || null,
-            descricao: meta.descricao || meta.descUltimaAberturaVotacao || null,
-            ano: year,
-            sigla_orgao: meta.siglaOrgao || null,
-            proposicao_tipo: prop?.siglaTipo || null,
-            proposicao_numero: prop?.numero ? String(prop.numero) : null,
-            proposicao_ementa: prop?.ementa || null,
-            proposicao_ano: prop?.ano ? Number(prop.ano) : null,
-          });
-        } else {
-          votacaoRecords.push({ id_votacao: vid, ano: year });
+    // ── STEP 3: Fetch metadata via API for gov-oriented votações not in bulk ──
+    const govVotacaoIds = Object.keys(govOrientByVotacao);
+    const bulkVotacaoIdSet = new Set(allBulkVotacoes.map((v: any) => String(v.id)));
+    const needApiMeta = govVotacaoIds.filter((id) => !bulkVotacaoIdSet.has(id));
+
+    if (needApiMeta.length > 0) {
+      console.log(`[sync-camara] Fetching API metadata for ${needApiMeta.length} votações not in bulk`);
+      const META_BATCH = 10;
+      for (let i = 0; i < needApiMeta.length; i += META_BATCH) {
+        const batch = needApiMeta.slice(i, i + META_BATCH);
+        const metaResults = await Promise.all(batch.map(async (vid) => {
+          const json = await safeFetchJson(`${API_BASE}/votacoes/${vid}`);
+          return json?.dados || null;
+        }));
+
+        const records: any[] = [];
+        for (let j = 0; j < batch.length; j++) {
+          const meta = metaResults[j];
+          const vid = batch[j];
+          if (meta) {
+            const proposicoes = meta.proposicoesAfetadas || [];
+            const prop = proposicoes.length > 0 ? proposicoes[0] : null;
+            records.push({
+              id_votacao: vid,
+              data: meta.dataHoraRegistro || meta.data || null,
+              descricao: meta.descricao || null,
+              ano: year,
+              sigla_orgao: meta.siglaOrgao || null,
+              proposicao_tipo: prop?.siglaTipo || null,
+              proposicao_numero: prop?.numero ? String(prop.numero) : null,
+              proposicao_ementa: prop?.ementa || null,
+              proposicao_ano: prop?.ano ? Number(prop.ano) : null,
+            });
+          } else {
+            records.push({ id_votacao: vid, ano: year });
+          }
+        }
+
+        if (records.length > 0) {
+          await supabase.from("votacoes").upsert(records, { onConflict: "id_votacao" });
         }
       }
-
-      if (votacaoRecords.length > 0) {
-        const { error: metaErr } = await supabase
-          .from("votacoes")
-          .upsert(votacaoRecords, { onConflict: "id_votacao" });
-        if (metaErr) console.error(`[sync-camara] Votação meta upsert error: ${metaErr.message}`);
-        else metaFetched += votacaoRecords.length;
-      }
-
-      if (i % 50 === 0 && i > 0) console.log(`[sync-camara] Fetched metadata for ${i}/${votacaoIds.length} votações`);
     }
-    console.log(`[sync-camara] ${metaFetched} votação metadata records stored`);
 
-    // ── STEP 3: Fetch individual votes per votação ──
+    console.log(`[sync-camara] ${govVotacaoIds.length} votações with gov orientation`);
+
+    // ── STEP 4: Fetch individual votes for gov-oriented votações ──
     const deputyScores: Record<number, {
       aligned: number; relevant: number;
       nome: string; partido: string; uf: string; foto: string;
@@ -227,8 +263,8 @@ Deno.serve(async (req) => {
     let votosStored = 0;
     const VOTE_BATCH = 15;
 
-    for (let b = 0; b < votacaoIds.length; b += VOTE_BATCH) {
-      const batch = votacaoIds.slice(b, b + VOTE_BATCH);
+    for (let b = 0; b < govVotacaoIds.length; b += VOTE_BATCH) {
+      const batch = govVotacaoIds.slice(b, b + VOTE_BATCH);
       const results = await Promise.all(batch.map(fetchVotosForVotacao));
 
       const votoBatch: any[] = [];
@@ -278,12 +314,12 @@ Deno.serve(async (req) => {
         else votosStored += slice.length;
       }
 
-      if (b % 50 === 0 && b > 0) console.log(`[sync-camara] Processed ${b}/${votacaoIds.length} votações`);
+      if (b % 50 === 0 && b > 0) console.log(`[sync-camara] Processed ${b}/${govVotacaoIds.length} votações`);
     }
 
     console.log(`[sync-camara] ${votosStored} individual votes stored`);
 
-    // ── STEP 4: Classify and upsert deputy analyses ──
+    // ── STEP 5: Classify and upsert deputy analyses ──
     const records: any[] = [];
     for (const [depIdStr, data] of Object.entries(deputyScores)) {
       const score = data.relevant > 0 ? (data.aligned / data.relevant) * 100 : 0;
@@ -316,12 +352,12 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
-    console.log(`[sync-camara] Done: ${upsertCount} deputies, ${metaFetched} votações, ${votosStored} votes`);
+    console.log(`[sync-camara] Done: ${upsertCount} deputies, ${govVotacaoIds.length} gov votações, ${allBulkVotacoes.length} total votações, ${votosStored} votes`);
 
     return jsonResponse({
       analyzed: upsertCount,
-      votacoes_with_gov: votacaoIds.length,
-      votacoes_metadata: metaFetched,
+      votacoes_total: allBulkVotacoes.length,
+      votacoes_with_gov: govVotacaoIds.length,
       votos_stored: votosStored,
       year,
     });

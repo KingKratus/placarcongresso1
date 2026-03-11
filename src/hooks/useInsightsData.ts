@@ -9,6 +9,27 @@ export type VotacaoSenado = Tables<"votacoes_senado">;
 
 const ALL_YEARS = [2023, 2024, 2025, 2026];
 
+async function fetchAllPages<T>(
+  query: () => any,
+  pageSize = 1000
+): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await query()
+      .range(offset, offset + pageSize - 1);
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      all.push(...data);
+      offset += data.length;
+      if (data.length < pageSize) hasMore = false;
+    }
+  }
+  return all;
+}
+
 export function useInsightsData(ano: number) {
   const [deputados, setDeputados] = useState<AnaliseDeputado[]>([]);
   const [senadores, setSenadores] = useState<AnaliseSenador[]>([]);
@@ -20,18 +41,29 @@ export function useInsightsData(ano: number) {
 
   const fetch = useCallback(async () => {
     setLoading(true);
-    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+
+    // Fetch votações with pagination to get ALL records
+    const [r1, r2, r5, r6] = await Promise.all([
       supabase.from("analises_deputados").select("*").eq("ano", ano).order("score", { ascending: false }).limit(2000),
       supabase.from("analises_senadores").select("*").eq("ano", ano).order("score", { ascending: false }).limit(500),
-      supabase.from("votacoes").select("*").eq("ano", ano).order("data", { ascending: false }).limit(5000),
-      supabase.from("votacoes_senado").select("*").eq("ano", ano).order("data", { ascending: false }).limit(5000),
       supabase.from("analises_deputados").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }).limit(5000),
       supabase.from("analises_senadores").select("*").in("ano", ALL_YEARS).order("ano", { ascending: true }).limit(2000),
     ]);
+
+    // Fetch votações with pagination (may exceed 1000 limit)
+    const [votCam, votSen] = await Promise.all([
+      fetchAllPages<VotacaoCamara>(() =>
+        supabase.from("votacoes").select("*").eq("ano", ano).order("data", { ascending: false })
+      ),
+      fetchAllPages<VotacaoSenado>(() =>
+        supabase.from("votacoes_senado").select("*").eq("ano", ano).order("data", { ascending: false })
+      ),
+    ]);
+
     setDeputados(r1.data || []);
     setSenadores(r2.data || []);
-    setVotacoesCamara(r3.data || []);
-    setVotacoesSenado(r4.data || []);
+    setVotacoesCamara(votCam);
+    setVotacoesSenado(votSen);
     setAllYearsDeputados(r5.data || []);
     setAllYearsSenadores(r6.data || []);
     setLoading(false);

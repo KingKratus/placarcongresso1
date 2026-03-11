@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VotacaoCamara, VotacaoSenado } from "@/hooks/useInsightsData";
 
@@ -31,7 +31,12 @@ const CHART_COLORS = [
   "hsl(30, 80%, 55%)", "hsl(120, 50%, 45%)", "hsl(0, 60%, 50%)", "hsl(180, 60%, 40%)",
 ];
 
+const VOTE_COLORS: Record<string, string> = {
+  Sim: FAVOR_COLOR, Não: CONTRA_COLOR, Abstenção: ABSTENCAO_COLOR, Outros: OUTROS_COLOR,
+};
+
 const PAGE_SIZE = 30;
+const API_BASE = "https://dadosabertos.camara.leg.br/api/v2";
 
 interface Props {
   votacoesCamara: VotacaoCamara[];
@@ -48,8 +53,17 @@ interface UnifiedProject {
   data: string | null;
   dataFormatted: string;
   resultado: string;
-  idVotacao: string; // id_votacao for Câmara, codigo_sessao_votacao for Senado
+  idVotacao: string;
   orgao: string;
+}
+
+interface IndividualVote {
+  nome: string;
+  partido: string;
+  uf: string;
+  voto: string;
+  votoClass: string;
+  foto?: string;
 }
 
 interface VoteBreakdown {
@@ -60,6 +74,7 @@ interface VoteBreakdown {
   total: number;
   byParty: { partido: string; sim: number; nao: number; abstencao: number; total: number }[];
   orientacaoGoverno?: string;
+  individualVotes: IndividualVote[];
 }
 
 function classifyVote(voto: string): "sim" | "nao" | "abstencao" | "outros" {
@@ -68,6 +83,13 @@ function classifyVote(voto: string): "sim" | "nao" | "abstencao" | "outros" {
   if (v === "não" || v === "nao" || v === "contrário" || v === "contrario") return "nao";
   if (v === "abstenção" || v === "abstencao" || v === "abstencão") return "abstencao";
   return "outros";
+}
+
+function classifyVoteLabel(cls: string): string {
+  if (cls === "sim") return "Sim";
+  if (cls === "nao") return "Não";
+  if (cls === "abstencao") return "Abstenção";
+  return "Outros";
 }
 
 export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
@@ -79,8 +101,8 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
   const [selectedProject, setSelectedProject] = useState<UnifiedProject | null>(null);
   const [voteBreakdown, setVoteBreakdown] = useState<VoteBreakdown | null>(null);
   const [loadingVotes, setLoadingVotes] = useState(false);
+  const [voteSearch, setVoteSearch] = useState("");
 
-  // Build unified project list
   const allProjects = useMemo<UnifiedProject[]>(() => {
     const cam = votacoesCamara.map((v): UnifiedProject => ({
       casa: "Câmara",
@@ -109,7 +131,6 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     return [...cam, ...sen];
   }, [votacoesCamara, votacoesSenado]);
 
-  // Available filter options
   const tipoOptions = useMemo(() => {
     const set = new Set(allProjects.map((p) => p.tipo));
     return Array.from(set).sort();
@@ -120,19 +141,17 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     return Array.from(set).sort();
   }, [votacoesCamara]);
 
-  // Apply filters
+  // Fixed search: combine all searchable fields into one string
   const filteredProjects = useMemo(() => {
-    const term = search.toLowerCase();
+    const term = search.toLowerCase().trim();
     return allProjects.filter((p) => {
       if (casaFilter !== "all" && p.casa.toLowerCase() !== (casaFilter === "camara" ? "câmara" : "senado")) return false;
       if (tipoFilter !== "all" && p.tipo !== tipoFilter) return false;
       if (orgaoFilter !== "all" && p.orgao !== orgaoFilter) return false;
-      if (term && !(
-        p.ementa.toLowerCase().includes(term) ||
-        p.descricao.toLowerCase().includes(term) ||
-        p.tipo.toLowerCase().includes(term) ||
-        p.numero.toLowerCase().includes(term)
-      )) return false;
+      if (term) {
+        const searchStr = `${p.tipo} ${p.numero} ${p.ementa} ${p.descricao} ${p.orgao}`.toLowerCase();
+        if (!searchStr.includes(term)) return false;
+      }
       return true;
     });
   }, [allProjects, search, casaFilter, tipoFilter, orgaoFilter]);
@@ -143,17 +162,28 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     [filteredProjects, page]
   );
 
-  // Reset page on filter change
   const handleFilterChange = useCallback((setter: (v: any) => void, value: any) => {
     setter(value);
     setPage(0);
   }, []);
 
-  // Fetch vote details for a project
+  // Fetch votes on-demand from Câmara API when DB has no data
+  const fetchCamaraApiVotes = useCallback(async (votacaoId: string): Promise<any[]> => {
+    try {
+      const res = await fetch(`${API_BASE}/votacoes/${votacaoId}/votos`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json?.dados || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   const openProjectDetail = useCallback(async (project: UnifiedProject) => {
     setSelectedProject(project);
     setVoteBreakdown(null);
     setLoadingVotes(true);
+    setVoteSearch("");
 
     try {
       if (project.casa === "Câmara") {
@@ -162,19 +192,61 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
           supabase.from("orientacoes").select("orientacao_voto, sigla_orgao_politico").eq("id_votacao", project.idVotacao),
         ]);
 
-        // Get deputado names/parties for grouping
-        const deputadoIds = (votosRes.data || []).map((v) => v.deputado_id);
-        const analiseRes = deputadoIds.length > 0
-          ? await supabase.from("analises_deputados").select("deputado_id, deputado_partido").eq("ano", ano).in("deputado_id", deputadoIds.slice(0, 500))
-          : { data: [] };
+        let votosData = votosRes.data || [];
+        let individualVotes: IndividualVote[] = [];
 
-        const partyMap: Record<number, string> = {};
-        (analiseRes.data || []).forEach((a) => { partyMap[a.deputado_id] = a.deputado_partido || "Sem Partido"; });
+        if (votosData.length > 0) {
+          // Get deputado info from analises
+          const deputadoIds = votosData.map((v) => v.deputado_id);
+          const analiseRes = await supabase
+            .from("analises_deputados")
+            .select("deputado_id, deputado_nome, deputado_partido, deputado_uf, deputado_foto")
+            .eq("ano", ano)
+            .in("deputado_id", deputadoIds.slice(0, 500));
 
-        const votos = votosRes.data || [];
-        const breakdown = buildBreakdown(votos.map((v) => ({ voto: v.voto, partido: partyMap[v.deputado_id] || "Sem Partido" })));
+          const depMap: Record<number, { nome: string; partido: string; uf: string; foto: string }> = {};
+          (analiseRes.data || []).forEach((a) => {
+            depMap[a.deputado_id] = {
+              nome: a.deputado_nome,
+              partido: a.deputado_partido || "Sem Partido",
+              uf: a.deputado_uf || "",
+              foto: a.deputado_foto || "",
+            };
+          });
 
-        // Find government orientation
+          individualVotes = votosData.map((v) => {
+            const dep = depMap[v.deputado_id];
+            const cls = classifyVote(v.voto);
+            return {
+              nome: dep?.nome || `Dep. ${v.deputado_id}`,
+              partido: dep?.partido || "Sem Partido",
+              uf: dep?.uf || "",
+              voto: v.voto,
+              votoClass: classifyVoteLabel(cls),
+              foto: dep?.foto,
+            };
+          });
+        } else {
+          // Fallback: fetch from Câmara API
+          const apiVotos = await fetchCamaraApiVotes(project.idVotacao);
+          individualVotes = apiVotos.map((v: any) => {
+            const cls = classifyVote(v.tipoVoto || "");
+            return {
+              nome: v.deputado_?.nome || "N/A",
+              partido: v.deputado_?.siglaPartido || "Sem Partido",
+              uf: v.deputado_?.siglaUf || "",
+              voto: v.tipoVoto || "",
+              votoClass: classifyVoteLabel(cls),
+              foto: v.deputado_?.urlFoto || "",
+            };
+          });
+        }
+
+        const breakdown = buildBreakdown(
+          individualVotes.map((v) => ({ voto: v.voto, partido: v.partido })),
+          individualVotes
+        );
+
         const govOrient = (orientRes.data || []).find((o) =>
           ["GOV.", "GOVERNO", "LIDGOV", "Gov.", "Governo"].includes(o.sigla_orgao_politico)
         );
@@ -183,18 +255,51 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
         setVoteBreakdown(breakdown);
       } else {
         // Senado
-        const votosRes = await supabase.from("votos_senadores").select("voto, senador_id").eq("codigo_sessao_votacao", project.idVotacao).limit(500);
+        const votosRes = await supabase
+          .from("votos_senadores")
+          .select("voto, senador_id")
+          .eq("codigo_sessao_votacao", project.idVotacao)
+          .limit(500);
 
-        const senadorIds = (votosRes.data || []).map((v) => v.senador_id);
-        const analiseRes = senadorIds.length > 0
-          ? await supabase.from("analises_senadores").select("senador_id, senador_partido").eq("ano", ano).in("senador_id", senadorIds.slice(0, 500))
-          : { data: [] };
+        const votosData = votosRes.data || [];
+        let individualVotes: IndividualVote[] = [];
 
-        const partyMap: Record<number, string> = {};
-        (analiseRes.data || []).forEach((a) => { partyMap[a.senador_id] = a.senador_partido || "Sem Partido"; });
+        if (votosData.length > 0) {
+          const senadorIds = votosData.map((v) => v.senador_id);
+          const analiseRes = await supabase
+            .from("analises_senadores")
+            .select("senador_id, senador_nome, senador_partido, senador_uf, senador_foto")
+            .eq("ano", ano)
+            .in("senador_id", senadorIds.slice(0, 500));
 
-        const votos = votosRes.data || [];
-        const breakdown = buildBreakdown(votos.map((v) => ({ voto: v.voto, partido: partyMap[v.senador_id] || "Sem Partido" })));
+          const senMap: Record<number, { nome: string; partido: string; uf: string; foto: string }> = {};
+          (analiseRes.data || []).forEach((a) => {
+            senMap[a.senador_id] = {
+              nome: a.senador_nome,
+              partido: a.senador_partido || "Sem Partido",
+              uf: a.senador_uf || "",
+              foto: a.senador_foto || "",
+            };
+          });
+
+          individualVotes = votosData.map((v) => {
+            const sen = senMap[v.senador_id];
+            const cls = classifyVote(v.voto);
+            return {
+              nome: sen?.nome || `Sen. ${v.senador_id}`,
+              partido: sen?.partido || "Sem Partido",
+              uf: sen?.uf || "",
+              voto: v.voto,
+              votoClass: classifyVoteLabel(cls),
+              foto: sen?.foto,
+            };
+          });
+        }
+
+        const breakdown = buildBreakdown(
+          individualVotes.map((v) => ({ voto: v.voto, partido: v.partido })),
+          individualVotes
+        );
         setVoteBreakdown(breakdown);
       }
     } catch (err) {
@@ -202,7 +307,17 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     } finally {
       setLoadingVotes(false);
     }
-  }, [ano]);
+  }, [ano, fetchCamaraApiVotes]);
+
+  // Filtered individual votes for the dialog
+  const filteredVotes = useMemo(() => {
+    if (!voteBreakdown) return [];
+    const term = voteSearch.toLowerCase().trim();
+    if (!term) return voteBreakdown.individualVotes;
+    return voteBreakdown.individualVotes.filter((v) =>
+      `${v.nome} ${v.partido} ${v.uf} ${v.votoClass}`.toLowerCase().includes(term)
+    );
+  }, [voteBreakdown, voteSearch]);
 
   // Charts data
   const tiposCamara = useMemo(() => {
@@ -259,7 +374,7 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
         </CardContent></Card>
       </div>
 
-      {/* Charts row */}
+      {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Tipo de Proposição — Câmara</CardTitle></CardHeader>
@@ -340,12 +455,16 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Projetos Votados</CardTitle>
           <div className="flex flex-wrap gap-2 mt-2">
-            <Input
-              placeholder="Buscar ementa, tipo, número..."
-              value={search}
-              onChange={(e) => handleFilterChange(setSearch, e.target.value)}
-              className="max-w-[220px] text-sm h-8"
-            />
+            <div className="relative flex-1 min-w-[180px] max-w-[260px]">
+              <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
+              <Input
+                placeholder="Buscar: PL 1234, ementa..."
+                value={search}
+                onChange={(e) => handleFilterChange(setSearch, e.target.value)}
+                className="pl-8 text-sm h-8"
+                inputMode="search"
+              />
+            </div>
             <Select value={casaFilter} onValueChange={(v) => handleFilterChange(setCasaFilter, v)}>
               <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue placeholder="Casa" /></SelectTrigger>
               <SelectContent>
@@ -413,7 +532,6 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
             </Table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-3">
               <p className="text-xs text-muted-foreground">
@@ -433,12 +551,12 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
       </Card>
 
       {/* Detail Dialog */}
-      <Dialog open={!!selectedProject} onOpenChange={(open) => { if (!open) setSelectedProject(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <Dialog open={!!selectedProject} onOpenChange={(open) => { if (!open) { setSelectedProject(null); setVoteSearch(""); } }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selectedProject && (
             <>
               <DialogHeader>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge style={{
                     backgroundColor: selectedProject.casa === "Câmara" ? CAMARA_COLOR : SENADO_COLOR,
                     color: "#fff", border: "none",
@@ -468,7 +586,6 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                 </div>
               ) : voteBreakdown ? (
                 <div className="space-y-4 mt-4">
-                  {/* Orientation */}
                   {voteBreakdown.orientacaoGoverno && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-muted-foreground">Orientação do Governo:</span>
@@ -508,33 +625,38 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                     </div>
                   </div>
 
-                  {/* Pie chart */}
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: "Sim", value: voteBreakdown.sim },
-                          { name: "Não", value: voteBreakdown.nao },
-                          { name: "Abstenção", value: voteBreakdown.abstencao },
-                          { name: "Outros", value: voteBreakdown.outros },
-                        ].filter((d) => d.value > 0)}
-                        dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        <Cell fill={FAVOR_COLOR} />
-                        <Cell fill={CONTRA_COLOR} />
-                        <Cell fill={ABSTENCAO_COLOR} />
-                        <Cell fill={OUTROS_COLOR} />
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {/* Fixed Pie chart - map colors by category name */}
+                  {(() => {
+                    const pieData = [
+                      { name: "Sim", value: voteBreakdown.sim },
+                      { name: "Não", value: voteBreakdown.nao },
+                      { name: "Abstenção", value: voteBreakdown.abstencao },
+                      { name: "Outros", value: voteBreakdown.outros },
+                    ].filter((d) => d.value > 0);
+
+                    return (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {pieData.map((entry) => (
+                              <Cell key={entry.name} fill={VOTE_COLORS[entry.name] || OUTROS_COLOR} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
 
                   {/* By party */}
                   {voteBreakdown.byParty.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-foreground mb-2">Votos por Partido</h4>
-                      <div className="max-h-[300px] overflow-auto">
+                      <div className="max-h-[250px] overflow-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -560,6 +682,74 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                       </div>
                     </div>
                   )}
+
+                  {/* Individual parliamentarian votes */}
+                  {voteBreakdown.individualVotes.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Users size={14} /> Votos Individuais ({voteBreakdown.individualVotes.length})
+                        </h4>
+                      </div>
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
+                        <Input
+                          placeholder="Buscar parlamentar, partido, UF..."
+                          value={voteSearch}
+                          onChange={(e) => setVoteSearch(e.target.value)}
+                          className="pl-8 text-sm h-8"
+                          inputMode="search"
+                        />
+                      </div>
+                      <div className="max-h-[350px] overflow-auto border border-border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">Parlamentar</TableHead>
+                              <TableHead className="text-xs">Partido</TableHead>
+                              <TableHead className="text-xs">UF</TableHead>
+                              <TableHead className="text-xs text-center">Voto</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredVotes.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={4} className="text-center text-muted-foreground text-xs py-4">
+                                  Nenhum resultado
+                                </TableCell>
+                              </TableRow>
+                            ) : filteredVotes.map((v, i) => (
+                              <TableRow key={`${v.nome}-${i}`}>
+                                <TableCell className="text-xs font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {v.foto && (
+                                      <img src={v.foto} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                    )}
+                                    {v.nome}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs">{v.partido}</TableCell>
+                                <TableCell className="text-xs">{v.uf}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                    style={{
+                                      backgroundColor: VOTE_COLORS[v.votoClass] || OUTROS_COLOR,
+                                      color: "#fff",
+                                      border: "none",
+                                    }}
+                                  >
+                                    {v.votoClass}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground mt-4">Não foi possível carregar os votos.</p>
@@ -572,7 +762,10 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
   );
 }
 
-function buildBreakdown(votos: { voto: string; partido: string }[]): VoteBreakdown {
+function buildBreakdown(
+  votos: { voto: string; partido: string }[],
+  individualVotes: IndividualVote[] = []
+): VoteBreakdown {
   let sim = 0, nao = 0, abstencao = 0, outros = 0;
   const partyMap: Record<string, { sim: number; nao: number; abstencao: number; outros: number; total: number }> = {};
 
@@ -584,7 +777,6 @@ function buildBreakdown(votos: { voto: string; partido: string }[]): VoteBreakdo
     else outros++;
 
     if (!partyMap[partido]) partyMap[partido] = { sim: 0, nao: 0, abstencao: 0, outros: 0, total: 0 };
-    // Bug fix: properly count each category without merging "outros" into "abstencao"
     if (cls === "sim") partyMap[partido].sim++;
     else if (cls === "nao") partyMap[partido].nao++;
     else if (cls === "abstencao") partyMap[partido].abstencao++;
@@ -596,5 +788,5 @@ function buildBreakdown(votos: { voto: string; partido: string }[]): VoteBreakdo
     .map(([partido, v]) => ({ partido, sim: v.sim, nao: v.nao, abstencao: v.abstencao, total: v.total }))
     .sort((a, b) => b.total - a.total);
 
-  return { sim, nao, abstencao, outros, total: votos.length, byParty };
+  return { sim, nao, abstencao, outros, total: votos.length, byParty, individualVotes };
 }

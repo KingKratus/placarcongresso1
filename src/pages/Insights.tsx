@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
+import { BrazilMap } from "@/components/insights/BrazilMap";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,7 +50,6 @@ export default function Insights() {
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [senadores]);
 
-  // Shared party aggregation
   const partyAggregation = useMemo(() => {
     const camMap: Record<string, { sum: number; count: number }> = {};
     const senMap: Record<string, { sum: number; count: number }> = {};
@@ -83,7 +83,6 @@ export default function Insights() {
       .slice(0, 15);
   }, [partyAggregation]);
 
-  // Top/Bottom 10
   const topBottom = useMemo(() => {
     const all = [
       ...deputados.map((d) => ({ nome: d.deputado_nome, score: Number(d.score), casa: "Câmara", partido: d.deputado_partido })),
@@ -93,7 +92,6 @@ export default function Insights() {
     return { top10: sorted.slice(0, 10), bottom10: sorted.slice(-10).reverse() };
   }, [deputados, senadores]);
 
-  // Histogram
   const histogram = useMemo(() => {
     const bins = Array.from({ length: 10 }, (_, i) => ({ range: `${i * 10}-${i * 10 + 10}`, camara: 0, senado: 0 }));
     deputados.forEach((d) => { bins[Math.min(Math.floor(Number(d.score) / 10), 9)].camara++; });
@@ -101,28 +99,40 @@ export default function Insights() {
     return bins;
   }, [deputados, senadores]);
 
-  // UF heatmap
+  // UF data with classifications
   const ufData = useMemo(() => {
-    const camUf: Record<string, { sum: number; count: number }> = {};
-    const senUf: Record<string, { sum: number; count: number }> = {};
+    const camUf: Record<string, { sum: number; count: number; classes: Record<string, number> }> = {};
+    const senUf: Record<string, { sum: number; count: number; classes: Record<string, number> }> = {};
     deputados.forEach((d) => {
       if (!d.deputado_uf) return;
-      camUf[d.deputado_uf] = camUf[d.deputado_uf] || { sum: 0, count: 0 };
+      camUf[d.deputado_uf] = camUf[d.deputado_uf] || { sum: 0, count: 0, classes: {} };
       camUf[d.deputado_uf].sum += Number(d.score); camUf[d.deputado_uf].count++;
+      camUf[d.deputado_uf].classes[d.classificacao] = (camUf[d.deputado_uf].classes[d.classificacao] || 0) + 1;
     });
     senadores.forEach((s) => {
       if (!s.senador_uf) return;
-      senUf[s.senador_uf] = senUf[s.senador_uf] || { sum: 0, count: 0 };
+      senUf[s.senador_uf] = senUf[s.senador_uf] || { sum: 0, count: 0, classes: {} };
       senUf[s.senador_uf].sum += Number(s.score); senUf[s.senador_uf].count++;
+      senUf[s.senador_uf].classes[s.classificacao] = (senUf[s.senador_uf].classes[s.classificacao] || 0) + 1;
     });
+
+    const getMajorityClass = (classes: Record<string, number>) => {
+      let max = 0, cls = "Sem Dados";
+      for (const [k, v] of Object.entries(classes)) {
+        if (v > max) { max = v; cls = k; }
+      }
+      return cls;
+    };
+
     return UFS.map((uf) => ({
       uf,
       camara: camUf[uf] ? Math.round(camUf[uf].sum / camUf[uf].count) : null,
       senado: senUf[uf] ? Math.round(senUf[uf].sum / senUf[uf].count) : null,
+      camaraClass: camUf[uf] ? getMajorityClass(camUf[uf].classes) : "Sem Dados",
+      senadoClass: senUf[uf] ? getMajorityClass(senUf[uf].classes) : "Sem Dados",
     })).filter((x) => x.camara !== null || x.senado !== null);
   }, [deputados, senadores]);
 
-  // Party divergence
   const partyDivergence = useMemo(() => {
     const { camMap, senMap } = partyAggregation;
     return Object.keys(camMap).filter((p) => senMap[p])
@@ -135,7 +145,6 @@ export default function Insights() {
       .slice(0, 10);
   }, [partyAggregation]);
 
-  // Volume by month
   const volumeByMonth = useMemo(() => {
     const months: Record<string, { camara: number; senado: number }> = {};
     const addMonth = (dateStr: string | null, casa: "camara" | "senado") => {
@@ -149,7 +158,6 @@ export default function Insights() {
     return Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).map(([mes, v]) => ({ mes, ...v }));
   }, [votacoesCamara, votacoesSenado]);
 
-  // Summary stats
   const stats = useMemo(() => {
     const totalDep = deputados.length;
     const totalSen = senadores.length;
@@ -157,15 +165,6 @@ export default function Insights() {
     const avgSen = totalSen > 0 ? senadores.reduce((s, d) => s + Number(d.score), 0) / totalSen : 0;
     return { totalDep, totalSen, avgDep, avgSen, totalVotCam: votacoesCamara.length, totalVotSen: votacoesSenado.length };
   }, [deputados, senadores, votacoesCamara, votacoesSenado]);
-
-  const getHeatColor = (val: number | null) => {
-    if (val === null) return "hsl(var(--muted))";
-    if (val >= 80) return "hsl(160, 84%, 39%)";
-    if (val >= 60) return "hsl(160, 60%, 50%)";
-    if (val >= 40) return "hsl(45, 80%, 55%)";
-    if (val >= 20) return "hsl(20, 80%, 55%)";
-    return "hsl(347, 77%, 50%)";
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -190,7 +189,6 @@ export default function Insights() {
           </Select>
         </div>
 
-        {/* Quick Stats */}
         {!loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <Card><CardContent className="p-3 text-center">
@@ -240,7 +238,6 @@ export default function Insights() {
             <TabsContent value="visao-geral" className="space-y-6">
               <AlignmentTrendChart allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
 
-              {/* Classification Distribution */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader className="pb-2"><CardTitle className="text-base">Classificação — Câmara</CardTitle></CardHeader>
@@ -272,7 +269,6 @@ export default function Insights() {
                 </Card>
               </div>
 
-              {/* Top / Bottom 10 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader className="pb-2"><CardTitle className="text-base">Top 10 — Mais Alinhados</CardTitle></CardHeader>
@@ -308,7 +304,6 @@ export default function Insights() {
                 </Card>
               </div>
 
-              {/* Histogram */}
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-base">Distribuição de Scores (Histograma)</CardTitle></CardHeader>
                 <CardContent>
@@ -346,30 +341,9 @@ export default function Insights() {
               </Card>
             </TabsContent>
 
-            {/* Estados */}
+            {/* Estados - Brazil Map */}
             <TabsContent value="estados">
-              <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base">Alinhamento Médio por UF</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-2">
-                    {ufData.map((u) => (
-                      <div key={u.uf} className="rounded-lg border border-border p-2 text-center space-y-1">
-                        <span className="text-xs font-bold text-foreground">{u.uf}</span>
-                        <div className="flex gap-1 justify-center">
-                          <div className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                            style={{ backgroundColor: getHeatColor(u.camara), color: "#fff" }} title="Câmara">
-                            C: {u.camara ?? "—"}
-                          </div>
-                          <div className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                            style={{ backgroundColor: getHeatColor(u.senado), color: "#fff" }} title="Senado">
-                            S: {u.senado ?? "—"}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <BrazilMap ufData={ufData} />
             </TabsContent>
 
             {/* Divergência */}
