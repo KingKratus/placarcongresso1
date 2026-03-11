@@ -31,9 +31,7 @@ function normalizeVoto(voto: string | null | undefined): string {
 
 async function safeFetchJson(url: string): Promise<any> {
   try {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
-    });
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -41,25 +39,17 @@ async function safeFetchJson(url: string): Promise<any> {
   }
 }
 
-/** Parse BR date format "DD/MM/YYYY HH:MM:SS" to ISO string */
 function parseDate(dateStr: string): string | null {
   if (!dateStr) return null;
   if (dateStr.includes("-")) return dateStr;
   const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
-  if (match) {
-    return `${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}:${match[6]}`;
-  }
+  if (match) return `${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}:${match[6]}`;
   return null;
 }
 
 function normalizeName(name: string): string {
-  return name
-    .trim()
-    .replace(/^(Astr\.\s*|Prof\.\s*|Dr\.\s*|Dra\.\s*|Sen\.\s*|Dep\.\s*)/i, "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+  return name.trim().replace(/^(Astr\.\s*|Prof\.\s*|Dr\.\s*|Dra\.\s*|Sen\.\s*|Dep\.\s*)/i, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ");
 }
 
 const NAME_ALIASES: Record<string, string> = {
@@ -112,32 +102,27 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // ── Authentication: require service-role key or any authenticated user (1 sync/10min) ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-
-    // Allow service-role token directly (used by cron via vault secret)
     const isServiceRole = token === supabaseServiceKey;
 
+    // Buffer body before auth
+    const bodyText = await req.text();
+
     if (!isServiceRole) {
-      // Validate as a regular JWT
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
       });
       const { data: userData, error: userError } = await authClient.auth.getUser();
-
-      // Reject anon role — only real authenticated users may proceed
       if (userError || !userData?.user) {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
       const userId = userData.user.id;
-
-      // Check rate limit: 1 sync per 10 minutes per user for this casa
       const adminClient = createClient(supabaseUrl, supabaseServiceKey);
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
@@ -161,19 +146,15 @@ Deno.serve(async (req) => {
         }, 429);
       }
 
-      // Log this sync
       await adminClient.from("sync_logs").insert({ user_id: userId, casa: "senado" });
     }
 
-    // Use service role for data operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── Input validation ──
     let year = new Date().getFullYear();
     try {
-      const text = await req.text();
-      if (text) {
-        const body = JSON.parse(text);
+      if (bodyText) {
+        const body = JSON.parse(bodyText);
         if (body?.ano !== undefined) {
           const inputYear = Number(body.ano);
           if (!Number.isInteger(inputYear) || inputYear < 2000 || inputYear > 2030) {
@@ -190,11 +171,10 @@ Deno.serve(async (req) => {
 
     console.log(`[sync-senado] Starting sync for year ${year}`);
 
-    // ── STEP 1: Fetch all votações with orientações de bancada ──
     const votacoes = await fetchVotacoesWithOrientacoes(year);
     console.log(`[sync-senado] ${votacoes.length} votações fetched`);
 
-    // ── STEP 2: Build senator name → ID map (fuzzy matching) ──
+    // Build senator name → ID map
     const senadoresJson = await safeFetchJson(`${SENADO_API}/senador/lista/atual.json`);
     const senadorList = senadoresJson?.ListaParlamentarEmExercicio?.Parlamentares?.Parlamentar || [];
 
@@ -209,13 +189,10 @@ Deno.serve(async (req) => {
       const id = Number(ident.CodigoParlamentar);
       const foto = ident.UrlFotoParlamentar || "";
       const entry = { id, foto };
-
       nameToId[nome] = entry;
       if (nomeCompleto) nameToId[nomeCompleto] = entry;
       normalizedNameToId[normalizeName(nome)] = { ...entry, original: nome };
-      if (nomeCompleto) {
-        normalizedNameToId[normalizeName(nomeCompleto)] = { ...entry, original: nomeCompleto };
-      }
+      if (nomeCompleto) normalizedNameToId[normalizeName(nomeCompleto)] = { ...entry, original: nomeCompleto };
     }
 
     const { data: existingAnalises } = await supabase
@@ -249,23 +226,22 @@ Deno.serve(async (req) => {
       return null;
     }
 
-    // ── STEP 3: Process votações ──
+    // Process votações
     const senatorScores: Record<string, {
-      aligned: number;
-      total: number;
-      nome: string;
-      partido: string;
-      uf: string;
+      aligned: number; total: number;
+      nome: string; partido: string; uf: string;
     }> = {};
 
     let votacoesStored = 0;
     let votacoesWithGovOrient = 0;
     let consensusSkipped = 0;
+    let votosStored = 0;
     const unresolvedNames = new Set<string>();
 
     for (let i = 0; i < votacoes.length; i += 10) {
       const batch = votacoes.slice(i, i + 10);
       const votacaoRecords: any[] = [];
+      const votoBatch: any[] = [];
 
       for (const votacao of batch) {
         const codigo = votacao.codigoVotacaoSve;
@@ -283,6 +259,24 @@ Deno.serve(async (req) => {
           ementa: votacao.descricaoMateria || votacao.descricaoVotacao || null,
         });
 
+        // Store individual votes for ALL votações
+        const parlamentares = votacao.votosParlamentar || [];
+        for (const voto of parlamentares) {
+          const nome = (voto.nomeParlamentar || "").trim();
+          const mapping = resolveId(nome);
+          if (!mapping) {
+            unresolvedNames.add(nome);
+            continue;
+          }
+          votoBatch.push({
+            senador_id: mapping.id,
+            codigo_sessao_votacao: String(codigo),
+            voto: voto.voto || "",
+            ano: year,
+          });
+        }
+
+        // Score calculation only for gov-oriented votações
         const orientacoes = votacao.orientacoesLideranca || [];
         let govOrient: string | null = null;
         let opoOrient: string | null = null;
@@ -301,14 +295,9 @@ Deno.serve(async (req) => {
         }
 
         if (!govOrient) continue;
-
-        if (opoOrient && govOrient === opoOrient) {
-          consensusSkipped++;
-          continue;
-        }
+        if (opoOrient && govOrient === opoOrient) { consensusSkipped++; continue; }
         votacoesWithGovOrient++;
 
-        const parlamentares = votacao.votosParlamentar || [];
         for (const voto of parlamentares) {
           const nome = (voto.nomeParlamentar || "").trim();
           const partido = voto.partido || "";
@@ -322,9 +311,7 @@ Deno.serve(async (req) => {
 
           const depNorm = normalizeVoto(votoStr);
           senatorScores[senKey].total++;
-          if (depNorm === govOrient) {
-            senatorScores[senKey].aligned++;
-          }
+          if (depNorm === govOrient) senatorScores[senKey].aligned++;
         }
       }
 
@@ -336,20 +323,27 @@ Deno.serve(async (req) => {
         else votacoesStored += votacaoRecords.length;
       }
 
+      // Store individual votes
+      for (let j = 0; j < votoBatch.length; j += 500) {
+        const slice = votoBatch.slice(j, j + 500);
+        const { error: votoErr } = await supabase
+          .from("votos_senadores")
+          .upsert(slice, { onConflict: "senador_id,codigo_sessao_votacao" });
+        if (votoErr) console.error(`[sync-senado] Voto upsert error: ${votoErr.message}`);
+        else votosStored += slice.length;
+      }
+
       if (i % 50 === 0 && i > 0)
         console.log(`[sync-senado] Processed ${i}/${votacoes.length} votações`);
     }
 
-    console.log(`[sync-senado] ${votacoesStored} votações stored, ${votacoesWithGovOrient} effective, ${consensusSkipped} consensus skipped`);
+    console.log(`[sync-senado] ${votacoesStored} votações, ${votosStored} votes stored`);
 
-    // ── STEP 4: Classify and upsert senator analyses ──
+    // Classify senators
     const records: any[] = [];
     for (const [_senKey, data] of Object.entries(senatorScores)) {
       const mapping = resolveId(data.nome);
-      if (!mapping) {
-        unresolvedNames.add(data.nome);
-        continue;
-      }
+      if (!mapping) { unresolvedNames.add(data.nome); continue; }
 
       const score = data.total > 0 ? (data.aligned / data.total) * 100 : 0;
       let classificacao = "Centro";
@@ -385,7 +379,7 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
-    console.log(`[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votacoesWithGovOrient} effective, ${consensusSkipped} consensus`);
+    console.log(`[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votosStored} votes`);
 
     return jsonResponse({
       analyzed: upsertCount,
@@ -393,6 +387,7 @@ Deno.serve(async (req) => {
       votacoes_with_gov: votacoesWithGovOrient,
       votacoes_consensus_skipped: consensusSkipped,
       votacoes_stored: votacoesStored,
+      votos_stored: votosStored,
       unresolved_names: [...unresolvedNames],
       year,
     });
