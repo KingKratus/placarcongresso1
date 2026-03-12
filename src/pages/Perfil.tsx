@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, Users, LogIn, Key, Copy, Check, Trash2, Plus, ExternalLink } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
