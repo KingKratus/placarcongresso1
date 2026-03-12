@@ -47,10 +47,7 @@ const Perfil = () => {
   }, [user]);
 
   // Fetch API keys on mount
-  useState(() => {});
-  
-  // Fix: use useEffect instead of useState for side effects
-  import { useEffect } from "react";
+  useEffect(() => { if (user) fetchApiKeys(); }, [user, fetchApiKeys]);
 
   const generateApiKey = useCallback(async () => {
     if (!user) return;
