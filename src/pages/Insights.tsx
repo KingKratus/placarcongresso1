@@ -233,6 +233,7 @@ export default function Insights() {
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
               <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
+              <TabsTrigger value="ao-vivo" className="gap-2"><Radio size={14} /> Ao Vivo</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
