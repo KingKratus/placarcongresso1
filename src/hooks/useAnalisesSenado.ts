@@ -30,13 +30,16 @@ export function useAnalisesSenado(ano: number) {
     fetchAnalises();
   }, [fetchAnalises]);
 
-  const syncSenadores = useCallback(async () => {
+  const syncSenadores = useCallback(async (runId?: string) => {
     setSyncing(true);
     setError(null);
     try {
+      const body: any = { ano };
+      if (runId) body.run_id = runId;
+
       const { data, error: err } = await supabase.functions.invoke(
         "sync-senado",
-        { body: { ano } }
+        { body }
       );
       if (err) {
         let msg = err.message || "Erro ao sincronizar com a API do Senado.";
