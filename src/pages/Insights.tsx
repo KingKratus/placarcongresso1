@@ -6,6 +6,7 @@ import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { BrazilMap } from "@/components/insights/BrazilMap";
+import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,7 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio } from "lucide-react";
 
 const ANOS = [2023, 2024, 2025, 2026];
 const CLASS_COLORS: Record<string, string> = {
