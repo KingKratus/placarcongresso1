@@ -220,6 +220,77 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_run_events: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          run_id: string
+          step: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          run_id: string
+          step: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          run_id?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_run_events_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_runs: {
+        Row: {
+          ano: number
+          casa: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          started_at: string
+          status: string
+          summary: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          ano?: number
+          casa: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          summary?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

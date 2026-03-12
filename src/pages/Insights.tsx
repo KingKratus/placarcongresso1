@@ -6,6 +6,7 @@ import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { BrazilMap } from "@/components/insights/BrazilMap";
+import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,7 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio } from "lucide-react";
 
 const ANOS = [2023, 2024, 2025, 2026];
 const CLASS_COLORS: Record<string, string> = {
@@ -232,6 +233,7 @@ export default function Insights() {
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
               <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
+              <TabsTrigger value="ao-vivo" className="gap-2"><Radio size={14} /> Ao Vivo</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
@@ -393,6 +395,11 @@ export default function Insights() {
             {/* Projetos */}
             <TabsContent value="projetos">
               <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} ano={ano} />
+            </TabsContent>
+
+            {/* Ao Vivo */}
+            <TabsContent value="ao-vivo">
+              <AgendaAoVivo />
             </TabsContent>
           </Tabs>
         )}

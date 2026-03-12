@@ -56,11 +56,32 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  let runId: string | null = null;
+  let userId: string | null = null;
+
+  async function logEvent(step: string, message: string) {
+    if (!runId) return;
+    try {
+      await supabase.from("sync_run_events").insert({ run_id: runId, step, message });
+    } catch {}
+  }
+
+  async function finishRun(status: string, summary?: any, error?: string) {
+    if (!runId) return;
+    try {
+      await supabase.from("sync_runs").update({
+        status, finished_at: new Date().toISOString(),
+        summary: summary || null, error: error || null,
+      }).eq("id", runId);
+    } catch {}
+  }
+
+  try {
     // ── Authentication ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -69,8 +90,6 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const isServiceRole = token === supabaseServiceKey;
-
-    // Buffer body before auth to avoid stream consumption issues
     const bodyText = await req.text();
 
     if (!isServiceRole) {
@@ -82,11 +101,10 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
-      const userId = userData.user.id;
-      const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+      userId = userData.user.id;
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-      const { data: recentSyncs } = await adminClient
+      const { data: recentSyncs } = await supabase
         .from("sync_logs")
         .select("id, created_at")
         .eq("user_id", userId)
@@ -105,11 +123,7 @@ Deno.serve(async (req) => {
           remaining_seconds: remainingSec,
         }, 429);
       }
-
-      await adminClient.from("sync_logs").insert({ user_id: userId, casa: "camara" });
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ── Input validation ──
     let year = new Date().getFullYear();
@@ -123,6 +137,7 @@ Deno.serve(async (req) => {
           }
           year = inputYear;
         }
+        if (body?.run_id) runId = body.run_id;
       }
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -130,17 +145,29 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[sync-camara] Starting sync for year ${year}`);
+    // Create sync run if not provided
+    if (!runId) {
+      runId = crypto.randomUUID();
+    }
+    await supabase.from("sync_runs").insert({
+      id: runId, user_id: userId, casa: "camara", ano: year, status: "running",
+    });
 
-    // ── STEP 1: Fetch orientações from bulk file ──
+    console.log(`[sync-camara] Starting sync for year ${year}, run ${runId}`);
+    await logEvent("init", `Iniciando sincronização da Câmara para ${year}`);
+
+    // ── STEP 1: Fetch orientações ──
+    await logEvent("orientacoes", "Baixando orientações de bancada...");
     const orientUrl = `${BULK_BASE}/votacoesOrientacoes/json/votacoesOrientacoes-${year}.json`;
     const orientRes = await fetch(orientUrl);
     if (!orientRes.ok) {
-      return jsonResponse({ error: `Não foi possível baixar orientações para ${year}` }, 400);
+      await logEvent("error", `Arquivo de orientações para ${year} não disponível`);
+      await finishRun("error", null, `Orientações para ${year} não disponíveis`);
+      return jsonResponse({ error: `Não foi possível baixar orientações para ${year}`, run_id: runId }, 400);
     }
     const orientJson = await orientRes.json();
     const allOrientacoes: any[] = orientJson.dados || [];
-    console.log(`[sync-camara] ${allOrientacoes.length} orientações loaded`);
+    await logEvent("orientacoes", `${allOrientacoes.length} orientações carregadas`);
 
     // Identify gov-oriented votações
     const govOrientByVotacao: Record<string, string> = {};
@@ -157,6 +184,7 @@ Deno.serve(async (req) => {
     }
 
     // Store orientações
+    await logEvent("orientacoes", "Salvando orientações no banco...");
     const orientRecords = allOrientacoes.map((o: any) => ({
       id_votacao: String(o.idVotacao),
       sigla_orgao_politico: o.siglaBancada || "",
@@ -169,17 +197,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── STEP 2: Fetch bulk votações file for ALL metadata ──
+    // ── STEP 2: Fetch bulk votações ──
+    await logEvent("votacoes", "Baixando metadados de votações...");
     const votacoesUrl = `${BULK_BASE}/votacoes/json/votacoes-${year}.json`;
-    console.log(`[sync-camara] Fetching bulk votações: ${votacoesUrl}`);
     const votacoesRes = await fetch(votacoesUrl);
     let allBulkVotacoes: any[] = [];
     if (votacoesRes.ok) {
       const votacoesJson = await votacoesRes.json();
       allBulkVotacoes = votacoesJson.dados || [];
-      console.log(`[sync-camara] ${allBulkVotacoes.length} votações from bulk file`);
+      await logEvent("votacoes", `${allBulkVotacoes.length} votações carregadas do arquivo`);
 
-      // Store ALL votação metadata from bulk file
       const bulkRecords: any[] = [];
       for (const v of allBulkVotacoes) {
         const vid = String(v.id);
@@ -203,18 +230,18 @@ Deno.serve(async (req) => {
           .upsert(bulkRecords.slice(i, i + 500), { onConflict: "id_votacao" });
         if (bErr) console.error(`[sync-camara] Bulk votação upsert error: ${bErr.message}`);
       }
-      console.log(`[sync-camara] ${bulkRecords.length} bulk votação records stored`);
+      await logEvent("votacoes", `${bulkRecords.length} registros de votação salvos`);
     } else {
-      console.log(`[sync-camara] Bulk votações file not available, falling back to API`);
+      await logEvent("votacoes", "Arquivo bulk não disponível, usando API");
     }
 
-    // ── STEP 3: Fetch metadata via API for gov-oriented votações not in bulk ──
+    // ── STEP 3: Fetch metadata via API for missing votações ──
     const govVotacaoIds = Object.keys(govOrientByVotacao);
     const bulkVotacaoIdSet = new Set(allBulkVotacoes.map((v: any) => String(v.id)));
     const needApiMeta = govVotacaoIds.filter((id) => !bulkVotacaoIdSet.has(id));
 
     if (needApiMeta.length > 0) {
-      console.log(`[sync-camara] Fetching API metadata for ${needApiMeta.length} votações not in bulk`);
+      await logEvent("metadata", `Buscando metadados via API para ${needApiMeta.length} votações`);
       const META_BATCH = 10;
       for (let i = 0; i < needApiMeta.length; i += META_BATCH) {
         const batch = needApiMeta.slice(i, i + META_BATCH);
@@ -252,7 +279,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[sync-camara] ${govVotacaoIds.length} votações with gov orientation`);
+    await logEvent("votos", `${govVotacaoIds.length} votações com orientação do governo. Buscando votos individuais...`);
 
     // ── STEP 4: Fetch individual votes for gov-oriented votações ──
     const deputyScores: Record<number, {
@@ -314,12 +341,15 @@ Deno.serve(async (req) => {
         else votosStored += slice.length;
       }
 
-      if (b % 50 === 0 && b > 0) console.log(`[sync-camara] Processed ${b}/${govVotacaoIds.length} votações`);
+      if (b % 60 === 0 && b > 0) {
+        await logEvent("votos", `Processadas ${b}/${govVotacaoIds.length} votações, ${votosStored} votos salvos`);
+      }
     }
 
-    console.log(`[sync-camara] ${votosStored} individual votes stored`);
+    await logEvent("votos", `${votosStored} votos individuais salvos`);
 
     // ── STEP 5: Classify and upsert deputy analyses ──
+    await logEvent("analises", "Calculando classificações dos deputados...");
     const records: any[] = [];
     for (const [depIdStr, data] of Object.entries(deputyScores)) {
       const score = data.relevant > 0 ? (data.aligned / data.relevant) * 100 : 0;
@@ -352,17 +382,30 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
-    console.log(`[sync-camara] Done: ${upsertCount} deputies, ${govVotacaoIds.length} gov votações, ${allBulkVotacoes.length} total votações, ${votosStored} votes`);
-
-    return jsonResponse({
+    const summary = {
       analyzed: upsertCount,
       votacoes_total: allBulkVotacoes.length,
       votacoes_with_gov: govVotacaoIds.length,
       votos_stored: votosStored,
       year,
-    });
+    };
+
+    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} deputados, ${govVotacaoIds.length} votações gov, ${votosStored} votos`);
+
+    // Only log cooldown on SUCCESS
+    if (userId) {
+      await supabase.from("sync_logs").insert({ user_id: userId, casa: "camara" });
+    }
+
+    await finishRun("completed", summary);
+
+    console.log(`[sync-camara] Done: ${upsertCount} deputies, ${govVotacaoIds.length} gov votações, ${votosStored} votes`);
+
+    return jsonResponse({ ...summary, run_id: runId });
   } catch (error) {
     console.error("[sync-camara] Fatal error:", error.message, error.stack);
-    return jsonResponse({ error: "Erro interno do servidor." }, 500);
+    await logEvent("error", `❌ Erro fatal: ${error.message}`);
+    await finishRun("error", null, error.message);
+    return jsonResponse({ error: "Erro interno do servidor.", run_id: runId }, 500);
   }
 });

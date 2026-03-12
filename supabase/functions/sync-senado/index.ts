@@ -77,8 +77,6 @@ async function fetchVotacoesWithOrientacoes(year: number): Promise<any[]> {
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 
     const url = `${SENADO_API}/plenario/votacao/orientacaoBancada/${fmt(cursor)}/${fmt(end)}.json`;
-    console.log(`[sync-senado] Fetching orientações: ${url}`);
-
     const json = await safeFetchJson(url);
     const votacoes = json?.votacoes;
     if (votacoes && Array.isArray(votacoes)) {
@@ -97,11 +95,32 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  let runId: string | null = null;
+  let userId: string | null = null;
+
+  async function logEvent(step: string, message: string) {
+    if (!runId) return;
+    try {
+      await supabase.from("sync_run_events").insert({ run_id: runId, step, message });
+    } catch {}
+  }
+
+  async function finishRun(status: string, summary?: any, error?: string) {
+    if (!runId) return;
+    try {
+      await supabase.from("sync_runs").update({
+        status, finished_at: new Date().toISOString(),
+        summary: summary || null, error: error || null,
+      }).eq("id", runId);
+    } catch {}
+  }
+
+  try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Unauthorized" }, 401);
@@ -109,8 +128,6 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const isServiceRole = token === supabaseServiceKey;
-
-    // Buffer body before auth
     const bodyText = await req.text();
 
     if (!isServiceRole) {
@@ -122,11 +139,10 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
 
-      const userId = userData.user.id;
-      const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+      userId = userData.user.id;
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-      const { data: recentSyncs } = await adminClient
+      const { data: recentSyncs } = await supabase
         .from("sync_logs")
         .select("id, created_at")
         .eq("user_id", userId)
@@ -145,11 +161,7 @@ Deno.serve(async (req) => {
           remaining_seconds: remainingSec,
         }, 429);
       }
-
-      await adminClient.from("sync_logs").insert({ user_id: userId, casa: "senado" });
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     let year = new Date().getFullYear();
     try {
@@ -162,6 +174,7 @@ Deno.serve(async (req) => {
           }
           year = inputYear;
         }
+        if (body?.run_id) runId = body.run_id;
       }
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -169,12 +182,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[sync-senado] Starting sync for year ${year}`);
+    if (!runId) runId = crypto.randomUUID();
+    await supabase.from("sync_runs").insert({
+      id: runId, user_id: userId, casa: "senado", ano: year, status: "running",
+    });
 
+    console.log(`[sync-senado] Starting sync for year ${year}, run ${runId}`);
+    await logEvent("init", `Iniciando sincronização do Senado para ${year}`);
+
+    await logEvent("votacoes", "Buscando votações com orientações...");
     const votacoes = await fetchVotacoesWithOrientacoes(year);
-    console.log(`[sync-senado] ${votacoes.length} votações fetched`);
+    await logEvent("votacoes", `${votacoes.length} votações encontradas`);
 
     // Build senator name → ID map
+    await logEvent("senadores", "Carregando lista de senadores...");
     const senadoresJson = await safeFetchJson(`${SENADO_API}/senador/lista/atual.json`);
     const senadorList = senadoresJson?.ListaParlamentarEmExercicio?.Parlamentares?.Parlamentar || [];
 
@@ -210,6 +231,7 @@ Deno.serve(async (req) => {
         }
       }
     }
+    await logEvent("senadores", `${senadorList.length} senadores mapeados`);
 
     function resolveId(voteName: string): { id: number; foto: string } | null {
       if (nameToId[voteName]) return nameToId[voteName];
@@ -237,6 +259,8 @@ Deno.serve(async (req) => {
     let consensusSkipped = 0;
     let votosStored = 0;
     const unresolvedNames = new Set<string>();
+
+    await logEvent("processamento", "Processando votações e votos...");
 
     for (let i = 0; i < votacoes.length; i += 10) {
       const batch = votacoes.slice(i, i + 10);
@@ -323,7 +347,6 @@ Deno.serve(async (req) => {
         else votacoesStored += votacaoRecords.length;
       }
 
-      // Store individual votes
       for (let j = 0; j < votoBatch.length; j += 500) {
         const slice = votoBatch.slice(j, j + 500);
         const { error: votoErr } = await supabase
@@ -333,13 +356,15 @@ Deno.serve(async (req) => {
         else votosStored += slice.length;
       }
 
-      if (i % 50 === 0 && i > 0)
-        console.log(`[sync-senado] Processed ${i}/${votacoes.length} votações`);
+      if (i % 50 === 0 && i > 0) {
+        await logEvent("processamento", `Processadas ${i}/${votacoes.length} votações, ${votosStored} votos salvos`);
+      }
     }
 
-    console.log(`[sync-senado] ${votacoesStored} votações, ${votosStored} votes stored`);
+    await logEvent("votos", `${votacoesStored} votações, ${votosStored} votos salvos`);
 
     // Classify senators
+    await logEvent("analises", "Calculando classificações dos senadores...");
     const records: any[] = [];
     for (const [_senKey, data] of Object.entries(senatorScores)) {
       const mapping = resolveId(data.nome);
@@ -365,10 +390,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (unresolvedNames.size > 0) {
-      console.log(`[sync-senado] Unresolved names (${unresolvedNames.size}): ${[...unresolvedNames].join(", ")}`);
-    }
-
     let upsertCount = 0;
     for (let i = 0; i < records.length; i += 200) {
       const chunk = records.slice(i, i + 200);
@@ -379,20 +400,32 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
-    console.log(`[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votosStored} votes`);
-
-    return jsonResponse({
+    const summary = {
       analyzed: upsertCount,
       votacoes_total: votacoes.length,
       votacoes_with_gov: votacoesWithGovOrient,
-      votacoes_consensus_skipped: consensusSkipped,
       votacoes_stored: votacoesStored,
       votos_stored: votosStored,
       unresolved_names: [...unresolvedNames],
       year,
-    });
+    };
+
+    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} senadores, ${votacoesStored} votações, ${votosStored} votos`);
+
+    // Only log cooldown on SUCCESS
+    if (userId) {
+      await supabase.from("sync_logs").insert({ user_id: userId, casa: "senado" });
+    }
+
+    await finishRun("completed", summary);
+
+    console.log(`[sync-senado] Done: ${upsertCount} senators, ${votacoesStored} votações, ${votosStored} votes`);
+
+    return jsonResponse({ ...summary, run_id: runId });
   } catch (error) {
     console.error("[sync-senado] Fatal error:", error.message, error.stack);
-    return jsonResponse({ error: "Erro interno do servidor." }, 500);
+    await logEvent("error", `❌ Erro fatal: ${error.message}`);
+    await finishRun("error", null, error.message);
+    return jsonResponse({ error: "Erro interno do servidor.", run_id: runId }, 500);
   }
 });

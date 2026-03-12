@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, Users, LogIn, Key, Copy, Check, Trash2, Plus, ExternalLink } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -47,7 +47,7 @@ const Perfil = () => {
   }, [user]);
 
   // Fetch API keys on mount
-  useState(() => { if (user) fetchApiKeys(); });
+  useEffect(() => { if (user) fetchApiKeys(); }, [user, fetchApiKeys]);
 
   const generateApiKey = useCallback(async () => {
     if (!user) return;

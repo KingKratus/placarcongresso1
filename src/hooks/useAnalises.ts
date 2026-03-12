@@ -31,16 +31,18 @@ export function useAnalises(ano: number) {
   }, [fetchAnalises]);
 
   const syncDeputados = useCallback(
-    async () => {
+    async (runId?: string) => {
       setSyncing(true);
       setError(null);
       try {
+        const body: any = { ano };
+        if (runId) body.run_id = runId;
+
         const { data, error: err } = await supabase.functions.invoke(
           "sync-camara",
-          { body: { ano } }
+          { body }
         );
         if (err) {
-          // Extract message from edge function HTTP error response
           let msg = err.message || "Erro ao sincronizar com a API da Câmara.";
           try {
             if (err.context?.body) {
