@@ -1,90 +1,72 @@
 
+Objetivo aprovado: corrigir sync/manual, garantir atualização real dos Insights, melhorar detalhe de votos por projeto, adicionar agenda ao vivo Câmara/Senado e entregar um plano de testes ponta a ponta.
 
-# Monitor Legislativo — Plano de Implementação
+1) Diagnóstico (com base no código + reprodução)
+- Reproduzi o problema do botão de sync: ele entra em “Sincronizando...” e depois retorna erro genérico “Failed to send a request to the Edge Function”.
+- Mesmo quando falha, a cota de 10 min é consumida (porque `sync_logs` é gravado no início da execução).
+- Em Insights, o detalhe de projeto já tenta listar votos individuais, mas depende de joins por `analises_*` (pode faltar nome/partido em alguns casos e ficar “Dep./Sen. ID”).
+- Não existe painel de progresso/log em tempo real para sync.
+- Não há área de agenda/votação ao vivo ainda.
 
-## Visão Geral
-Um webapp de transparência legislativa que analisa o alinhamento dos deputados federais com a orientação do líder do governo, com backend Supabase para cache, autenticação e histórico.
+2) Correções de sync (automático + manual com autenticação)
+- Criar tabela `sync_runs` (status, casa, ano, user_id nullable p/ automático, started_at, finished_at, error, summary_json).
+- Criar tabela `sync_run_events` (run_id, step, message, created_at) para logs incrementais visíveis na UI.
+- Atualizar `sync-camara` e `sync-senado`:
+  - registrar `sync_runs` no início;
+  - gravar eventos por etapa (download, upsert metadados, votos, análises);
+  - só inserir em `sync_logs` ao final com sucesso (não penalizar falha);
+  - retornar `run_id` + resumo final.
+- Ajustar UX do botão:
+  - estado “em execução” com timeline de logs;
+  - polling dos logs enquanto roda;
+  - refetch automático ao concluir (analises + votações + insights).
 
----
+3) Correções no detalhe de projetos (nome, partido, voto)
+- No sync, salvar dados denormalizados em `votos_deputados` e `votos_senadores` (nome, partido, UF, foto) para não depender de join com `analises`.
+- Em `ProjetosTab`, buscar votos paginados (não limitar a 500/1000 fixo) e exibir sempre nome/partido/voto.
+- Melhorar busca interna do modal (nome, partido, UF, voto literal e normalizado).
 
-## 1. Backend Supabase (Lovable Cloud)
+4) Insights + mapa (filtro real por UF e blocos)
+- Elevar estado de UF selecionada para `Insights.tsx`.
+- Fazer o `BrazilMap` emitir `onSelectUf`.
+- Aplicar filtro UF nos datasets de Visão Geral/Partidos/Divergência/Projetos.
+- Adicionar contadores por UF de Governo/Centro/Oposição no painel lateral do mapa.
 
-### Banco de Dados
-- **Tabela `votacoes`**: Cache das votações buscadas da API da Câmara (id_votacao, data, descrição, ano)
-- **Tabela `orientacoes`**: Orientação do líder do governo por votação (evita re-buscar da API)
-- **Tabela `analises_deputados`**: Score de alinhamento calculado por deputado por ano (deputado_id, ano, score, total_votos, classificação)
-- **Tabela `profiles`**: Perfil dos usuários logados (nome, avatar, favoritos)
-- **Tabela `user_roles`**: Roles de acesso dos usuários
+5) Agenda ao vivo e “votando agora”
+- Nova aba “Ao Vivo” em Insights.
+- Criar função backend `agenda-live` para consolidar agenda/plenário de Câmara e Senado e classificar:
+  - “em andamento agora”,
+  - “próximas votações”,
+  - “últimas atualizações”.
+- Persistir em `agenda_live_items` (cache curto) + atualização automática (cron curto, ex. a cada 2-5 min).
+- Frontend com polling curto e carimbo “atualizado há Xs”.
 
-### Edge Function: Sincronização com API da Câmara
-- Uma edge function que busca votações e orientações da API da Câmara e salva no Supabase
-- Resolve o problema de rate limit (429) centralizando as chamadas no servidor
-- Sempre prioriza buscar a orientação do **líder do governo** (GOV./GOVERNO/LIDGOV)
-- Aceita parâmetro de **ano** para filtrar o período de busca
+6) Endpoint para uso externo (robustez)
+- Manter `api-dados`, mas corrigir UX em Perfil:
+  - trocar `useState(() => fetchApiKeys())` por `useEffect`;
+  - mostrar URL completa copiável;
+  - exemplo pronto por casa/ano/tipo.
+- Endurecimento: exibir chave só na criação (mascarada na lista), com rotação/revogação.
 
-### Autenticação
-- Login com Google via Supabase Auth
-- Usuários logados podem salvar deputados favoritos e acessar exportação
+7) Migrações e segurança (RLS)
+- Novas tabelas: `sync_runs`, `sync_run_events`, `agenda_live_items` (+ índices por casa/ano/status/created_at).
+- RLS:
+  - `sync_runs`/`sync_run_events`: usuário autenticado vê apenas os próprios runs; execução automática registrada sem exposição indevida.
+  - `agenda_live_items`: leitura pública (dados legislativos não sensíveis).
+- Sem mexer em arquivos auto-gerados de cliente/tipos manualmente.
 
----
-
-## 2. Página Principal — Dashboard
-
-### Barra Superior
-- Logo e título "Monitor Legislativo"
-- Busca por nome de deputado
-- Filtro por partido (dropdown)
-- **Filtro por ano** (2024, 2025, 2026) — altera o período de consulta
-- **Filtro por classificação**: Governo / Centro / Oposição / Todos
-- Botão de login com Google
-
-### Painel Lateral (Estatísticas)
-- Contadores: Governo, Centro, Oposição, Por Analisar
-- Barra de progresso da análise
-- Botão "Analisar Filtro Atual"
-- Card de Metodologia (critérios de classificação)
-
-### Grid de Deputados
-- Cards com foto, nome, partido, UF e score de alinhamento
-- Cores por classificação (verde/governo, azul/centro, vermelho/oposição)
-- Indicador de loading individual por card durante análise
-- Clique abre página de detalhes
-
----
-
-## 3. Ranking de Alinhamento
-- Lista ordenada dos deputados mais e menos alinhados com o governo
-- Filtro por ano e partido
-- Top 10 mais alinhados e top 10 mais oposicionistas em destaque
-
----
-
-## 4. Gráficos por Partido
-- Gráfico de barras com alinhamento médio de cada partido com o governo
-- Comparação visual entre partidos usando Recharts
-- Filtro por ano para ver evolução
-
----
-
-## 5. Página de Detalhes do Deputado
-- Foto, nome completo, partido, UF
-- Score de alinhamento com barra visual
-- Lista das votações analisadas mostrando: voto do deputado vs. orientação do líder do governo
-- Classificação geral (Governo/Centro/Oposição)
-
----
-
-## 6. Exportação de Dados
-- Botão para exportar ranking e análises em CSV
-- Disponível para usuários logados
-- Inclui nome, partido, UF, score, classificação, total de votos
-
----
-
-## 7. Design e UX
-- Design moderno com Tailwind CSS, cards arredondados, sombras sutis
-- Paleta: indigo como cor primária, emerald para governo, rose para oposição
-- Responsivo (mobile e desktop)
-- Modo claro (como no código original)
-- Feedback visual durante processamento (spinners por card e global)
-
+8) Plano de teste ponta a ponta (checklist)
+- Câmara:
+  - login → clicar sync → ver logs em tempo real → conclusão sem erro;
+  - confirmar atualização de cards/ranking/insights;
+  - repetir antes de 10 min e validar bloqueio correto.
+- Senado: mesmo fluxo.
+- Insights > Projetos:
+  - abrir projeto e validar votos individuais com nome/partido/UF/voto;
+  - busca por número (ex: “PL 1234”) e por nome no modal.
+- Insights > Estados:
+  - selecionar UF e confirmar que demais blocos filtram.
+- Insights > Ao Vivo:
+  - validar sessões “em andamento agora” e lista de projetos votados no momento.
+- Perfil/API:
+  - gerar chave, copiar endpoint, testar chamada externa com resposta paginada.
