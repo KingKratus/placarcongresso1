@@ -4,6 +4,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { SyncLogViewer } from "@/components/SyncLogViewer";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_deputados">;
@@ -17,6 +18,9 @@ interface StatsPanelProps {
   lastSync?: Date | null;
   canSync?: boolean;
   remainingSeconds?: number;
+  syncEvents?: { id: string; step: string; message: string; created_at: string }[];
+  syncStatus?: "idle" | "running" | "completed" | "error";
+  syncError?: string | null;
 }
 
 function StatItem({ label, count, icon, colorClass }: {
@@ -53,6 +57,7 @@ function formatLastSync(date: Date): string {
 export function StatsPanel({
   analises, totalDeputados, syncing, onSync, user,
   lastSync, canSync = true, remainingSeconds = 0,
+  syncEvents = [], syncStatus = "idle", syncError = null,
 }: StatsPanelProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
@@ -88,7 +93,6 @@ export function StatsPanel({
 
           {user && (
             <>
-              {/* Sync status indicator */}
               {lastSync && (
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-2">
                   <Clock size={12} />
@@ -116,6 +120,8 @@ export function StatsPanel({
               <p className="text-[9px] text-center text-muted-foreground font-bold uppercase">
                 Busca votações → orientações do governo → votos dos deputados
               </p>
+
+              <SyncLogViewer events={syncEvents} status={syncStatus} error={syncError} />
             </>
           )}
         </CardContent>

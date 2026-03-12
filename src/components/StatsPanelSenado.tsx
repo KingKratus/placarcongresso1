@@ -4,6 +4,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { SyncLogViewer } from "@/components/SyncLogViewer";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_senadores">;
@@ -17,6 +18,9 @@ interface StatsPanelSenadoProps {
   lastSync?: Date | null;
   canSync?: boolean;
   remainingSeconds?: number;
+  syncEvents?: { id: string; step: string; message: string; created_at: string }[];
+  syncStatus?: "idle" | "running" | "completed" | "error";
+  syncError?: string | null;
 }
 
 function StatItem({ label, count, icon, colorClass }: {
@@ -53,6 +57,7 @@ function formatLastSync(date: Date): string {
 export function StatsPanelSenado({
   analises, totalSenadores, syncing, onSync, user,
   lastSync, canSync = true, remainingSeconds = 0,
+  syncEvents = [], syncStatus = "idle", syncError = null,
 }: StatsPanelSenadoProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
@@ -115,6 +120,8 @@ export function StatsPanelSenado({
               <p className="text-[9px] text-center text-muted-foreground font-bold uppercase">
                 Busca votações do plenário → voto do Líder do Governo → votos dos senadores
               </p>
+
+              <SyncLogViewer events={syncEvents} status={syncStatus} error={syncError} />
             </>
           )}
         </CardContent>

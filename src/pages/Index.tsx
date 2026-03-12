@@ -17,6 +17,7 @@ import { useDeputados } from "@/hooks/useDeputados";
 import { useAnalises } from "@/hooks/useAnalises";
 import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
+import { useSyncRun } from "@/hooks/useSyncRun";
 import { useFavoritos } from "@/hooks/useFavoritos";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 
@@ -32,9 +33,17 @@ const Index = () => {
   const { user, signInWithGoogle, signOut } = useAuth();
   const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
   const { toggleFavorito, isFavorito } = useFavoritos(user?.id);
+  const syncRun = useSyncRun();
 
   const handleSync = async () => {
-    await syncDeputados();
+    const runId = crypto.randomUUID();
+    syncRun.startRun(runId);
+    const result = await syncDeputados(runId);
+    if (result) {
+      syncRun.finishRun("completed");
+    } else {
+      syncRun.finishRun("error", error || "Erro na sincronização");
+    }
     refetchStatus();
   };
 
@@ -71,6 +80,7 @@ const Index = () => {
             analises={analises} totalDeputados={deputados.length}
             syncing={syncing} onSync={handleSync} user={user}
             lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
+            syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
           />
           {user && (
             <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>

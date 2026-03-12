@@ -396,6 +396,11 @@ export default function Insights() {
             <TabsContent value="projetos">
               <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} ano={ano} />
             </TabsContent>
+
+            {/* Ao Vivo */}
+            <TabsContent value="ao-vivo">
+              <AgendaAoVivo />
+            </TabsContent>
           </Tabs>
         )}
       </main>
