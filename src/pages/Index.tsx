@@ -27,8 +27,13 @@ const Index = () => {
   const [partyFilter, setPartyFilter] = useState("all");
   const [ano, setAno] = useState(new Date().getFullYear());
   const [classFilter, setClassFilter] = useState("all");
+  const [ufFilter, setUfFilter] = useState("all");
+  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
+  const [sortBy, setSortBy] = useState("nome");
+  const [titulares, setTitulares] = useState(true);
 
-  const { deputados, partidos, loading: depLoading } = useDeputados();
+  const legislatura = titulares ? 57 : 0;
+  const { deputados, partidos, loading: depLoading } = useDeputados(legislatura || undefined);
   const { analises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
   const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
@@ -54,13 +59,32 @@ const Index = () => {
   }, [analises]);
 
   const filteredDeputies = useMemo(() => {
-    return deputados.filter((d) => {
+    let result = deputados.filter((d) => {
       const matchName = d.nome.toLowerCase().includes(searchTerm.toLowerCase());
       const matchParty = partyFilter === "all" || d.siglaPartido === partyFilter;
-      const matchClass = classFilter === "all" || analiseMap[d.id]?.classificacao === classFilter;
-      return matchName && matchParty && matchClass;
+      const matchUf = ufFilter === "all" || d.siglaUf === ufFilter;
+      const analise = analiseMap[d.id];
+      const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
+      const score = analise ? Number(analise.score) : -1;
+      const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
+      return matchName && matchParty && matchUf && matchClass && matchScore;
     });
-  }, [deputados, searchTerm, partyFilter, classFilter, analiseMap]);
+
+    // Sort
+    result.sort((a, b) => {
+      const aA = analiseMap[a.id];
+      const bA = analiseMap[b.id];
+      switch (sortBy) {
+        case "score-desc": return (Number(bA?.score ?? -1)) - (Number(aA?.score ?? -1));
+        case "score-asc": return (Number(aA?.score ?? 999)) - (Number(bA?.score ?? 999));
+        case "partido": return (a.siglaPartido || "").localeCompare(b.siglaPartido || "");
+        case "uf": return (a.siglaUf || "").localeCompare(b.siglaUf || "");
+        default: return a.nome.localeCompare(b.nome);
+      }
+    });
+
+    return result;
+  }, [deputados, searchTerm, partyFilter, ufFilter, classFilter, scoreRange, sortBy, analiseMap]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -106,7 +130,19 @@ const Index = () => {
                   <p className="text-sm font-medium text-destructive">{error}</p>
                 </div>
               )}
-              <ClassificationFilter analises={analises} classFilter={classFilter} onClassFilterChange={setClassFilter} />
+              <ClassificationFilter
+                analises={analises}
+                classFilter={classFilter}
+                onClassFilterChange={setClassFilter}
+                ufFilter={ufFilter}
+                onUfFilterChange={setUfFilter}
+                scoreRange={scoreRange}
+                onScoreRangeChange={setScoreRange}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                titulares={titulares}
+                onTitularesChange={setTitulares}
+              />
               <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
                 <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users size={16} className="text-primary" /> {filteredDeputies.length} deputados

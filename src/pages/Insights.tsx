@@ -34,7 +34,7 @@ const UFS = [
 ];
 
 export default function Insights() {
-  const [ano, setAno] = useState(2025);
+  const [ano, setAno] = useState(new Date().getFullYear());
   const { deputados, senadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
 

@@ -1,13 +1,23 @@
 import {
-  UserCheck, UserX, UserMinus, Minus, BarChart2, Info, Loader2, Clock, Timer,
+  UserCheck, UserX, UserMinus, Minus, BarChart2, Info, Loader2, Clock, Timer, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { SyncLogViewer } from "@/components/SyncLogViewer";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_senadores">;
+
+interface GovPartyStats {
+  govParty: string;
+  govPartyAvg: number;
+  acimaMedia: number;
+  totalAnalises: number;
+}
 
 interface StatsPanelSenadoProps {
   analises: Analise[];
@@ -21,6 +31,9 @@ interface StatsPanelSenadoProps {
   syncEvents?: { id: string; step: string; message: string; created_at: string }[];
   syncStatus?: "idle" | "running" | "completed" | "error";
   syncError?: string | null;
+  govMethod?: "lider" | "partido-gov";
+  onGovMethodChange?: (v: "lider" | "partido-gov") => void;
+  govPartyStats?: GovPartyStats;
 }
 
 function StatItem({ label, count, icon, colorClass }: {
@@ -58,6 +71,7 @@ export function StatsPanelSenado({
   analises, totalSenadores, syncing, onSync, user,
   lastSync, canSync = true, remainingSeconds = 0,
   syncEvents = [], syncStatus = "idle", syncError = null,
+  govMethod = "lider", onGovMethodChange, govPartyStats,
 }: StatsPanelSenadoProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
@@ -78,10 +92,40 @@ export function StatsPanelSenado({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Gov method selector */}
+          {onGovMethodChange && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Método</span>
+              <Select value={govMethod} onValueChange={(v) => onGovMethodChange(v as "lider" | "partido-gov")}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lider">Líder do Governo</SelectItem>
+                  <SelectItem value="partido-gov">Média Partido Gov</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <StatItem label="Governo" count={counts.Governo} icon={<UserCheck size={16} className="text-governo" />} colorClass="bg-governo/10 text-governo" />
           <StatItem label="Centro" count={counts.Centro} icon={<UserMinus size={16} className="text-centro" />} colorClass="bg-centro/10 text-centro" />
           <StatItem label="Oposição" count={counts.Oposição} icon={<UserX size={16} className="text-oposicao" />} colorClass="bg-oposicao/10 text-oposicao" />
           <StatItem label="Por Analisar" count={Math.max(0, totalSenadores - analises.length)} icon={<Minus size={16} className="text-muted-foreground" />} colorClass="bg-muted text-muted-foreground" />
+
+          {/* Gov party average stat */}
+          {govPartyStats && govPartyStats.totalAnalises > 0 && (
+            <div className="p-3 rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp size={14} />
+                <span className="text-[10px] font-black uppercase tracking-wider">Média Partido Gov ({govPartyStats.govParty})</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold">Média: {govPartyStats.govPartyAvg.toFixed(1)}%</span>
+                <span className="text-xs font-black">{govPartyStats.acimaMedia}/{govPartyStats.totalAnalises} acima</span>
+              </div>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-border">
             <div className="flex justify-between items-end mb-2">
@@ -138,7 +182,9 @@ export function StatsPanelSenado({
             <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento {"≤ "}30%</div>
           </div>
           <p className="text-[10px] mt-3 leading-relaxed opacity-70">
-            Comparação do voto de cada senador com o voto do Líder do Governo no Senado nas votações nominais do ano selecionado.
+            {govMethod === "lider"
+              ? "Comparação do voto de cada senador com o voto do Líder do Governo no Senado nas votações nominais do ano selecionado."
+              : `Comparação do voto de cada senador com a média de votos do partido do governo (${govPartyStats?.govParty || "PT"}) nas votações nominais do ano selecionado.`}
           </p>
         </CardContent>
       </Card>
