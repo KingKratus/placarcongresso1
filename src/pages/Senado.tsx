@@ -27,6 +27,10 @@ const Senado = () => {
   const [partyFilter, setPartyFilter] = useState("all");
   const [ano, setAno] = useState(new Date().getFullYear());
   const [classFilter, setClassFilter] = useState("all");
+  const [ufFilter, setUfFilter] = useState("all");
+  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
+  const [sortBy, setSortBy] = useState("nome");
+  const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
 
   const { senadores, partidos, loading: senLoading } = useSenadores();
   const { analises, loading: analLoading, syncing, error, syncSenadores, refetch } = useAnalisesSenado(ano);
@@ -47,6 +51,34 @@ const Senado = () => {
     refetchStatus();
   };
 
+  // Compute gov party average stats
+  const govPartyStats = useMemo(() => {
+    // Identify gov party: party with highest avg score (typically PT or the leader's party)
+    const partyScores: Record<string, { sum: number; count: number }> = {};
+    analises.forEach((a) => {
+      const p = a.senador_partido || "";
+      if (!p) return;
+      partyScores[p] = partyScores[p] || { sum: 0, count: 0 };
+      partyScores[p].sum += Number(a.score);
+      partyScores[p].count++;
+    });
+
+    let govParty = "PT";
+    let maxAvg = 0;
+    for (const [party, { sum, count }] of Object.entries(partyScores)) {
+      const avg = sum / count;
+      if (avg > maxAvg) { maxAvg = avg; govParty = party; }
+    }
+
+    const govPartyAvg = partyScores[govParty]
+      ? partyScores[govParty].sum / partyScores[govParty].count
+      : 50;
+
+    const acimaMedia = analises.filter((a) => Number(a.score) >= govPartyAvg).length;
+
+    return { govParty, govPartyAvg, acimaMedia, totalAnalises: analises.length };
+  }, [analises]);
+
   const analiseMap = useMemo(() => {
     const map: Record<number, (typeof analises)[0]> = {};
     analises.forEach((a) => { map[a.senador_id] = a; });
@@ -54,13 +86,31 @@ const Senado = () => {
   }, [analises]);
 
   const filteredSenadores = useMemo(() => {
-    return senadores.filter((s) => {
+    let result = senadores.filter((s) => {
       const matchName = s.nome.toLowerCase().includes(searchTerm.toLowerCase());
       const matchParty = partyFilter === "all" || s.siglaPartido === partyFilter;
-      const matchClass = classFilter === "all" || analiseMap[s.id]?.classificacao === classFilter;
-      return matchName && matchParty && matchClass;
+      const matchUf = ufFilter === "all" || s.siglaUf === ufFilter;
+      const analise = analiseMap[s.id];
+      const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
+      const score = analise ? Number(analise.score) : -1;
+      const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
+      return matchName && matchParty && matchUf && matchClass && matchScore;
     });
-  }, [senadores, searchTerm, partyFilter, classFilter, analiseMap]);
+
+    result.sort((a, b) => {
+      const aA = analiseMap[a.id];
+      const bA = analiseMap[b.id];
+      switch (sortBy) {
+        case "score-desc": return (Number(bA?.score ?? -1)) - (Number(aA?.score ?? -1));
+        case "score-asc": return (Number(aA?.score ?? 999)) - (Number(bA?.score ?? 999));
+        case "partido": return (a.siglaPartido || "").localeCompare(b.siglaPartido || "");
+        case "uf": return (a.siglaUf || "").localeCompare(b.siglaUf || "");
+        default: return a.nome.localeCompare(b.nome);
+      }
+    });
+
+    return result;
+  }, [senadores, searchTerm, partyFilter, ufFilter, classFilter, scoreRange, sortBy, analiseMap]);
 
   const partidosForNavbar = partidos.map((p, i) => ({ id: i, sigla: p.sigla, nome: p.sigla }));
 
@@ -83,6 +133,9 @@ const Senado = () => {
             syncing={syncing} onSync={handleSync} user={user}
             lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
             syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
+            govMethod={govMethod}
+            onGovMethodChange={setGovMethod}
+            govPartyStats={govPartyStats}
           />
           {user && (
             <Button variant="outline" className="w-full" onClick={() => exportAnalisesSenadorCsv(analises, ano)} disabled={analises.length === 0}>
@@ -108,7 +161,17 @@ const Senado = () => {
                   <p className="text-sm font-medium text-destructive">{error}</p>
                 </div>
               )}
-              <ClassificationFilterSenado analises={analises} classFilter={classFilter} onClassFilterChange={setClassFilter} />
+              <ClassificationFilterSenado
+                analises={analises}
+                classFilter={classFilter}
+                onClassFilterChange={setClassFilter}
+                ufFilter={ufFilter}
+                onUfFilterChange={setUfFilter}
+                scoreRange={scoreRange}
+                onScoreRangeChange={setScoreRange}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+              />
               <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
                 <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users size={16} className="text-primary" /> {filteredSenadores.length} senadores

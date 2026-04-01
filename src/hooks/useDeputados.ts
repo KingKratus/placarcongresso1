@@ -17,7 +17,7 @@ export interface Partido {
   nome: string;
 }
 
-export function useDeputados() {
+export function useDeputados(legislatura: number = 57) {
   const [deputados, setDeputados] = useState<Deputado[]>([]);
   const [partidos, setPartidos] = useState<Partido[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +29,7 @@ export function useDeputados() {
       setError(null);
       try {
         const [depRes, partRes] = await Promise.all([
-          fetch(`${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600`),
+          fetch(`${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600&idLegislatura=${legislatura}`),
           fetch(`${API_BASE}/partidos?itens=100&ordem=ASC&ordenarPor=sigla`),
         ]);
         const depData = await depRes.json();
@@ -44,7 +44,7 @@ export function useDeputados() {
       }
     };
     load();
-  }, []);
+  }, [legislatura]);
 
   return { deputados, partidos, loading, error };
 }

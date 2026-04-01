@@ -105,7 +105,7 @@ export function Navbar({
             <SelectTrigger className="w-32"><SelectValue placeholder="Partido" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {partidos.map((p) => <SelectItem key={p.id} value={p.sigla}>{p.sigla}</SelectItem>)}
+              {partidos.map((p, i) => <SelectItem key={`${p.sigla}-${i}`} value={p.sigla}>{p.sigla}</SelectItem>)}
             </SelectContent>
           </Select>
 
