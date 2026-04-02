@@ -20,6 +20,7 @@ import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { useSyncRun } from "@/hooks/useSyncRun";
 import { useFavoritos } from "@/hooks/useFavoritos";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
+import { getBancada } from "@/lib/bancadas";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -31,9 +32,10 @@ const Index = () => {
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
   const [sortBy, setSortBy] = useState("nome");
   const [titulares, setTitulares] = useState(true);
+  const [bancadaFilter, setBancadaFilter] = useState("all");
 
-  const legislatura = titulares ? 57 : 0;
-  const { deputados, partidos, loading: depLoading } = useDeputados(legislatura || undefined);
+  const legislatura = titulares ? 57 : undefined;
+  const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);
   const { analises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
   const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
@@ -63,14 +65,14 @@ const Index = () => {
       const matchName = d.nome.toLowerCase().includes(searchTerm.toLowerCase());
       const matchParty = partyFilter === "all" || d.siglaPartido === partyFilter;
       const matchUf = ufFilter === "all" || d.siglaUf === ufFilter;
+      const matchBancada = bancadaFilter === "all" || getBancada(d.siglaPartido) === bancadaFilter;
       const analise = analiseMap[d.id];
       const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
       const score = analise ? Number(analise.score) : -1;
       const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
-      return matchName && matchParty && matchUf && matchClass && matchScore;
+      return matchName && matchParty && matchUf && matchBancada && matchClass && matchScore;
     });
 
-    // Sort
     result.sort((a, b) => {
       const aA = analiseMap[a.id];
       const bA = analiseMap[b.id];
@@ -84,7 +86,7 @@ const Index = () => {
     });
 
     return result;
-  }, [deputados, searchTerm, partyFilter, ufFilter, classFilter, scoreRange, sortBy, analiseMap]);
+  }, [deputados, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -142,6 +144,8 @@ const Index = () => {
                 onSortByChange={setSortBy}
                 titulares={titulares}
                 onTitularesChange={setTitulares}
+                bancadaFilter={bancadaFilter}
+                onBancadaFilterChange={setBancadaFilter}
               />
               <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
                 <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
