@@ -13,7 +13,10 @@ function jsonResponse(data: unknown, status = 200) {
 
 async function safeFetchJson(url: string, headers?: Record<string, string>): Promise<any> {
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json", ...headers } });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const res = await fetch(url, { headers: { Accept: "application/json", ...headers }, signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -31,20 +34,18 @@ Deno.serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0];
     const yearMonth = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}`;
 
-    // Fetch Câmara events for today
     const camaraEventsUrl = `https://dadosabertos.camara.leg.br/api/v2/eventos?dataInicio=${todayStr}&dataFim=${todayStr}&ordem=ASC&ordenarPor=dataHoraInicio&itens=50`;
     const camaraVotacoesUrl = `https://dadosabertos.camara.leg.br/api/v2/votacoes?dataInicio=${todayStr}&dataFim=${todayStr}&ordem=DESC&ordenarPor=dataHoraRegistro&itens=20`;
-
-    // Fetch Senado agenda for this month
     const senadoAgendaUrl = `https://legis.senado.leg.br/dadosabertos/plenario/agenda/mes/${yearMonth}.json`;
 
+    // Fetch in parallel — each independently handles errors
     const [camaraEvents, camaraVotacoes, senadoAgenda] = await Promise.all([
       safeFetchJson(camaraEventsUrl),
       safeFetchJson(camaraVotacoesUrl),
       safeFetchJson(senadoAgendaUrl),
     ]);
 
-    // Process Câmara events
+    // Process Câmara events (resilient — returns empty if API failed)
     const eventosCamara = (camaraEvents?.dados || []).map((e: any) => ({
       id: e.id,
       titulo: e.descricaoTipo || "",
@@ -57,7 +58,6 @@ Deno.serve(async (req) => {
       urlPauta: e.uri ? `${e.uri}/pauta` : null,
     }));
 
-    // Process today's votações from Câmara
     const votacoesHoje = (camaraVotacoes?.dados || []).map((v: any) => ({
       id: v.id,
       data: v.dataHoraRegistro,
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       aprovacao: v.aprovacao,
     }));
 
-    // Process Senado agenda - filter to today
+    // Process Senado agenda (resilient)
     let senadoItems: any[] = [];
     try {
       const agendaData = senadoAgenda?.AgendaPlenario?.Sessoes?.Sessao;
@@ -93,7 +93,6 @@ Deno.serve(async (req) => {
       }
     } catch {}
 
-    // Determine status
     const now = today.getTime();
     const emAndamento = eventosCamara.filter((e: any) => {
       if (!e.dataInicio) return false;
@@ -114,9 +113,11 @@ Deno.serve(async (req) => {
         em_andamento: emAndamento,
         proximos: proximos.slice(0, 10),
         votacoes_hoje: votacoesHoje,
+        api_disponivel: camaraEvents !== null,
       },
       senado: {
         sessoes_hoje: senadoItems,
+        api_disponivel: senadoAgenda !== null,
       },
     });
   } catch (error) {

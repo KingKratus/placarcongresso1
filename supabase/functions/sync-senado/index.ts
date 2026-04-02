@@ -31,7 +31,10 @@ function normalizeVoto(voto: string | null | undefined): string {
 
 async function safeFetchJson(url: string): Promise<any> {
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -259,6 +262,8 @@ Deno.serve(async (req) => {
     let consensusSkipped = 0;
     let votosStored = 0;
     const unresolvedNames = new Set<string>();
+    // Track all senators seen in votes (for "Sem Dados")
+    const seenSenators: Record<string, { nome: string; partido: string; uf: string }> = {};
 
     await logEvent("processamento", "Processando votações e votos...");
 
@@ -298,6 +303,11 @@ Deno.serve(async (req) => {
             voto: voto.voto || "",
             ano: year,
           });
+          // Track for Sem Dados
+          const senKey = `${mapping.id}`;
+          if (!seenSenators[senKey]) {
+            seenSenators[senKey] = { nome, partido: voto.partido || "", uf: voto.uf || "" };
+          }
         }
 
         // Score calculation only for gov-oriented votações
@@ -357,7 +367,8 @@ Deno.serve(async (req) => {
       }
 
       if (i % 50 === 0 && i > 0) {
-        await logEvent("processamento", `Processadas ${i}/${votacoes.length} votações, ${votosStored} votos salvos`);
+        const pct = Math.round((i / votacoes.length) * 100);
+        await logEvent("processamento", `${pct}% — Processadas ${i}/${votacoes.length} votações, ${votosStored} votos salvos`);
       }
     }
 
@@ -366,9 +377,12 @@ Deno.serve(async (req) => {
     // Classify senators
     await logEvent("analises", "Calculando classificações dos senadores...");
     const records: any[] = [];
+    const analyzedIds = new Set<number>();
+
     for (const [_senKey, data] of Object.entries(senatorScores)) {
       const mapping = resolveId(data.nome);
       if (!mapping) { unresolvedNames.add(data.nome); continue; }
+      analyzedIds.add(mapping.id);
 
       const score = data.total > 0 ? (data.aligned / data.total) * 100 : 0;
       let classificacao = "Centro";
@@ -390,6 +404,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Add "Sem Dados" for senators who voted but had no gov-oriented votações
+    for (const [senIdStr, data] of Object.entries(seenSenators)) {
+      const senId = Number(senIdStr);
+      if (analyzedIds.has(senId)) continue;
+      const mapping = resolveId(data.nome);
+      if (!mapping) continue;
+
+      records.push({
+        senador_id: mapping.id,
+        senador_nome: data.nome,
+        senador_partido: data.partido || null,
+        senador_uf: data.uf || null,
+        senador_foto: mapping.foto || null,
+        ano: year,
+        score: 0,
+        total_votos: 0,
+        votos_alinhados: 0,
+        classificacao: "Sem Dados",
+      });
+    }
+
     let upsertCount = 0;
     for (let i = 0; i < records.length; i += 200) {
       const chunk = records.slice(i, i + 200);
@@ -400,8 +435,11 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
+    const semDadosCount = records.filter((r) => r.classificacao === "Sem Dados").length;
+
     const summary = {
       analyzed: upsertCount,
+      sem_dados: semDadosCount,
       votacoes_total: votacoes.length,
       votacoes_with_gov: votacoesWithGovOrient,
       votacoes_stored: votacoesStored,
@@ -410,9 +448,8 @@ Deno.serve(async (req) => {
       year,
     };
 
-    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} senadores, ${votacoesStored} votações, ${votosStored} votos`);
+    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} senadores (${semDadosCount} sem dados), ${votacoesStored} votações, ${votosStored} votos`);
 
-    // Only log cooldown on SUCCESS
     if (userId) {
       await supabase.from("sync_logs").insert({ user_id: userId, casa: "senado" });
     }

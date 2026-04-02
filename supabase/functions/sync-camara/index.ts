@@ -29,7 +29,10 @@ function normalizeVoto(voto: string | null | undefined): string {
 
 async function safeFetchJson(url: string): Promise<any> {
   try {
-    const res = await fetch(url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -145,10 +148,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Create sync run if not provided
-    if (!runId) {
-      runId = crypto.randomUUID();
-    }
+    if (!runId) runId = crypto.randomUUID();
     await supabase.from("sync_runs").insert({
       id: runId, user_id: userId, casa: "camara", ano: year, status: "running",
     });
@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── STEP 2: Fetch bulk votações ──
+    // ── STEP 2: Fetch bulk votações with improved metadata parsing ──
     await logEvent("votacoes", "Baixando metadados de votações...");
     const votacoesUrl = `${BULK_BASE}/votacoes/json/votacoes-${year}.json`;
     const votacoesRes = await fetch(votacoesUrl);
@@ -210,7 +210,18 @@ Deno.serve(async (req) => {
       const bulkRecords: any[] = [];
       for (const v of allBulkVotacoes) {
         const vid = String(v.id);
-        const prop = parseProposicaoObjeto(v.proposicaoObjeto);
+        let prop = parseProposicaoObjeto(v.proposicaoObjeto);
+
+        // Fallback: try proposicoesAfetadas array
+        if (!prop.tipo && v.proposicoesAfetadas && Array.isArray(v.proposicoesAfetadas) && v.proposicoesAfetadas.length > 0) {
+          const pa = v.proposicoesAfetadas[0];
+          prop = {
+            tipo: pa.siglaTipo || pa.tipo || null,
+            numero: pa.numero ? String(pa.numero) : null,
+            ano: pa.ano ? Number(pa.ano) : null,
+          };
+        }
+
         bulkRecords.push({
           id_votacao: vid,
           data: v.dataHoraRegistro || v.data || null,
@@ -219,7 +230,7 @@ Deno.serve(async (req) => {
           sigla_orgao: v.siglaOrgao || null,
           proposicao_tipo: prop.tipo,
           proposicao_numero: prop.numero,
-          proposicao_ementa: v.ementa || null,
+          proposicao_ementa: v.ementa || v.proposicoesAfetadas?.[0]?.ementa || null,
           proposicao_ano: prop.ano,
         });
       }
@@ -342,11 +353,64 @@ Deno.serve(async (req) => {
       }
 
       if (b % 60 === 0 && b > 0) {
-        await logEvent("votos", `Processadas ${b}/${govVotacaoIds.length} votações, ${votosStored} votos salvos`);
+        const pct = Math.round((b / govVotacaoIds.length) * 100);
+        await logEvent("votos", `${pct}% — Processadas ${b}/${govVotacaoIds.length} votações, ${votosStored} votos salvos`);
       }
     }
 
     await logEvent("votos", `${votosStored} votos individuais salvos`);
+
+    // ── STEP 4b: Fetch votes for NON-gov votações (for ProjetosTab) ──
+    const allBulkIds = allBulkVotacoes.map((v: any) => String(v.id));
+    const govIdSet = new Set(govVotacaoIds);
+    const nonGovIds = allBulkIds.filter((id) => !govIdSet.has(id));
+    const NON_GOV_LIMIT = 100; // limit to prevent timeouts
+    const nonGovBatch = nonGovIds.slice(0, NON_GOV_LIMIT);
+
+    if (nonGovBatch.length > 0) {
+      await logEvent("votos-extra", `Buscando votos de ${nonGovBatch.length} votações adicionais (sem orientação gov)...`);
+      let extraVotos = 0;
+      for (let b = 0; b < nonGovBatch.length; b += VOTE_BATCH) {
+        const batch = nonGovBatch.slice(b, b + VOTE_BATCH);
+        const results = await Promise.all(batch.map(fetchVotosForVotacao));
+        const votoBatch: any[] = [];
+
+        for (let idx = 0; idx < batch.length; idx++) {
+          const votacaoId = batch[idx];
+          const votos = results[idx];
+          for (const voto of votos) {
+            const depId = voto.deputado_?.id;
+            if (!depId) continue;
+            votoBatch.push({
+              deputado_id: depId,
+              id_votacao: votacaoId,
+              voto: voto.tipoVoto || "",
+              ano: year,
+            });
+            // Also populate deputyScores metadata for "Sem Dados" deputies
+            if (!deputyScores[depId]) {
+              deputyScores[depId] = {
+                aligned: 0, relevant: 0,
+                nome: voto.deputado_?.nome || "N/A",
+                partido: voto.deputado_?.siglaPartido || "",
+                uf: voto.deputado_?.siglaUf || "",
+                foto: voto.deputado_?.urlFoto || "",
+              };
+            }
+          }
+        }
+
+        for (let j = 0; j < votoBatch.length; j += 500) {
+          const slice = votoBatch.slice(j, j + 500);
+          const { error: votoErr } = await supabase
+            .from("votos_deputados")
+            .upsert(slice, { onConflict: "deputado_id,id_votacao" });
+          if (!votoErr) extraVotos += slice.length;
+        }
+      }
+      await logEvent("votos-extra", `${extraVotos} votos adicionais salvos`);
+      votosStored += extraVotos;
+    }
 
     // ── STEP 5: Classify and upsert deputy analyses ──
     await logEvent("analises", "Calculando classificações dos deputados...");
@@ -382,17 +446,19 @@ Deno.serve(async (req) => {
       else upsertCount += chunk.length;
     }
 
+    const semDadosCount = records.filter((r) => r.classificacao === "Sem Dados").length;
+
     const summary = {
       analyzed: upsertCount,
+      sem_dados: semDadosCount,
       votacoes_total: allBulkVotacoes.length,
       votacoes_with_gov: govVotacaoIds.length,
       votos_stored: votosStored,
       year,
     };
 
-    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} deputados, ${govVotacaoIds.length} votações gov, ${votosStored} votos`);
+    await logEvent("concluido", `✅ Sincronização concluída: ${upsertCount} deputados (${semDadosCount} sem dados), ${govVotacaoIds.length} votações gov, ${votosStored} votos`);
 
-    // Only log cooldown on SUCCESS
     if (userId) {
       await supabase.from("sync_logs").insert({ user_id: userId, casa: "camara" });
     }
