@@ -92,7 +92,6 @@ export function StatsPanelSenado({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Gov method selector */}
           {onGovMethodChange && (
             <div className="space-y-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Método</span>
@@ -113,7 +112,6 @@ export function StatsPanelSenado({
           <StatItem label="Oposição" count={counts.Oposição} icon={<UserX size={16} className="text-oposicao" />} colorClass="bg-oposicao/10 text-oposicao" />
           <StatItem label="Por Analisar" count={Math.max(0, totalSenadores - analises.length)} icon={<Minus size={16} className="text-muted-foreground" />} colorClass="bg-muted text-muted-foreground" />
 
-          {/* Gov party average stat */}
           {govPartyStats && govPartyStats.totalAnalises > 0 && (
             <div className="p-3 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <div className="flex items-center gap-2 mb-1">
@@ -177,9 +175,9 @@ export function StatsPanelSenado({
             <Info size={14} /> Metodologia
           </h4>
           <div className="space-y-2 text-[11px] font-semibold">
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento {"> "}50%</div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-centro" /> CENTRÃO: Alinhamento 30–50%</div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento {"≤ "}30%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento ≥ 70%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-centro" /> CENTRÃO: Alinhamento 36–69%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento ≤ 35%</div>
           </div>
           <p className="text-[10px] mt-3 leading-relaxed opacity-70">
             {govMethod === "lider"
