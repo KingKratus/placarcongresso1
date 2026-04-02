@@ -6,6 +6,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { BANCADA_OPTIONS } from "@/lib/bancadas";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_deputados">;
@@ -22,6 +23,8 @@ interface ClassificationFilterProps {
   onSortByChange?: (v: string) => void;
   titulares?: boolean;
   onTitularesChange?: (v: boolean) => void;
+  bancadaFilter?: string;
+  onBancadaFilterChange?: (v: string) => void;
 }
 
 const UFS = [
@@ -49,6 +52,8 @@ export function ClassificationFilter({
   onSortByChange,
   titulares,
   onTitularesChange,
+  bancadaFilter = "all",
+  onBancadaFilterChange,
 }: ClassificationFilterProps) {
   const counts: Record<string, number> = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
@@ -99,6 +104,19 @@ export function ClassificationFilter({
               <SelectItem value="all">Todos UFs</SelectItem>
               {UFS.map((uf) => (
                 <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {onBancadaFilterChange && (
+          <Select value={bancadaFilter} onValueChange={onBancadaFilterChange}>
+            <SelectTrigger className="w-36 h-8 text-xs">
+              <SelectValue placeholder="Bancada" />
+            </SelectTrigger>
+            <SelectContent>
+              {BANCADA_OPTIONS.map((b) => (
+                <SelectItem key={b} value={b}>{b === "all" ? "Todas Bancadas" : b}</SelectItem>
               ))}
             </SelectContent>
           </Select>

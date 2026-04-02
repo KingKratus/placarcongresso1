@@ -133,12 +133,12 @@ export function StatsPanel({
             <Info size={14} /> Metodologia
           </h4>
           <div className="space-y-2 text-[11px] font-semibold">
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento {"> "}50%</div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-centro" /> CENTRÃO: Alinhamento 30–50%</div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento {"≤ "}30%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-governo" /> GOVERNO: Alinhamento ≥ 70%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-centro" /> CENTRÃO: Alinhamento 36–69%</div>
+            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento ≤ 35%</div>
           </div>
           <p className="text-[10px] mt-3 leading-relaxed opacity-70">
-            Análise das últimas 30 votações de cada deputado, comparando com a orientação do líder do governo no ano selecionado.
+            Análise das votações de cada deputado no ano selecionado, comparando com a orientação do líder do governo.
           </p>
         </CardContent>
       </Card>

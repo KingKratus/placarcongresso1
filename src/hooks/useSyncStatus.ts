@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SyncStatus {
@@ -13,8 +13,9 @@ export function useSyncStatus(casa: "camara" | "senado", userId?: string) {
     canSync: true,
     remainingSeconds: 0,
   });
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+  const COOLDOWN_MS = 10 * 60 * 1000;
 
   const fetchStatus = useCallback(async () => {
     if (!userId) {
@@ -42,7 +43,6 @@ export function useSyncStatus(casa: "camara" | "senado", userId?: string) {
         remainingSeconds: remaining,
       });
     } else {
-      // Check for any last sync (even older)
       const { data: anySync } = await supabase
         .from("sync_logs")
         .select("created_at")
@@ -59,18 +59,26 @@ export function useSyncStatus(casa: "camara" | "senado", userId?: string) {
     }
   }, [userId, casa]);
 
-  // Fetch on mount and after changes
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
 
-  // Countdown timer
+  // Countdown timer — use a stable ref-based approach
   useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     if (status.remainingSeconds <= 0) return;
 
-    const interval = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setStatus((prev) => {
         const newRemaining = Math.max(0, prev.remainingSeconds - 1);
+        if (newRemaining === 0 && timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
         return {
           ...prev,
           remainingSeconds: newRemaining,
@@ -79,8 +87,13 @@ export function useSyncStatus(casa: "camara" | "senado", userId?: string) {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [status.remainingSeconds > 0]);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [status.remainingSeconds > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { ...status, refetchStatus: fetchStatus };
 }

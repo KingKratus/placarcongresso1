@@ -20,6 +20,9 @@ import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { useSyncRun } from "@/hooks/useSyncRun";
 import { useFavoritos } from "@/hooks/useFavoritos";
 import { exportAnalisesSenadorCsv } from "@/lib/exportCsvSenado";
+import { getBancada } from "@/lib/bancadas";
+
+const GOV_PARTY = "PT";
 
 const Senado = () => {
   const navigate = useNavigate();
@@ -31,6 +34,7 @@ const Senado = () => {
   const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
   const [sortBy, setSortBy] = useState("nome");
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
+  const [bancadaFilter, setBancadaFilter] = useState("all");
 
   const { senadores, partidos, loading: senLoading } = useSenadores();
   const { analises, loading: analLoading, syncing, error, syncSenadores, refetch } = useAnalisesSenado(ano);
@@ -51,32 +55,14 @@ const Senado = () => {
     refetchStatus();
   };
 
-  // Compute gov party average stats
+  // Compute gov party average stats — always use PT as gov party
   const govPartyStats = useMemo(() => {
-    // Identify gov party: party with highest avg score (typically PT or the leader's party)
-    const partyScores: Record<string, { sum: number; count: number }> = {};
-    analises.forEach((a) => {
-      const p = a.senador_partido || "";
-      if (!p) return;
-      partyScores[p] = partyScores[p] || { sum: 0, count: 0 };
-      partyScores[p].sum += Number(a.score);
-      partyScores[p].count++;
-    });
-
-    let govParty = "PT";
-    let maxAvg = 0;
-    for (const [party, { sum, count }] of Object.entries(partyScores)) {
-      const avg = sum / count;
-      if (avg > maxAvg) { maxAvg = avg; govParty = party; }
-    }
-
-    const govPartyAvg = partyScores[govParty]
-      ? partyScores[govParty].sum / partyScores[govParty].count
+    const ptAnalises = analises.filter((a) => (a.senador_partido || "").toUpperCase() === GOV_PARTY);
+    const govPartyAvg = ptAnalises.length > 0
+      ? ptAnalises.reduce((s, a) => s + Number(a.score), 0) / ptAnalises.length
       : 50;
-
     const acimaMedia = analises.filter((a) => Number(a.score) >= govPartyAvg).length;
-
-    return { govParty, govPartyAvg, acimaMedia, totalAnalises: analises.length };
+    return { govParty: GOV_PARTY, govPartyAvg, acimaMedia, totalAnalises: analises.length };
   }, [analises]);
 
   const analiseMap = useMemo(() => {
@@ -90,11 +76,12 @@ const Senado = () => {
       const matchName = s.nome.toLowerCase().includes(searchTerm.toLowerCase());
       const matchParty = partyFilter === "all" || s.siglaPartido === partyFilter;
       const matchUf = ufFilter === "all" || s.siglaUf === ufFilter;
+      const matchBancada = bancadaFilter === "all" || getBancada(s.siglaPartido) === bancadaFilter;
       const analise = analiseMap[s.id];
       const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
       const score = analise ? Number(analise.score) : -1;
       const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
-      return matchName && matchParty && matchUf && matchClass && matchScore;
+      return matchName && matchParty && matchUf && matchBancada && matchClass && matchScore;
     });
 
     result.sort((a, b) => {
@@ -110,7 +97,7 @@ const Senado = () => {
     });
 
     return result;
-  }, [senadores, searchTerm, partyFilter, ufFilter, classFilter, scoreRange, sortBy, analiseMap]);
+  }, [senadores, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap]);
 
   const partidosForNavbar = partidos.map((p, i) => ({ id: i, sigla: p.sigla, nome: p.sigla }));
 
@@ -171,6 +158,8 @@ const Senado = () => {
                 onScoreRangeChange={setScoreRange}
                 sortBy={sortBy}
                 onSortByChange={setSortBy}
+                bancadaFilter={bancadaFilter}
+                onBancadaFilterChange={setBancadaFilter}
               />
               <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
                 <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
