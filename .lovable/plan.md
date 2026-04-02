@@ -1,86 +1,138 @@
 
 
-## Plan: Advanced Filters, Senate Governism Methods, and New Features
+## Plan: End-to-End Fixes, Bancada Filter, Sync Improvements, and Bug Corrections
 
-### Problem Analysis
+### Bugs Found During Testing
 
-1. **No "titulares only" filter**: The Câmara API returns ~513 deputados (titulares) but the app fetches 600 with `itens=600` which includes suplentes. Senado API returns all exercising senators including suplentes. There's no UI filter for this.
-2. **Senate governism limited to single method**: Currently only compares with "Líder do Governo" orientation. User wants alternative methods like comparing with the average vote of the government leader's party (currently PSD per the data — but actually the gov coalition lead party).
-3. **Dashboard missing party-average stat**: No stat showing how many senators voted with/against the government party average.
-4. **Various code quality issues**: `useDeputados` fetches from the external API every page load (no caching), Navbar `partidos` prop requires `id` field which Senado doesn't have (line 108: `p.id`), filter resets are incomplete.
+1. **Titulares toggle broken**: When toggled OFF, `legislatura = 0`, then `0 || undefined = undefined`, defaulting back to `57`. The toggle does nothing.
+2. **"600 DEPUTADOS" displayed** even with Titulares ON — the Câmara API with `idLegislatura=57` returns ~513, but the heading uses `filteredDeputies.length` which is correct. The 600 comes from `itens=600` param. This is actually working if the API returns fewer. The real bug is #1.
+3. **Methodology card inconsistency**: StatsPanel says "GOVERNO: > 50%" but `sync-camara` classifies at `>= 70%`. StatsPanelSenado says "> 50%" but `sync-senado` also uses `>= 70%`. The thresholds shown to users are wrong.
+4. **Gov party identification for Senate**: Picks party with highest average score (PROGRESSISTAS in 2026) instead of the actual government leader's party. Should default to PT (the president's party) or allow user configuration.
+5. **Votações Câmara mostly "Outros"**: The bulk `votacoes-{year}.json` file may not have `proposicaoObjeto` for many entries, causing `parseProposicaoObjeto` to return nulls. Need to also parse from `proposicoesAfetadas` in the bulk data or fetch metadata via API.
+6. **Sync only fetches votes for gov-oriented votações**: Step 4 in `sync-camara` only iterates `govVotacaoIds`, meaning non-gov votações have no individual votes in the DB. The Projetos detail falls back to the Câmara API which is slow and rate-limited.
+7. **`Sem Dados` count always 0** on Câmara: The sync classifies deputies as Centro/Governo/Oposição only — never "Sem Dados" because `relevant === 0` sets "Sem Dados" but these deputies typically have zero votes and the `deputyScores` map only includes deputies who actually voted.
 
 ### Implementation Steps
 
-#### 1. Add "Titulares" filter for Câmara
+#### 1. Fix Titulares Toggle
 
-- The Câmara API supports `?idLegislatura=57` (current legislature) which returns only titulares (~513). Current query uses `itens=600` without legislature filter.
-- Add a toggle "Apenas Titulares" in `ClassificationFilter` and the Câmara page.
-- In `useDeputados.ts`, add the `idLegislatura=57` parameter to the API call (this naturally filters to titulares of the current legislature).
-- Add a `conditionFilter` state in `Index.tsx` with options: "Todos", "Titulares" (legislature-based).
+**File**: `src/pages/Index.tsx`
+- Change `const legislatura = titulares ? 57 : 0;` to use `undefined` when off: `const legislatura = titulares ? 57 : undefined;`
+- Update `useDeputados` call: `useDeputados(legislatura)` (remove `|| undefined`)
 
-#### 2. Add alternative governism methods for Senate
+**File**: `src/hooks/useDeputados.ts`
+- When `legislatura` is undefined, omit `idLegislatura` param entirely from API URL to fetch ALL deputies (including suplentes)
 
-- Currently: compares each senator's votes to the Líder do Governo orientation.
-- New method: "Média do Partido do Líder" — compare each senator's vote pattern to the average voting pattern of senators from the government leader's party.
-- Add a `Select` in `StatsPanelSenado` or `Senado.tsx` to toggle method: "Líder do Governo" (default) | "Média Partido Gov".
-- For "Média Partido Gov" method:
-  - Identify gov party (configurable, default to party with highest avg score or "PT" which has 100% alignment).
-  - For each votação, compute majority vote of gov party senators → use that as the reference instead of explicit orientation.
-  - This is a frontend-only calculation using existing `votos_senadores` data, no sync changes needed.
+#### 2. Add Bancada/Bloco Parlamentar Filter
 
-#### 3. Add dashboard stat: "Votaram com a média do partido do governo"
+**File**: `src/components/ClassificationFilter.tsx`
+- Add a new `Select` for "Bancada" with predefined coalition groups:
+  - "Base Gov" (PT, PSD, MDB, PP, PV, PCdoB, Solidariedade, PSDB, etc.)
+  - "Independente" (parties not in either bloc)
+  - "Oposição" (PL, NOVO, UNIÃO, etc.)
+- Define a static mapping `BANCADAS` grouping party siglas
+- Add prop `bancadaFilter` + `onBancadaFilterChange`
 
-- In `StatsPanelSenado`, add a new stat card showing how many senators voted above/below the gov party average.
-- Compute: gov party avg score → count senators with score >= gov party avg.
-- Display as a new `StatItem` or a separate highlight card.
+**File**: `src/pages/Index.tsx`
+- Add `bancadaFilter` state
+- Add filter logic in `filteredDeputies` to match party against bancada groups
 
-#### 4. New filter: filter by UF in Câmara and Senado dashboards
+**File**: `src/pages/Senado.tsx`
+- Same bancada filter for Senate
 
-- Add a UF `Select` dropdown in `ClassificationFilter` and `ClassificationFilterSenado`.
-- Filter deputies/senators by their UF.
+#### 3. Fix Methodology Card Thresholds
 
-#### 5. New suggested features
+**Files**: `src/components/StatsPanel.tsx`, `src/components/StatsPanelSenado.tsx`
+- Update displayed thresholds to match actual sync logic:
+  - GOVERNO: >= 70%
+  - CENTRO: 36%-69%
+  - OPOSIÇÃO: <= 35%
 
-- **"Sem Dados" filter**: Already exists in Navbar but not in `ClassificationFilter` buttons — add it.
-- **Score range slider**: Allow filtering by score range (e.g., 40%-60%) to find swing voters.
-- **Sort options**: Allow sorting cards by score (asc/desc), name, party, UF.
+#### 4. Fix Gov Party Identification for Senate
 
-#### 6. Bug fixes
+**File**: `src/pages/Senado.tsx`
+- Instead of picking party with highest avg score, hardcode the government leader's party as "PT" (Lula's party) with a configurable override
+- Add a text input or select in the gov method selector to let users choose which party represents the government
 
-- **Navbar partidos `id` field**: Senado page creates `partidosForNavbar` with index as `id` but the Select uses `p.id` as key. This works but is fragile. Fix type consistency.
-- **Insights page hardcoded year 2025**: `useState(2025)` should be `useState(new Date().getFullYear())`.
-- **ClassificationFilter doesn't show "Sem Dados"**: Missing from the filter buttons but exists in Navbar dropdown.
+**File**: `src/components/StatsPanelSenado.tsx`
+- When method is "partido-gov", show the selected gov party name
+
+#### 5. Improve Votações Metadata Parsing in sync-camara
+
+**File**: `supabase/functions/sync-camara/index.ts`
+- In the bulk votações processing, also check `proposicoesAfetadas` array (which many bulk entries have) to extract tipo/numero/ementa
+- Add fallback: if `proposicaoObjeto` is null, try `proposicoesAfetadas[0]` fields
+- For entries still missing tipo, try to fetch metadata from API in small batches (limit to ~50 to avoid timeouts)
+
+#### 6. Expand Vote Fetching to ALL Votações (not just gov-oriented)
+
+**File**: `supabase/functions/sync-camara/index.ts`
+- After Step 4 (gov-oriented votes), add Step 4b: fetch votes for remaining votações (non-gov) in batches
+- Use a smaller batch size and add timeout protection
+- This ensures ProjetosTab can show individual votes for any votação without API fallback
+
+**File**: `supabase/functions/sync-senado/index.ts`
+- Already stores votes for all votações — no change needed
+
+#### 7. Fix "Sem Dados" Classification
+
+**File**: `supabase/functions/sync-camara/index.ts`
+- After computing scores, also create analysis records for deputies from the external API that have zero votes
+- Fetch the full deputy list from `analises_deputados` or the Câmara API and insert "Sem Dados" records for any not in `deputyScores`
+
+#### 8. Edge Function Improvements
+
+**Files**: All edge functions
+- `sync-camara`: Add timeout protection for large batches, better error messages per step
+- `sync-senado`: Add progress percentage in log events
+- `agenda-live`: Add caching headers and error handling for individual API failures (if Câmara API fails, still return Senado data)
+- `api-dados`: Add rate limiting per API key (optional), add CORS headers for all standard Supabase client headers
+
+#### 9. Bug Fix Roundup
+
+- **`useDeputados.ts`**: Add `AbortController` for cleanup on unmount to prevent state updates on unmounted component
+- **`useSyncStatus.ts` line 83**: `status.remainingSeconds > 0` in useEffect dependency is evaluated once — should use `status.remainingSeconds` as the actual dependency
+- **`Insights.tsx`**: The `ANOS` array is hardcoded `[2023, 2024, 2025, 2026]` — make dynamic based on current year
 
 ### Technical Details
 
-**Titulares filter (`useDeputados.ts`)**:
+**Bancada mapping** (approximate for current legislature):
 ```
-// Change API call to include legislature
-fetch(`${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600&idLegislatura=57`)
+const BANCADAS = {
+  "Base Gov": ["PT","PSD","MDB","PP","PV","PCdoB","SOLIDARIEDADE","PSDB","AVANTE","PRD","AGIR"],
+  "Oposição": ["PL","NOVO","UNIÃO"],
+  "Independente": [] // everything else
+};
 ```
-This naturally returns only titulares. Add a toggle to switch between current legislature (titulares) and all.
 
-**Senate alternative governism (`Senado.tsx` + new hook)**:
-- Create `useSenadoGovMethod` hook that takes `analises`, `votos_senadores` data, and a method parameter.
-- For "Média Partido Gov": query `votos_senadores` for gov party senators, compute per-votação majority, then recalculate all scores client-side.
-- Display recalculated scores alongside original scores.
+**Titulares fix**:
+```typescript
+// Index.tsx
+const legislatura = titulares ? 57 : undefined;
+const { deputados } = useDeputados(legislatura);
 
-**New stat in StatsPanelSenado**:
-- Compute gov party (PT currently has 100% alignment) average score.
-- Count senators with `score >= govPartyAvg`.
-- Add StatItem: "Acima da Média Gov" with count.
+// useDeputados.ts
+export function useDeputados(legislatura?: number) {
+  const url = legislatura
+    ? `${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600&idLegislatura=${legislatura}`
+    : `${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600`;
+  // ...
+}
+```
 
-**Files to modify**:
-- `src/hooks/useDeputados.ts` — add legislature filter
-- `src/pages/Index.tsx` — add titulares toggle, UF filter, sort options
-- `src/pages/Senado.tsx` — add governism method selector, UF filter
-- `src/components/ClassificationFilter.tsx` — add "Sem Dados" button, UF filter
-- `src/components/ClassificationFilterSenado.tsx` — same
-- `src/components/StatsPanelSenado.tsx` — add gov party avg stat, method selector
-- `src/components/StatsPanel.tsx` — add titulares count
-- `src/pages/Insights.tsx` — fix hardcoded year
-- `src/components/Navbar.tsx` — fix partidos type
+**Vote expansion in sync-camara**: After the existing Step 4 loop, add a second loop for non-gov votações fetching only votes (no score calculation), limited to prevent timeouts.
 
-**New files**:
-- None required; all changes fit in existing files.
+### Files to Modify
+- `src/pages/Index.tsx` — titulares fix, bancada filter
+- `src/pages/Senado.tsx` — bancada filter, gov party fix
+- `src/hooks/useDeputados.ts` — legislatura param fix
+- `src/components/ClassificationFilter.tsx` — bancada select
+- `src/components/ClassificationFilterSenado.tsx` — bancada select
+- `src/components/StatsPanel.tsx` — methodology thresholds
+- `src/components/StatsPanelSenado.tsx` — methodology thresholds, gov party
+- `src/pages/Insights.tsx` — dynamic ANOS
+- `src/hooks/useSyncStatus.ts` — useEffect dependency fix
+- `supabase/functions/sync-camara/index.ts` — metadata parsing, vote expansion, sem dados
+- `supabase/functions/agenda-live/index.ts` — resilience improvements
+- `supabase/functions/api-dados/index.ts` — CORS headers fix
 
