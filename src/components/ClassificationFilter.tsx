@@ -34,10 +34,10 @@ const UFS = [
 
 const items = [
   { value: "all", label: "Todos", icon: Users, colorClass: "text-foreground" },
-  { value: "Governo", label: "Governo", icon: UserCheck, colorClass: "text-governo" },
+  { value: "Governo", label: "Gov", icon: UserCheck, colorClass: "text-governo" },
   { value: "Centro", label: "Centro", icon: UserMinus, colorClass: "text-centro" },
-  { value: "Oposição", label: "Oposição", icon: UserX, colorClass: "text-oposicao" },
-  { value: "Sem Dados", label: "Sem Dados", icon: HelpCircle, colorClass: "text-muted-foreground" },
+  { value: "Oposição", label: "Opos", icon: UserX, colorClass: "text-oposicao" },
+  { value: "Sem Dados", label: "S/D", icon: HelpCircle, colorClass: "text-muted-foreground" },
 ];
 
 export function ClassificationFilter({
@@ -62,7 +62,7 @@ export function ClassificationFilter({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
         {items.map((item) => {
           const Icon = item.icon;
           const count = item.value === "all" ? analises.length : counts[item.value] || 0;
@@ -74,14 +74,14 @@ export function ClassificationFilter({
               variant={isActive ? "default" : "outline"}
               size="sm"
               onClick={() => onClassFilterChange(item.value)}
-              className={`gap-1.5 text-xs font-bold ${
+              className={`gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold px-2 sm:px-3 h-7 sm:h-8 ${
                 !isActive ? item.colorClass : ""
               }`}
             >
-              <Icon size={14} />
-              {item.label}
+              <Icon size={12} className="sm:w-3.5 sm:h-3.5" />
+              <span className="hidden sm:inline">{item.label}</span>
               <span
-                className={`ml-1 text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                className={`ml-0.5 sm:ml-1 text-[9px] sm:text-[10px] font-black px-1 sm:px-1.5 py-0.5 rounded-md ${
                   isActive
                     ? "bg-primary-foreground/20 text-primary-foreground"
                     : "bg-muted text-muted-foreground"
@@ -94,10 +94,10 @@ export function ClassificationFilter({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {onUfFilterChange && (
           <Select value={ufFilter} onValueChange={onUfFilterChange}>
-            <SelectTrigger className="w-28 h-8 text-xs">
+            <SelectTrigger className="w-full sm:w-28 h-8 text-xs">
               <SelectValue placeholder="UF" />
             </SelectTrigger>
             <SelectContent>
@@ -111,7 +111,7 @@ export function ClassificationFilter({
 
         {onBancadaFilterChange && (
           <Select value={bancadaFilter} onValueChange={onBancadaFilterChange}>
-            <SelectTrigger className="w-36 h-8 text-xs">
+            <SelectTrigger className="w-full sm:w-36 h-8 text-xs">
               <SelectValue placeholder="Bancada" />
             </SelectTrigger>
             <SelectContent>
@@ -124,7 +124,7 @@ export function ClassificationFilter({
 
         {onSortByChange && (
           <Select value={sortBy} onValueChange={onSortByChange}>
-            <SelectTrigger className="w-36 h-8 text-xs">
+            <SelectTrigger className="w-full sm:w-36 h-8 text-xs">
               <ArrowUpDown size={12} className="mr-1" />
               <SelectValue />
             </SelectTrigger>
@@ -145,7 +145,7 @@ export function ClassificationFilter({
               checked={titulares}
               onCheckedChange={onTitularesChange}
             />
-            <Label htmlFor="titulares" className="text-xs font-bold cursor-pointer">
+            <Label htmlFor="titulares" className="text-xs font-bold cursor-pointer whitespace-nowrap">
               Titulares (Leg. 57)
             </Label>
           </div>

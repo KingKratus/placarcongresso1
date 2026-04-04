@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
     const allBulkIds = allBulkVotacoes.map((v: any) => String(v.id));
     const govIdSet = new Set(govVotacaoIds);
     const nonGovIds = allBulkIds.filter((id) => !govIdSet.has(id));
-    const NON_GOV_LIMIT = 100; // limit to prevent timeouts
+    const NON_GOV_LIMIT = 200; // increased for better coverage
     const nonGovBatch = nonGovIds.slice(0, NON_GOV_LIMIT);
 
     if (nonGovBatch.length > 0) {

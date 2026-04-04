@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target,
+  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target, ChevronDown,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanelSenado } from "@/components/StatsPanelSenado";
@@ -13,12 +13,14 @@ import { ClassificationFilterSenado } from "@/components/ClassificationFilterSen
 import { CentroTrendsSenado } from "@/components/CentroTrendsSenado";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useSenadores } from "@/hooks/useSenadores";
 import { useAnalisesSenado } from "@/hooks/useAnalisesSenado";
 import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { useSyncRun } from "@/hooks/useSyncRun";
 import { useFavoritos } from "@/hooks/useFavoritos";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { exportAnalisesSenadorCsv } from "@/lib/exportCsvSenado";
 import { getBancada } from "@/lib/bancadas";
 
@@ -26,6 +28,7 @@ const GOV_PARTY = "PT";
 
 const Senado = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [ano, setAno] = useState(new Date().getFullYear());
@@ -35,6 +38,7 @@ const Senado = () => {
   const [sortBy, setSortBy] = useState("nome");
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
   const [bancadaFilter, setBancadaFilter] = useState("all");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { senadores, partidos, loading: senLoading } = useSenadores();
   const { analises, loading: analLoading, syncing, error, syncSenadores, refetch } = useAnalisesSenado(ano);
@@ -55,7 +59,6 @@ const Senado = () => {
     refetchStatus();
   };
 
-  // Compute gov party average stats — always use PT as gov party
   const govPartyStats = useMemo(() => {
     const ptAnalises = analises.filter((a) => (a.senador_partido || "").toUpperCase() === GOV_PARTY);
     const govPartyAvg = ptAnalises.length > 0
@@ -101,6 +104,25 @@ const Senado = () => {
 
   const partidosForNavbar = partidos.map((p, i) => ({ id: i, sigla: p.sigla, nome: p.sigla }));
 
+  const sidebarContent = (
+    <>
+      <StatsPanelSenado
+        analises={analises} totalSenadores={senadores.length}
+        syncing={syncing} onSync={handleSync} user={user}
+        lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
+        syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
+        govMethod={govMethod}
+        onGovMethodChange={setGovMethod}
+        govPartyStats={govPartyStats}
+      />
+      {user && (
+        <Button variant="outline" className="w-full" onClick={() => exportAnalisesSenadorCsv(analises, ano)} disabled={analises.length === 0}>
+          <Download size={14} className="mr-2" /> Exportar CSV
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar
@@ -113,39 +135,43 @@ const Senado = () => {
         casa="senado"
       />
 
-      <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <aside className="xl:col-span-3 space-y-4">
-          <StatsPanelSenado
-            analises={analises} totalSenadores={senadores.length}
-            syncing={syncing} onSync={handleSync} user={user}
-            lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
-            syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
-            govMethod={govMethod}
-            onGovMethodChange={setGovMethod}
-            govPartyStats={govPartyStats}
-          />
-          {user && (
-            <Button variant="outline" className="w-full" onClick={() => exportAnalisesSenadorCsv(analises, ano)} disabled={analises.length === 0}>
-              <Download size={14} className="mr-2" /> Exportar CSV
-            </Button>
-          )}
-        </aside>
+      <main className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
+        {isMobile ? (
+          <Collapsible open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" className="w-full gap-2 text-xs font-bold">
+                <BarChart2 size={14} />
+                Resumo & Sincronização
+                <ChevronDown size={14} className={`ml-auto transition-transform ${sidebarOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 mt-3">
+              {sidebarContent}
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          <aside className="xl:col-span-3 space-y-4">
+            {sidebarContent}
+          </aside>
+        )}
 
-        <section className="xl:col-span-9 space-y-4">
+        <section className={isMobile ? "" : "xl:col-span-9"}>
           <Tabs defaultValue="senadores">
-            <TabsList>
-              <TabsTrigger value="senadores" className="gap-2"><Users size={14} /> Senadores</TabsTrigger>
-              <TabsTrigger value="ranking" className="gap-2"><Trophy size={14} /> Ranking</TabsTrigger>
-              <TabsTrigger value="partidos" className="gap-2"><BarChart2 size={14} /> Partidos</TabsTrigger>
-              <TabsTrigger value="comparativo" className="gap-2"><GitCompareArrows size={14} /> Comparativo</TabsTrigger>
-              <TabsTrigger value="tendencias" className="gap-2"><Target size={14} /> Tendências</TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 scrollbar-none">
+              <TabsList className="w-max min-w-full sm:w-auto">
+                <TabsTrigger value="senadores" className="gap-1 sm:gap-2 text-[10px] sm:text-sm"><Users size={12} className="sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Senadores</span><span className="sm:hidden">Sen.</span></TabsTrigger>
+                <TabsTrigger value="ranking" className="gap-1 sm:gap-2 text-[10px] sm:text-sm"><Trophy size={12} className="sm:w-3.5 sm:h-3.5" /> Ranking</TabsTrigger>
+                <TabsTrigger value="partidos" className="gap-1 sm:gap-2 text-[10px] sm:text-sm"><BarChart2 size={12} className="sm:w-3.5 sm:h-3.5" /> Partidos</TabsTrigger>
+                <TabsTrigger value="comparativo" className="gap-1 sm:gap-2 text-[10px] sm:text-sm"><GitCompareArrows size={12} className="sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Comparativo</span><span className="sm:hidden">Comp.</span></TabsTrigger>
+                <TabsTrigger value="tendencias" className="gap-1 sm:gap-2 text-[10px] sm:text-sm"><Target size={12} className="sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Tendências</span><span className="sm:hidden">Tend.</span></TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="senadores" className="space-y-4 mt-4">
               {error && (
-                <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-center gap-3">
-                  <AlertTriangle size={20} className="text-destructive" />
-                  <p className="text-sm font-medium text-destructive">{error}</p>
+                <div className="bg-destructive/10 border border-destructive/20 p-3 sm:p-4 rounded-xl flex items-center gap-3">
+                  <AlertTriangle size={18} className="text-destructive shrink-0" />
+                  <p className="text-xs sm:text-sm font-medium text-destructive">{error}</p>
                 </div>
               )}
               <ClassificationFilterSenado
@@ -161,13 +187,13 @@ const Senado = () => {
                 bancadaFilter={bancadaFilter}
                 onBancadaFilterChange={setBancadaFilter}
               />
-              <div className="flex items-center justify-between bg-card p-4 rounded-xl border border-border">
-                <h2 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                  <Users size={16} className="text-primary" /> {filteredSenadores.length} senadores
+              <div className="flex items-center justify-between bg-card p-3 sm:p-4 rounded-xl border border-border">
+                <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <Users size={14} className="text-primary" /> {filteredSenadores.length} senadores
                 </h2>
-                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-3 py-1 rounded-full uppercase tracking-widest">{ano}</span>
+                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-2 sm:px-3 py-1 rounded-full uppercase tracking-widest">{ano}</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-10 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-10 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar">
                 {filteredSenadores.map((sen) => (
                   <SenadorCard
                     key={sen.id} senador={sen} analise={analiseMap[sen.id]}
@@ -178,8 +204,8 @@ const Senado = () => {
                 ))}
               </div>
               {!senLoading && filteredSenadores.length === 0 && (
-                <div className="py-16 text-center bg-card rounded-2xl border-2 border-dashed border-border">
-                  <Search size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+                <div className="py-12 sm:py-16 text-center bg-card rounded-2xl border-2 border-dashed border-border">
+                  <Search size={32} className="mx-auto text-muted-foreground/30 mb-3" />
                   <p className="text-muted-foreground font-semibold text-sm">Nenhum senador encontrado</p>
                 </div>
               )}
@@ -197,8 +223,8 @@ const Senado = () => {
         </section>
       </main>
 
-      <footer className="text-center py-8">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.4em]">
+      <footer className="text-center py-6 sm:py-8">
+        <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-[0.3em] sm:tracking-[0.4em]">
           Monitor Legislativo • Senado • {ano}
         </p>
       </footer>
