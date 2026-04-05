@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const isServiceRole = token === supabaseServiceKey;
+    const isServiceRole = token === supabaseServiceKey || token === supabaseAnonKey;
     const bodyText = await req.text();
 
     if (!isServiceRole) {
