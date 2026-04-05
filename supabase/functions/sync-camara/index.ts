@@ -87,12 +87,15 @@ Deno.serve(async (req) => {
   try {
     // ── Authentication ──
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const apikeyHeader = req.headers.get("apikey");
+    
+    // Accept: service_role key, anon key via Bearer or apikey header
+    const token = authHeader?.replace("Bearer ", "") || "";
+    const isServiceRole = token === supabaseServiceKey || token === supabaseAnonKey || apikeyHeader === supabaseAnonKey;
+    
+    if (!authHeader?.startsWith("Bearer ") && !apikeyHeader) {
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
-
-    const token = authHeader.replace("Bearer ", "");
-    const isServiceRole = token === supabaseServiceKey || token === supabaseAnonKey;
     const bodyText = await req.text();
 
     if (!isServiceRole) {
