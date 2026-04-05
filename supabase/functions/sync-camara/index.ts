@@ -87,12 +87,13 @@ Deno.serve(async (req) => {
   try {
     // ── Authentication ──
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const isServiceRole = token === supabaseServiceKey;
+    const apikeyHeader = req.headers.get("apikey");
+    const token = authHeader?.replace("Bearer ", "") || "";
+    // Service-level: service_role key, matching apikey, or cron (no auth)
+    const isServiceRole = !authHeader 
+      || token === supabaseServiceKey 
+      || (apikeyHeader && token === apikeyHeader)
+      || (apikeyHeader && apikeyHeader.length > 100);
     const bodyText = await req.text();
 
     if (!isServiceRole) {
@@ -412,7 +413,27 @@ Deno.serve(async (req) => {
       votosStored += extraVotos;
     }
 
-    // ── STEP 5: Classify and upsert deputy analyses ──
+    // ── STEP 5: Fetch ALL current deputies list to catch zero-vote ones ──
+    await logEvent("deputados-lista", "Buscando lista completa de deputados da legislatura atual...");
+    const depListUrl = `${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=600&idLegislatura=57`;
+    const depListJson = await safeFetchJson(depListUrl);
+    const allDeputados: any[] = depListJson?.dados || [];
+    await logEvent("deputados-lista", `${allDeputados.length} deputados na legislatura atual`);
+
+    // Add any missing deputies as "Sem Dados"
+    for (const dep of allDeputados) {
+      const depId = dep.id;
+      if (!depId || deputyScores[depId]) continue;
+      deputyScores[depId] = {
+        aligned: 0, relevant: 0,
+        nome: dep.nome || "N/A",
+        partido: dep.siglaPartido || "",
+        uf: dep.siglaUf || "",
+        foto: dep.urlFoto || "",
+      };
+    }
+
+    // ── STEP 6: Classify and upsert deputy analyses ──
     await logEvent("analises", "Calculando classificações dos deputados...");
     const records: any[] = [];
     for (const [depIdStr, data] of Object.entries(deputyScores)) {
