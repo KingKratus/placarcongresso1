@@ -89,6 +89,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const apikeyHeader = req.headers.get("apikey");
     const token = authHeader?.replace("Bearer ", "") || "";
+    console.log("[sync-camara] Auth debug:", { hasAuth: !!authHeader, hasApikey: !!apikeyHeader, tokenMatch: token === supabaseAnonKey, tokenLen: token.length, anonLen: supabaseAnonKey?.length });
     // Service-level: service_role key, anon key, or no auth (cron/internal)
     const isServiceRole = !authHeader || token === supabaseServiceKey || token === supabaseAnonKey 
       || apikeyHeader === supabaseAnonKey || apikeyHeader === supabaseServiceKey;
