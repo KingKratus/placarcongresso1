@@ -410,6 +410,7 @@ Deno.serve(async (req) => {
       if (analyzedIds.has(senId)) continue;
       const mapping = resolveId(data.nome);
       if (!mapping) continue;
+      analyzedIds.add(mapping.id);
 
       records.push({
         senador_id: mapping.id,
@@ -417,6 +418,28 @@ Deno.serve(async (req) => {
         senador_partido: data.partido || null,
         senador_uf: data.uf || null,
         senador_foto: mapping.foto || null,
+        ano: year,
+        score: 0,
+        total_votos: 0,
+        votos_alinhados: 0,
+        classificacao: "Sem Dados",
+      });
+    }
+
+    // Add "Sem Dados" for ALL senators from the official list who are still missing
+    for (const sen of senadorList) {
+      const ident = sen.IdentificacaoParlamentar;
+      if (!ident) continue;
+      const id = Number(ident.CodigoParlamentar);
+      if (analyzedIds.has(id)) continue;
+      analyzedIds.add(id);
+
+      records.push({
+        senador_id: id,
+        senador_nome: (ident.NomeParlamentar || "").trim(),
+        senador_partido: ident.SiglaPartidoParlamentar || null,
+        senador_uf: ident.UfParlamentar || null,
+        senador_foto: ident.UrlFotoParlamentar || null,
         ano: year,
         score: 0,
         total_votos: 0,
