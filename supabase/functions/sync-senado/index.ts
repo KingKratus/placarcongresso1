@@ -127,8 +127,10 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const apikeyHeader = req.headers.get("apikey");
     const token = authHeader?.replace("Bearer ", "") || "";
-    const isServiceRole = !authHeader || token === supabaseServiceKey || token === supabaseAnonKey 
-      || apikeyHeader === supabaseAnonKey || apikeyHeader === supabaseServiceKey;
+    const isServiceRole = !authHeader 
+      || token === supabaseServiceKey 
+      || (apikeyHeader && token === apikeyHeader)
+      || (apikeyHeader && apikeyHeader.length > 100);
     const bodyText = await req.text();
 
     if (!isServiceRole) {
