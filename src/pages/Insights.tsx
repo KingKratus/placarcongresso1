@@ -3,6 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useAuth } from "@/hooks/useAuth";
 import { AlignmentTrendChart } from "@/components/insights/AlignmentTrendChart";
+import { PeriodAlignmentChart } from "@/components/insights/PeriodAlignmentChart";
 import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { BrazilMap } from "@/components/insights/BrazilMap";
@@ -239,6 +240,7 @@ export default function Insights() {
 
             {/* Visão Geral */}
             <TabsContent value="visao-geral" className="space-y-6">
+              <PeriodAlignmentChart ano={ano} />
               <AlignmentTrendChart allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
