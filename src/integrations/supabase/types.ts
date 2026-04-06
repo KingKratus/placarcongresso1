@@ -452,6 +452,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_monthly_alignment: {
+        Args: { p_ano: number }
+        Returns: {
+          alinhados: number
+          casa: string
+          mes: number
+          score: number
+          total: number
+        }[]
+      }
       has_role:
         | {
             Args: { _role: Database["public"]["Enums"]["app_role"] }
