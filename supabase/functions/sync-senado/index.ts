@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
 
     const nameToId: Record<string, { id: number; foto: string }> = {};
     const normalizedNameToId: Record<string, { id: number; foto: string; original: string }> = {};
+    const senadorParticipacao: Record<number, { descricao: string; isTitular: boolean }> = {};
 
     for (const sen of senadorList) {
       const ident = sen.IdentificacaoParlamentar;
@@ -217,6 +218,12 @@ Deno.serve(async (req) => {
       if (nomeCompleto) nameToId[nomeCompleto] = entry;
       normalizedNameToId[normalizeName(nome)] = { ...entry, original: nome };
       if (nomeCompleto) normalizedNameToId[normalizeName(nomeCompleto)] = { ...entry, original: nomeCompleto };
+      
+      // Extract titular/suplente info from Mandato
+      const mandato = sen.Mandato;
+      const descParticipacao = mandato?.DescricaoParticipacao || "Titular";
+      const isTitular = descParticipacao === "Titular";
+      senadorParticipacao[id] = { descricao: descParticipacao, isTitular };
     }
 
     const { data: existingAnalises } = await supabase
