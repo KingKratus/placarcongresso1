@@ -61,6 +61,15 @@ const Index = () => {
     refetchStatus();
   };
 
+  const govPartyStats = useMemo(() => {
+    const ptAnalises = analises.filter((a) => (a.deputado_partido || "").toUpperCase() === GOV_PARTY);
+    const govPartyAvg = ptAnalises.length > 0
+      ? ptAnalises.reduce((s, a) => s + Number(a.score), 0) / ptAnalises.length
+      : 50;
+    const acimaMedia = analises.filter((a) => Number(a.score) >= govPartyAvg).length;
+    return { govParty: GOV_PARTY, govPartyAvg, acimaMedia, totalAnalises: analises.length };
+  }, [analises]);
+
   const analiseMap = useMemo(() => {
     const map: Record<number, (typeof analises)[0]> = {};
     analises.forEach((a) => { map[a.deputado_id] = a; });
