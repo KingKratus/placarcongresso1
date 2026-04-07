@@ -92,10 +92,38 @@ export function StatsPanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {onGovMethodChange && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Método</span>
+              <Select value={govMethod} onValueChange={(v) => onGovMethodChange(v as "lider" | "partido-gov")}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lider">Líder do Governo</SelectItem>
+                  <SelectItem value="partido-gov">Média Partido Gov</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <StatItem label="Governo" count={counts.Governo} icon={<UserCheck size={16} className="text-governo" />} colorClass="bg-governo/10 text-governo" />
           <StatItem label="Centro" count={counts.Centro} icon={<UserMinus size={16} className="text-centro" />} colorClass="bg-centro/10 text-centro" />
           <StatItem label="Oposição" count={counts.Oposição} icon={<UserX size={16} className="text-oposicao" />} colorClass="bg-oposicao/10 text-oposicao" />
           <StatItem label="Por Analisar" count={Math.max(0, totalDeputados - analises.length)} icon={<Minus size={16} className="text-muted-foreground" />} colorClass="bg-muted text-muted-foreground" />
+
+          {govPartyStats && govPartyStats.totalAnalises > 0 && (
+            <div className="p-3 rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp size={14} />
+                <span className="text-[10px] font-black uppercase tracking-wider">Média Partido Gov ({govPartyStats.govParty})</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold">Média: {govPartyStats.govPartyAvg.toFixed(1)}%</span>
+                <span className="text-xs font-black">{govPartyStats.acimaMedia}/{govPartyStats.totalAnalises} acima</span>
+              </div>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-border">
             <div className="flex justify-between items-end mb-2">
