@@ -24,6 +24,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 import { getBancada } from "@/lib/bancadas";
 
+const GOV_PARTY = "PT";
+
 const Index = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -37,6 +39,7 @@ const Index = () => {
   const [titulares, setTitulares] = useState(true);
   const [bancadaFilter, setBancadaFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
 
   const legislatura = titulares ? 57 : undefined;
   const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);
@@ -57,6 +60,15 @@ const Index = () => {
     }
     refetchStatus();
   };
+
+  const govPartyStats = useMemo(() => {
+    const ptAnalises = analises.filter((a) => (a.deputado_partido || "").toUpperCase() === GOV_PARTY);
+    const govPartyAvg = ptAnalises.length > 0
+      ? ptAnalises.reduce((s, a) => s + Number(a.score), 0) / ptAnalises.length
+      : 50;
+    const acimaMedia = analises.filter((a) => Number(a.score) >= govPartyAvg).length;
+    return { govParty: GOV_PARTY, govPartyAvg, acimaMedia, totalAnalises: analises.length };
+  }, [analises]);
 
   const analiseMap = useMemo(() => {
     const map: Record<number, (typeof analises)[0]> = {};
@@ -99,6 +111,7 @@ const Index = () => {
         syncing={syncing} onSync={handleSync} user={user}
         lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
         syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
+        govMethod={govMethod} onGovMethodChange={setGovMethod} govPartyStats={govPartyStats}
       />
       {user && (
         <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>

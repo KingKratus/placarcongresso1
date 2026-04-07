@@ -414,8 +414,12 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 5: Fetch ALL deputies from legislature + currently exercising ──
+    const currentYear = new Date().getFullYear();
+    const isCurrentYear = year >= currentYear - 1; // current or previous year gets full detail
+    
     await logEvent("deputados-lista", "Buscando lista completa de deputados da legislatura atual...");
-    const depListUrl = `${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=1000&idLegislatura=57`;
+    const legNum = year >= 2023 ? 57 : year >= 2019 ? 56 : 55;
+    const depListUrl = `${API_BASE}/deputados?ordem=ASC&ordenarPor=nome&itens=1000&idLegislatura=${legNum}`;
     const depListJson = await safeFetchJson(depListUrl);
     const allDeputados: any[] = depListJson?.dados || [];
     
@@ -425,17 +429,10 @@ Deno.serve(async (req) => {
     const exercisingDeps: any[] = depExercJson?.dados || [];
     const exercisingIds = new Set(exercisingDeps.map((d: any) => d.id));
     
-    // Build set of all legislature dep IDs for titular detection
-    // Those in the full legislature (57) list who are NOT in the current exercise list are afastados
-    const fullLegIds = new Set(allDeputados.map((d: any) => d.id));
-    
-    // Fetch individual details for "Sem Dados" deputies to get condicaoEleitoral
-    const needDetails: number[] = [];
     for (const dep of allDeputados) {
       const depId = dep.id;
       if (!depId) continue;
       if (!deputyScores[depId]) {
-        needDetails.push(depId);
         deputyScores[depId] = {
           aligned: 0, relevant: 0,
           nome: dep.nome || "N/A",
@@ -446,7 +443,6 @@ Deno.serve(async (req) => {
       }
     }
     
-    // Also add exercising deputies not in legislature 57 (rare edge case)
     for (const dep of exercisingDeps) {
       const depId = dep.id;
       if (!depId || deputyScores[depId]) continue;
@@ -459,31 +455,35 @@ Deno.serve(async (req) => {
       };
     }
     
-    await logEvent("deputados-lista", `${allDeputados.length} deputados na legislatura, ${exercisingDeps.length} em exercício`);
+    await logEvent("deputados-lista", `${allDeputados.length} deputados na legislatura ${legNum}, ${exercisingDeps.length} em exercício`);
     
-    // Batch-fetch individual details to get condicaoEleitoral
+    // Batch-fetch individual details only for current/recent years (skip for historical to avoid timeout)
     const depConditions: Record<number, { condicao: string; situacao: string }> = {};
-    const detailIds = [...new Set([...Object.keys(deputyScores).map(Number)])];
     
-    await logEvent("deputados-detalhe", `Buscando detalhes de ${Math.min(detailIds.length, 800)} deputados para titular/suplente...`);
-    const DETAIL_BATCH = 20;
-    for (let i = 0; i < detailIds.length; i += DETAIL_BATCH) {
-      const batch = detailIds.slice(i, i + DETAIL_BATCH);
-      const results = await Promise.all(batch.map(id => safeFetchJson(`${API_BASE}/deputados/${id}`)));
-      for (let j = 0; j < batch.length; j++) {
-        const data = results[j]?.dados;
-        if (data?.ultimoStatus) {
-          depConditions[batch[j]] = {
-            condicao: data.ultimoStatus.condicaoEleitoral || "Titular",
-            situacao: data.ultimoStatus.situacao || "",
-          };
+    if (isCurrentYear) {
+      const detailIds = [...new Set([...Object.keys(deputyScores).map(Number)])];
+      await logEvent("deputados-detalhe", `Buscando detalhes de ${detailIds.length} deputados para titular/suplente...`);
+      const DETAIL_BATCH = 30;
+      for (let i = 0; i < detailIds.length; i += DETAIL_BATCH) {
+        const batch = detailIds.slice(i, i + DETAIL_BATCH);
+        const results = await Promise.all(batch.map(id => safeFetchJson(`${API_BASE}/deputados/${id}`)));
+        for (let j = 0; j < batch.length; j++) {
+          const data = results[j]?.dados;
+          if (data?.ultimoStatus) {
+            depConditions[batch[j]] = {
+              condicao: data.ultimoStatus.condicaoEleitoral || "Titular",
+              situacao: data.ultimoStatus.situacao || "",
+            };
+          }
+        }
+        if (i % 120 === 0 && i > 0) {
+          await logEvent("deputados-detalhe", `${i}/${detailIds.length} deputados consultados...`);
         }
       }
-      if (i % 100 === 0 && i > 0) {
-        await logEvent("deputados-detalhe", `${i}/${detailIds.length} deputados consultados...`);
-      }
+      await logEvent("deputados-detalhe", `Detalhes obtidos para ${Object.keys(depConditions).length} deputados`);
+    } else {
+      await logEvent("deputados-detalhe", `Ano histórico (${year}) — usando lista de exercício para determinar titular/suplente`);
     }
-    await logEvent("deputados-detalhe", `Detalhes obtidos para ${Object.keys(depConditions).length} deputados`);
 
     // ── STEP 6: Classify and upsert deputy analyses ──
     await logEvent("analises", "Calculando classificações dos deputados...");
