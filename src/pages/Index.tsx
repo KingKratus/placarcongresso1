@@ -24,6 +24,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 import { getBancada } from "@/lib/bancadas";
 
+const GOV_PARTY = "PT";
+
 const Index = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -37,6 +39,7 @@ const Index = () => {
   const [titulares, setTitulares] = useState(true);
   const [bancadaFilter, setBancadaFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
 
   const legislatura = titulares ? 57 : undefined;
   const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);

@@ -180,7 +180,9 @@ export function StatsPanel({
             <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-oposicao" /> OPOSIÇÃO: Alinhamento ≤ 35%</div>
           </div>
           <p className="text-[10px] mt-3 leading-relaxed opacity-70">
-            Análise das votações de cada deputado no ano selecionado, comparando com a orientação do líder do governo.
+            {govMethod === "lider"
+              ? "Análise das votações de cada deputado no ano selecionado, comparando com a orientação do líder do governo."
+              : `Comparação do voto de cada deputado com a média de votos do partido do governo (${govPartyStats?.govParty || "PT"}) nas votações nominais do ano selecionado.`}
           </p>
         </CardContent>
       </Card>
