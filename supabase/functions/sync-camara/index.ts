@@ -495,8 +495,13 @@ Deno.serve(async (req) => {
       else if (score >= 70) classificacao = "Governo";
       else if (score <= 35) classificacao = "Oposição";
 
+      const depId = Number(depIdStr);
+      const cond = depConditions[depId];
+      const isTitular = cond ? cond.condicao === "Titular" : exercisingIds.has(depId);
+      const situacao = cond?.situacao || (exercisingIds.has(depId) ? "Exercício" : "Afastado");
+      
       records.push({
-        deputado_id: Number(depIdStr),
+        deputado_id: depId,
         deputado_nome: data.nome,
         deputado_partido: data.partido || null,
         deputado_uf: data.uf || null,
@@ -506,6 +511,8 @@ Deno.serve(async (req) => {
         total_votos: data.relevant,
         votos_alinhados: data.aligned,
         classificacao,
+        is_titular: isTitular,
+        situacao,
       });
     }
 
