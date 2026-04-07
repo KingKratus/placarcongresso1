@@ -111,6 +111,7 @@ const Index = () => {
         syncing={syncing} onSync={handleSync} user={user}
         lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
         syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
+        govMethod={govMethod} onGovMethodChange={setGovMethod} govPartyStats={govPartyStats}
       />
       {user && (
         <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>
