@@ -1,13 +1,23 @@
 import {
-  UserCheck, UserX, UserMinus, Minus, BarChart2, Info, Loader2, Clock, Timer,
+  UserCheck, UserX, UserMinus, Minus, BarChart2, Info, Loader2, Clock, Timer, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { SyncLogViewer } from "@/components/SyncLogViewer";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Analise = Tables<"analises_deputados">;
+
+interface GovPartyStats {
+  govParty: string;
+  govPartyAvg: number;
+  acimaMedia: number;
+  totalAnalises: number;
+}
 
 interface StatsPanelProps {
   analises: Analise[];
@@ -21,6 +31,9 @@ interface StatsPanelProps {
   syncEvents?: { id: string; step: string; message: string; created_at: string }[];
   syncStatus?: "idle" | "running" | "completed" | "error";
   syncError?: string | null;
+  govMethod?: "lider" | "partido-gov";
+  onGovMethodChange?: (v: "lider" | "partido-gov") => void;
+  govPartyStats?: GovPartyStats;
 }
 
 function StatItem({ label, count, icon, colorClass }: {
@@ -58,6 +71,7 @@ export function StatsPanel({
   analises, totalDeputados, syncing, onSync, user,
   lastSync, canSync = true, remainingSeconds = 0,
   syncEvents = [], syncStatus = "idle", syncError = null,
+  govMethod = "lider", onGovMethodChange, govPartyStats,
 }: StatsPanelProps) {
   const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
