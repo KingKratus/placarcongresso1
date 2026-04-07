@@ -397,6 +397,8 @@ Deno.serve(async (req) => {
       else if (score >= 70) classificacao = "Governo";
       else if (score <= 35) classificacao = "Oposição";
 
+      const participacao = senadorParticipacao[mapping.id];
+      
       records.push({
         senador_id: mapping.id,
         senador_nome: data.nome,
@@ -408,6 +410,8 @@ Deno.serve(async (req) => {
         total_votos: data.total,
         votos_alinhados: data.aligned,
         classificacao,
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
