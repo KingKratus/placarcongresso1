@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
 
     const nameToId: Record<string, { id: number; foto: string }> = {};
     const normalizedNameToId: Record<string, { id: number; foto: string; original: string }> = {};
+    const senadorParticipacao: Record<number, { descricao: string; isTitular: boolean }> = {};
 
     for (const sen of senadorList) {
       const ident = sen.IdentificacaoParlamentar;
@@ -217,6 +218,12 @@ Deno.serve(async (req) => {
       if (nomeCompleto) nameToId[nomeCompleto] = entry;
       normalizedNameToId[normalizeName(nome)] = { ...entry, original: nome };
       if (nomeCompleto) normalizedNameToId[normalizeName(nomeCompleto)] = { ...entry, original: nomeCompleto };
+      
+      // Extract titular/suplente info from Mandato
+      const mandato = sen.Mandato;
+      const descParticipacao = mandato?.DescricaoParticipacao || "Titular";
+      const isTitular = descParticipacao === "Titular";
+      senadorParticipacao[id] = { descricao: descParticipacao, isTitular };
     }
 
     const { data: existingAnalises } = await supabase
@@ -390,6 +397,8 @@ Deno.serve(async (req) => {
       else if (score >= 70) classificacao = "Governo";
       else if (score <= 35) classificacao = "Oposição";
 
+      const participacao = senadorParticipacao[mapping.id];
+      
       records.push({
         senador_id: mapping.id,
         senador_nome: data.nome,
@@ -401,6 +410,8 @@ Deno.serve(async (req) => {
         total_votos: data.total,
         votos_alinhados: data.aligned,
         classificacao,
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
@@ -412,6 +423,7 @@ Deno.serve(async (req) => {
       if (!mapping) continue;
       analyzedIds.add(mapping.id);
 
+      const participacao = senadorParticipacao[mapping.id];
       records.push({
         senador_id: mapping.id,
         senador_nome: data.nome,
@@ -423,6 +435,8 @@ Deno.serve(async (req) => {
         total_votos: 0,
         votos_alinhados: 0,
         classificacao: "Sem Dados",
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
@@ -434,6 +448,7 @@ Deno.serve(async (req) => {
       if (analyzedIds.has(id)) continue;
       analyzedIds.add(id);
 
+      const participacao = senadorParticipacao[id];
       records.push({
         senador_id: id,
         senador_nome: (ident.NomeParlamentar || "").trim(),
@@ -445,6 +460,8 @@ Deno.serve(async (req) => {
         total_votos: 0,
         votos_alinhados: 0,
         classificacao: "Sem Dados",
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
