@@ -423,6 +423,7 @@ Deno.serve(async (req) => {
       if (!mapping) continue;
       analyzedIds.add(mapping.id);
 
+      const participacao = senadorParticipacao[mapping.id];
       records.push({
         senador_id: mapping.id,
         senador_nome: data.nome,
@@ -434,6 +435,8 @@ Deno.serve(async (req) => {
         total_votos: 0,
         votos_alinhados: 0,
         classificacao: "Sem Dados",
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
@@ -445,6 +448,7 @@ Deno.serve(async (req) => {
       if (analyzedIds.has(id)) continue;
       analyzedIds.add(id);
 
+      const participacao = senadorParticipacao[id];
       records.push({
         senador_id: id,
         senador_nome: (ident.NomeParlamentar || "").trim(),
@@ -456,6 +460,8 @@ Deno.serve(async (req) => {
         total_votos: 0,
         votos_alinhados: 0,
         classificacao: "Sem Dados",
+        is_titular: participacao?.isTitular ?? true,
+        descricao_participacao: participacao?.descricao || "Titular",
       });
     }
 
