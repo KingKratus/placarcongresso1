@@ -25,7 +25,9 @@ export type Database = {
           deputado_partido: string | null
           deputado_uf: string | null
           id: string
+          is_titular: boolean | null
           score: number
+          situacao: string | null
           total_votos: number
           updated_at: string
           votos_alinhados: number
@@ -40,7 +42,9 @@ export type Database = {
           deputado_partido?: string | null
           deputado_uf?: string | null
           id?: string
+          is_titular?: boolean | null
           score?: number
+          situacao?: string | null
           total_votos?: number
           updated_at?: string
           votos_alinhados?: number
@@ -55,7 +59,9 @@ export type Database = {
           deputado_partido?: string | null
           deputado_uf?: string | null
           id?: string
+          is_titular?: boolean | null
           score?: number
+          situacao?: string | null
           total_votos?: number
           updated_at?: string
           votos_alinhados?: number
@@ -67,7 +73,9 @@ export type Database = {
           ano: number
           classificacao: Database["public"]["Enums"]["classificacao_tipo"]
           created_at: string
+          descricao_participacao: string | null
           id: string
+          is_titular: boolean | null
           score: number
           senador_foto: string | null
           senador_id: number
@@ -82,7 +90,9 @@ export type Database = {
           ano: number
           classificacao?: Database["public"]["Enums"]["classificacao_tipo"]
           created_at?: string
+          descricao_participacao?: string | null
           id?: string
+          is_titular?: boolean | null
           score?: number
           senador_foto?: string | null
           senador_id: number
@@ -97,7 +107,9 @@ export type Database = {
           ano?: number
           classificacao?: Database["public"]["Enums"]["classificacao_tipo"]
           created_at?: string
+          descricao_participacao?: string | null
           id?: string
+          is_titular?: boolean | null
           score?: number
           senador_foto?: string | null
           senador_id?: number
