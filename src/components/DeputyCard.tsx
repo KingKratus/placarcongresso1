@@ -67,13 +67,23 @@ export function DeputyCard({ deputado, analise, onClick, isFavorito, onToggleFav
           <h4 className="text-sm font-bold text-foreground truncate leading-tight">
             {deputado.nome}
           </h4>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
               {deputado.siglaPartido}
             </span>
             <span className="text-[10px] font-medium text-muted-foreground">
               {deputado.siglaUf}
             </span>
+            {analise && analise.is_titular === false && (
+              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
+                Suplente
+              </span>
+            )}
+            {analise?.situacao && analise.situacao !== "Exercício" && (
+              <span className="text-[9px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {analise.situacao}
+              </span>
+            )}
           </div>
         </div>
 
