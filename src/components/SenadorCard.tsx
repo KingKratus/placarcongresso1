@@ -103,9 +103,21 @@ export function SenadorCard({ senador, analise, onClick, isFavorito, onToggleFav
 
       {analise ? (
         <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
-          <span className={`text-[10px] font-black uppercase tracking-widest ${classTextColors[analise.classificacao]}`}>
-            {analise.classificacao}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-black uppercase tracking-widest ${classTextColors[analise.classificacao]}`}>
+              {analise.classificacao}
+            </span>
+            {analise.classificacao === "Sem Dados" && analise.descricao_participacao && analise.descricao_participacao !== "Titular" && (
+              <span className="text-[9px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {analise.descricao_participacao}
+              </span>
+            )}
+            {analise.classificacao === "Sem Dados" && analise.is_titular === true && (
+              <span className="text-[9px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                Ministro/Licenciado
+              </span>
+            )}
+          </div>
           <span className="text-[9px] font-medium text-muted-foreground">
             {analise.total_votos} votos úteis
           </span>

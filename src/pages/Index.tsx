@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanel } from "@/components/StatsPanel";
+import { SyncHistoryPanel } from "@/components/SyncHistoryPanel";
 import { DeputyCard } from "@/components/DeputyCard";
 import { RankingTable } from "@/components/RankingTable";
 import { PartyChart } from "@/components/PartyChart";
@@ -114,9 +115,12 @@ const Index = () => {
         govMethod={govMethod} onGovMethodChange={setGovMethod} govPartyStats={govPartyStats}
       />
       {user && (
-        <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>
-          <Download size={14} className="mr-2" /> Exportar CSV
-        </Button>
+        <>
+          <SyncHistoryPanel />
+          <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>
+            <Download size={14} className="mr-2" /> Exportar CSV
+          </Button>
+        </>
       )}
     </>
   );
