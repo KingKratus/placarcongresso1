@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { SankeyMigration } from "@/components/insights/SankeyMigration";
 
 type Analise = Tables<"analises_senadores">;
 
@@ -144,6 +145,23 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
     return migrations.filter((m) => m.classPrev !== m.classCurr);
   }, [migrations]);
 
+  // Sankey flow data
+  const sankeyFlows = useMemo(() => {
+    if (prevAnalises.length === 0) return [];
+    const prevMap = new Map(prevAnalises.map((a) => [a.senador_id, a]));
+    const flowMap: Record<string, number> = {};
+    for (const curr of analises) {
+      const prev = prevMap.get(curr.senador_id);
+      if (!prev) continue;
+      const key = `${prev.classificacao}→${curr.classificacao}`;
+      flowMap[key] = (flowMap[key] || 0) + 1;
+    }
+    return Object.entries(flowMap).map(([key, count]) => {
+      const [from, to] = key.split("→");
+      return { from, to, count };
+    });
+  }, [analises, prevAnalises]);
+
   if (centroSenadores.length === 0) {
     return (
       <Card>
@@ -254,6 +272,16 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
             </p>
           ) : (
             <div className="space-y-4">
+              {/* Sankey diagram */}
+              {sankeyFlows.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    Fluxo de Migração
+                  </p>
+                  <SankeyMigration flows={sankeyFlows} yearFrom={compareYear} yearTo={ano} casa="senado" />
+                </div>
+              )}
+
               {/* Class changes highlight */}
               {classChanges.length > 0 && (
                 <div className="space-y-2">
