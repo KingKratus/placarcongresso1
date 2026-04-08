@@ -1,86 +1,56 @@
-## Plan: Sync Execution, Mobile UI Optimization, and "Sem Dados" Investigation
 
-### Findings from Sync Testing
 
-**Senado sync**: Ran successfully — 81 senators analyzed, 6 votações with gov orientation in 2026, 388 votes stored. Only 1 "Sem Dados" (Davi Alcolumbre, who is Senate president and doesn't vote). This is correct behavior.
+# Plano: Aba Admin + Correção de Bugs
 
-**Câmara sync**: Last run stored 528 deputies, 51 gov-oriented votações, 20,699 votes. Zero "Sem Dados" because all deputies who appear in vote records (gov or non-gov) also had at least 1 gov-oriented vote. This is expected — deputies who were never present in *any* vote session are simply not in the API data. The "Sem Dados" category is working correctly.
+## Bugs Identificados
 
-**Why some deputies might appear without data**: Deputies who took office mid-year or were on leave have no vote records in the API. The sync correctly marks them "Sem Dados" only if they appear in at least one non-gov session. Currently, Step 4b fetches up to 100 non-gov votações — this is a good coverage expansion.
+1. **Runtime Error: "Rendered more hooks than during the previous render"** em `Senado.tsx` (linha 104). Provavelmente causado por hook condicional ou ordem de hooks alterada em edição anterior. Precisa investigar e corrigir.
 
-### Mobile UI Issues (375px viewport)
+2. **15 sync_runs presas com status "running"** há mais de 30 minutos. Devem ser marcadas como "error" ou "stale". A aba Admin terá um botão para limpar esses registros.
 
-1. **Navbar overflows**: The nav tabs (Câmara/Senado/Insights/Docs) plus search/filters don't wrap well on 375px. The tab bar extends beyond the viewport.
-2. **Filter section too wide**: UF, Bancada, and Sort selects are fixed-width (`w-28`, `w-36`) causing horizontal overflow on mobile.
-3. **Grid layout**: `xl:grid-cols-12` sidebar/main split means on mobile the sidebar (StatsPanel) appears above the main content — this is correct but takes up a lot of vertical space.
-4. **TabsList overflow**: 5 tabs (Deputados/Ranking/Partidos/Comparativo/Tendências) overflow on mobile.
+3. **Câmara 2024 sem dados**: Não há registros em `analises_deputados` para 2024 com sync completa (query mostra 572 registros, 0 sem dados - OK, mas não há sync_runs para 2024). Precisa sync 2024.
 
-### Implementation Steps
+4. **Câmara 2026 tem 40 erros e 12 running presos** nos sync_runs.
 
-#### 1. Mobile-Responsive Navbar
+## Nova Página: `/admin`
 
-- Make nav tabs scrollable horizontally on mobile with `overflow-x-auto`
-- Stack search and filters vertically on small screens
-- Hide less important filters behind a collapsible "Filtros" button on mobile
-- Reduce padding and font sizes for mobile
+Uma página dedicada para administradores com as seguintes seções:
 
-#### 2. Mobile-Responsive Filters
+### Seção 1: Visão Geral do Sistema
+- Contagem de registros por tabela (analises, votacoes, votos)
+- Cobertura por ano/casa (deputados analisados, sem dados, etc.)
+- Sync runs com status breakdown
 
-- Make classification filter buttons smaller on mobile (drop labels, keep icons + counts)
-- Make Select components full-width on mobile (`w-full sm:w-28`)
-- Stack filter row vertically on narrow screens
+### Seção 2: Gerenciamento de Syncs
+- Mover o `AdminBulkSync` existente para esta página (remover das sidebars de Index/Senado)
+- Adicionar botão "Limpar syncs presas" (marcar running > 30min como error)
+- Histórico completo de syncs (não apenas últimos 30)
 
-#### 3. Mobile TabsList
+### Seção 3: Gerenciamento de Usuários
+- Lista de admins atuais
+- (Futuro: adicionar/remover admins)
 
-- Add horizontal scrolling to `TabsList` on mobile
-- Or use a dropdown/select for tab navigation on small screens
+### Seção 4: Diagnóstico de Dados
+- Parlamentares "Sem Dados" por ano com detalhes
+- Botão de re-sync individual por ano
 
-#### 4. Collapsible StatsPanel on Mobile
+## Alterações Técnicas
 
-- Make the StatsPanel collapsible on mobile (default collapsed showing just summary counts)
-- Use an accordion or sheet pattern
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Admin.tsx` | Nova página com tabs: Visão Geral, Syncs, Dados, Usuários |
+| `src/pages/Senado.tsx` | Corrigir bug de hooks (investigar linha 104) |
+| `src/pages/Index.tsx` | Remover AdminBulkSync da sidebar (mover para Admin) |
+| `src/pages/Senado.tsx` | Remover AdminBulkSync da sidebar |
+| `src/components/Navbar.tsx` | Adicionar link "Admin" visível apenas para admins |
+| `src/App.tsx` | Adicionar rota `/admin` |
+| Migration SQL | Nenhuma necessária - usaremos `has_role` existente |
 
-#### 5. Run Both Syncs for Validation
+## Sugestões de Novas Funcionalidades
 
-- The Câmara sync is on cooldown (429). No code changes needed for sync logic — it's working correctly.
-- The "Sem Dados" mechanism works: deputies with 0 gov-relevant votes get classified correctly.
+1. **Limpeza automática de sync_runs presas** - trigger ou cron que marca como error após timeout
+2. **Notificações de sync** - alertar admin quando sync falha
+3. **Dashboard de cobertura temporal** - visualizar gaps de dados por mês
+4. **Export de dados administrativos** - CSV com relatório de saúde do sistema
+5. **Rate limiting visual** - mostrar cooldown restante para cada casa/ano
 
-#### 6. Increase Non-Gov Vote Coverage
-
-- Increase `NON_GOV_LIMIT` from 100 to 200 in `sync-camara` to capture more deputies who only voted in non-gov sessions
-- This has minimal timeout risk since the Câmara API is fast for individual vote lookups
-
-### Technical Details
-
-**Navbar mobile refactor**: Wrap the tab navigation in a scrollable container. Move search/filters into a collapsible section triggered by a filter icon button visible only on mobile.
-
-**Filter buttons mobile**: Use responsive classes to show abbreviated labels:
-
-```
-// On mobile: icon + count only
-// On desktop: icon + label + count
-<span className="hidden sm:inline">{item.label}</span>
-```
-
-**TabsList scrollable**: Add `overflow-x-auto` to the TabsList container and prevent wrapping.
-
-**StatsPanel collapsible**: Wrap in an `Accordion` on mobile using `useIsMobile()` hook.
-
-### Files to Modify
-
-- `src/components/Navbar.tsx` — mobile-responsive layout with scrollable tabs and collapsible filters
-- `src/components/ClassificationFilter.tsx` — responsive button labels, full-width selects on mobile
-- `src/components/ClassificationFilterSenado.tsx` — same responsive changes
-- `src/pages/Index.tsx` — collapsible sidebar on mobile
-- `src/pages/Senado.tsx` — collapsible sidebar on mobile
-- `supabase/functions/sync-camara/index.ts` — increase NON_GOV_LIMIT to 200
-
-&nbsp;
-
-&nbsp;
-
-&nbsp;
-
-Add a period filter (month/quarter) to see government alignment over time within the same year 
-
-Fix all bugs
