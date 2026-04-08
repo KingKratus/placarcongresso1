@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,13 @@ import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { BrazilMap } from "@/components/insights/BrazilMap";
 import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
+import {
+  EnhancedTooltip,
+  topBottomTooltipRows,
+  histogramTooltipRows,
+  partyTooltipRows,
+  volumeTooltipRows,
+} from "@/components/insights/EnhancedTooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,15 +37,94 @@ const CLASS_COLORS: Record<string, string> = {
 };
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
+const DIVERGENCE_COLOR = "hsl(45, 80%, 55%)";
 const UFS = [
   "AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT",
   "PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO",
 ];
 
+// Clickable legend helper
+function useToggleSeries(initial: string[] = []) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggle = useCallback((dataKey: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(dataKey)) next.delete(dataKey);
+      else next.add(dataKey);
+      return next;
+    });
+  }, []);
+  return { hidden, toggle };
+}
+
+function renderLegend(hidden: Set<string>, toggle: (key: string) => void) {
+  return (props: any) => {
+    const { payload } = props;
+    return (
+      <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs">
+        {payload?.map((entry: any) => {
+          const isHidden = hidden.has(entry.dataKey);
+          return (
+            <button
+              key={entry.dataKey}
+              onClick={() => toggle(entry.dataKey)}
+              className="flex items-center gap-1.5 cursor-pointer transition-opacity"
+              style={{ opacity: isHidden ? 0.35 : 1 }}
+            >
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: entry.color }} />
+              <span className="text-muted-foreground">{entry.value}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+}
+
 export default function Insights() {
   const [ano, setAno] = useState(new Date().getFullYear());
-  const { deputados, senadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
+  const [partidoFilter, setPartidoFilter] = useState("all");
+  const [ufFilter, setUfFilter] = useState("all");
+  const { deputados: rawDeputados, senadores: rawSenadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
+
+  // Toggle series state for different chart groups
+  const histogramToggle = useToggleSeries();
+  const partyToggle = useToggleSeries();
+  const divergenceToggle = useToggleSeries();
+  const volumeToggle = useToggleSeries();
+
+  // Extract available partidos and UFs from data
+  const availablePartidos = useMemo(() => {
+    const set = new Set<string>();
+    rawDeputados.forEach((d) => d.deputado_partido && set.add(d.deputado_partido));
+    rawSenadores.forEach((s) => s.senador_partido && set.add(s.senador_partido));
+    return Array.from(set).sort();
+  }, [rawDeputados, rawSenadores]);
+
+  const availableUfs = useMemo(() => {
+    const set = new Set<string>();
+    rawDeputados.forEach((d) => d.deputado_uf && set.add(d.deputado_uf));
+    rawSenadores.forEach((s) => s.senador_uf && set.add(s.senador_uf));
+    return Array.from(set).sort();
+  }, [rawDeputados, rawSenadores]);
+
+  // Global filtered data
+  const deputados = useMemo(() => {
+    return rawDeputados.filter((d) => {
+      if (partidoFilter !== "all" && d.deputado_partido !== partidoFilter) return false;
+      if (ufFilter !== "all" && d.deputado_uf !== ufFilter) return false;
+      return true;
+    });
+  }, [rawDeputados, partidoFilter, ufFilter]);
+
+  const senadores = useMemo(() => {
+    return rawSenadores.filter((s) => {
+      if (partidoFilter !== "all" && s.senador_partido !== partidoFilter) return false;
+      if (ufFilter !== "all" && s.senador_uf !== ufFilter) return false;
+      return true;
+    });
+  }, [rawSenadores, partidoFilter, ufFilter]);
 
   // Classification distribution
   const classDistCamara = useMemo(() => {
@@ -52,6 +138,9 @@ export default function Insights() {
     senadores.forEach((s) => { map[s.classificacao] = (map[s.classificacao] || 0) + 1; });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [senadores]);
+
+  const totalClassCamara = useMemo(() => classDistCamara.reduce((s, e) => s + e.value, 0), [classDistCamara]);
+  const totalClassSenado = useMemo(() => classDistSenado.reduce((s, e) => s + e.value, 0), [classDistSenado]);
 
   const partyAggregation = useMemo(() => {
     const camMap: Record<string, { sum: number; count: number }> = {};
@@ -79,6 +168,8 @@ export default function Insights() {
         partido: p,
         camara: camMap[p] ? Math.round(camMap[p].sum / camMap[p].count) : 0,
         senado: senMap[p] ? Math.round(senMap[p].sum / senMap[p].count) : 0,
+        camaraCount: camMap[p]?.count || 0,
+        senadoCount: senMap[p]?.count || 0,
         hasBoth: !!camMap[p] && !!senMap[p],
       }))
       .filter((p) => p.hasBoth)
@@ -88,8 +179,8 @@ export default function Insights() {
 
   const topBottom = useMemo(() => {
     const all = [
-      ...deputados.map((d) => ({ nome: d.deputado_nome, score: Number(d.score), casa: "Câmara", partido: d.deputado_partido })),
-      ...senadores.map((s) => ({ nome: s.senador_nome, score: Number(s.score), casa: "Senado", partido: s.senador_partido })),
+      ...deputados.map((d) => ({ nome: d.deputado_nome, score: Number(d.score), casa: "Câmara", partido: d.deputado_partido, votos: d.total_votos })),
+      ...senadores.map((s) => ({ nome: s.senador_nome, score: Number(s.score), casa: "Senado", partido: s.senador_partido, votos: s.total_votos })),
     ].filter((x) => x.score > 0);
     const sorted = [...all].sort((a, b) => b.score - a.score);
     return { top10: sorted.slice(0, 10), bottom10: sorted.slice(-10).reverse() };
@@ -142,7 +233,10 @@ export default function Insights() {
       .map((p) => {
         const cam = Math.round(camMap[p].sum / camMap[p].count);
         const sen = Math.round(senMap[p].sum / senMap[p].count);
-        return { partido: p, camara: cam, senado: sen, divergencia: Math.abs(cam - sen) };
+        return {
+          partido: p, camara: cam, senado: sen, divergencia: Math.abs(cam - sen),
+          camaraCount: camMap[p].count, senadoCount: senMap[p].count,
+        };
       })
       .sort((a, b) => b.divergencia - a.divergencia)
       .slice(0, 10);
@@ -179,17 +273,42 @@ export default function Insights() {
       />
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
+        {/* Header with global filters */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h2 className="text-2xl font-black text-foreground tracking-tight">Insights Legislativos</h2>
             <p className="text-sm text-muted-foreground">Análise comparativa Câmara vs Senado — {ano}</p>
           </div>
-          <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
-            <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+              <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={partidoFilter} onValueChange={setPartidoFilter}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Partido" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos Partidos</SelectItem>
+                {availablePartidos.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={ufFilter} onValueChange={setUfFilter}>
+              <SelectTrigger className="w-24 h-8 text-xs"><SelectValue placeholder="UF" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos UFs</SelectItem>
+                {availableUfs.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(partidoFilter !== "all" || ufFilter !== "all") && (
+              <button
+                onClick={() => { setPartidoFilter("all"); setUfFilter("all"); }}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
         </div>
 
         {!loading && (
@@ -253,7 +372,12 @@ export default function Insights() {
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                           {classDistCamara.map((entry) => <Cell key={entry.name} fill={CLASS_COLORS[entry.name] || "#999"} />)}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip content={<EnhancedTooltip rows={(payload) => {
+                          const e = payload[0];
+                          if (!e) return [];
+                          const pct = totalClassCamara > 0 ? ((e.value / totalClassCamara) * 100).toFixed(1) : "0";
+                          return [{ label: e.name, value: `${e.value} deputados (${pct}%)`, color: e.payload?.fill }];
+                        }} />} />
                       </PieChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -267,7 +391,12 @@ export default function Insights() {
                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                           {classDistSenado.map((entry) => <Cell key={entry.name} fill={CLASS_COLORS[entry.name] || "#999"} />)}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip content={<EnhancedTooltip rows={(payload) => {
+                          const e = payload[0];
+                          if (!e) return [];
+                          const pct = totalClassSenado > 0 ? ((e.value / totalClassSenado) * 100).toFixed(1) : "0";
+                          return [{ label: e.name, value: `${e.value} senadores (${pct}%)`, color: e.payload?.fill }];
+                        }} />} />
                       </PieChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -283,7 +412,7 @@ export default function Insights() {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" domain={[0, 100]} />
                         <YAxis type="category" dataKey="nome" width={95} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(v: number, _: string, props: any) => [`${v}% (${props.payload.casa})`, "Score"]} />
+                        <Tooltip content={<EnhancedTooltip rows={topBottomTooltipRows} />} />
                         <Bar dataKey="score" fill={SENADO_COLOR} radius={[0, 4, 4, 0]}>
                           {topBottom.top10.map((d, i) => <Cell key={i} fill={d.casa === "Câmara" ? CAMARA_COLOR : SENADO_COLOR} />)}
                         </Bar>
@@ -299,7 +428,7 @@ export default function Insights() {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" domain={[0, 100]} />
                         <YAxis type="category" dataKey="nome" width={95} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(v: number, _: string, props: any) => [`${v}% (${props.payload.casa})`, "Score"]} />
+                        <Tooltip content={<EnhancedTooltip rows={topBottomTooltipRows} />} />
                         <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                           {topBottom.bottom10.map((d, i) => <Cell key={i} fill={d.casa === "Câmara" ? CAMARA_COLOR : SENADO_COLOR} />)}
                         </Bar>
@@ -317,10 +446,10 @@ export default function Insights() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="range" />
                       <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[4, 4, 0, 0]} />
+                      <Tooltip content={<EnhancedTooltip rows={histogramTooltipRows(stats.totalDep, stats.totalSen)} />} />
+                      <Legend content={renderLegend(histogramToggle.hidden, histogramToggle.toggle)} />
+                      {!histogramToggle.hidden.has("camara") && <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[4, 4, 0, 0]} />}
+                      {!histogramToggle.hidden.has("senado") && <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[4, 4, 0, 0]} />}
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -337,9 +466,16 @@ export default function Insights() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis type="number" domain={[0, 100]} />
                       <YAxis type="category" dataKey="partido" width={55} tick={{ fontSize: 11 }} />
-                      <Tooltip /><Legend />
-                      <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[0, 4, 4, 0]} />
+                      <Tooltip content={<EnhancedTooltip rows={(payload, label) => {
+                        return payload.map((p) => ({
+                          label: p.name,
+                          value: `${p.value}% (${p.payload?.[p.dataKey === "camara" ? "camaraCount" : "senadoCount"] || 0} parl.)`,
+                          color: p.fill || p.color,
+                        }));
+                      }} />} />
+                      <Legend content={renderLegend(partyToggle.hidden, partyToggle.toggle)} />
+                      {!partyToggle.hidden.has("camara") && <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[0, 4, 4, 0]} />}
+                      {!partyToggle.hidden.has("senado") && <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[0, 4, 4, 0]} />}
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -361,10 +497,17 @@ export default function Insights() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis type="number" domain={[0, 100]} />
                       <YAxis type="category" dataKey="partido" width={55} tick={{ fontSize: 11 }} />
-                      <Tooltip /><Legend />
-                      <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="divergencia" name="Divergência" fill="hsl(45, 80%, 55%)" radius={[0, 4, 4, 0]} />
+                      <Tooltip content={<EnhancedTooltip rows={(payload) => {
+                        return payload.map((p) => {
+                          const countKey = p.dataKey === "camara" ? "camaraCount" : p.dataKey === "senado" ? "senadoCount" : null;
+                          const extra = countKey ? ` (${p.payload?.[countKey] || 0} parl.)` : "";
+                          return { label: p.name, value: `${p.value}%${extra}`, color: p.fill || p.color };
+                        });
+                      }} />} />
+                      <Legend content={renderLegend(divergenceToggle.hidden, divergenceToggle.toggle)} />
+                      {!divergenceToggle.hidden.has("camara") && <Bar dataKey="camara" name="Câmara" fill={CAMARA_COLOR} radius={[0, 4, 4, 0]} />}
+                      {!divergenceToggle.hidden.has("senado") && <Bar dataKey="senado" name="Senado" fill={SENADO_COLOR} radius={[0, 4, 4, 0]} />}
+                      {!divergenceToggle.hidden.has("divergencia") && <Bar dataKey="divergencia" name="Divergência" fill={DIVERGENCE_COLOR} radius={[0, 4, 4, 0]} />}
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -381,9 +524,10 @@ export default function Insights() {
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                       <YAxis />
-                      <Tooltip /><Legend />
-                      <Line type="monotone" dataKey="camara" name="Câmara" stroke={CAMARA_COLOR} strokeWidth={2} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="senado" name="Senado" stroke={SENADO_COLOR} strokeWidth={2} dot={{ r: 3 }} />
+                      <Tooltip content={<EnhancedTooltip rows={volumeTooltipRows} />} />
+                      <Legend content={renderLegend(volumeToggle.hidden, volumeToggle.toggle)} />
+                      {!volumeToggle.hidden.has("camara") && <Line type="monotone" dataKey="camara" name="Câmara" stroke={CAMARA_COLOR} strokeWidth={2} dot={{ r: 3 }} />}
+                      {!volumeToggle.hidden.has("senado") && <Line type="monotone" dataKey="senado" name="Senado" stroke={SENADO_COLOR} strokeWidth={2} dot={{ r: 3 }} />}
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>

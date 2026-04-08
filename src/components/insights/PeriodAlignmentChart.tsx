@@ -1,14 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, BarChart, Bar, Cell,
+  ResponsiveContainer, BarChart, Bar,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays } from "lucide-react";
+import { EnhancedTooltip } from "./EnhancedTooltip";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -35,10 +36,49 @@ interface Props {
   ano: number;
 }
 
+function useToggleSeries() {
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggle = useCallback((dataKey: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(dataKey)) next.delete(dataKey);
+      else next.add(dataKey);
+      return next;
+    });
+  }, []);
+  return { hidden, toggle };
+}
+
+function renderLegend(hidden: Set<string>, toggle: (key: string) => void) {
+  return (props: any) => {
+    const { payload } = props;
+    return (
+      <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs">
+        {payload?.map((entry: any) => {
+          const isHidden = hidden.has(entry.dataKey);
+          return (
+            <button
+              key={entry.dataKey}
+              onClick={() => toggle(entry.dataKey)}
+              className="flex items-center gap-1.5 cursor-pointer transition-opacity"
+              style={{ opacity: isHidden ? 0.35 : 1 }}
+            >
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: entry.color }} />
+              <span className="text-muted-foreground">{entry.value}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+}
+
 export function PeriodAlignmentChart({ ano }: Props) {
   const [data, setData] = useState<MonthlyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("all");
+  const lineToggle = useToggleSeries();
+  const barToggle = useToggleSeries();
 
   useEffect(() => {
     setLoading(true);
@@ -114,16 +154,18 @@ export function PeriodAlignmentChart({ ano }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
-            <Tooltip
-              formatter={(v: number, name: string) => [`${v}%`, name === "camara" ? "Câmara" : "Senado"]}
-              labelFormatter={(label) => `Mês: ${label}`}
-            />
-            <Legend formatter={(v) => (v === "camara" ? "Câmara" : "Senado")} />
-            {hasCamara && (
-              <Line type="monotone" dataKey="camara" name="camara" stroke={CAMARA_COLOR} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} connectNulls />
+            <Tooltip content={<EnhancedTooltip rows={(payload, label) => {
+              return payload.map((p) => {
+                const casa = p.dataKey === "camara" ? "Câmara" : "Senado";
+                return { label: casa, value: `${p.value}%`, color: p.stroke || p.color };
+              });
+            }} />} />
+            <Legend content={renderLegend(lineToggle.hidden, lineToggle.toggle)} />
+            {hasCamara && !lineToggle.hidden.has("camara") && (
+              <Line type="monotone" dataKey="camara" name="Câmara" stroke={CAMARA_COLOR} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} connectNulls />
             )}
-            {hasSenado && (
-              <Line type="monotone" dataKey="senado" name="senado" stroke={SENADO_COLOR} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} connectNulls />
+            {hasSenado && !lineToggle.hidden.has("senado") && (
+              <Line type="monotone" dataKey="senado" name="Senado" stroke={SENADO_COLOR} strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} connectNulls />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -133,12 +175,16 @@ export function PeriodAlignmentChart({ ano }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip
-              formatter={(v: number, name: string) => [v.toLocaleString("pt-BR"), name === "camaraVotos" ? "Votos Câmara" : "Votos Senado"]}
-            />
-            <Legend formatter={(v) => (v === "camaraVotos" ? "Votos Câmara" : "Votos Senado")} />
-            {hasCamara && <Bar dataKey="camaraVotos" name="camaraVotos" fill={CAMARA_COLOR} radius={[4, 4, 0, 0]} opacity={0.7} />}
-            <Bar dataKey="senadoVotos" name="senadoVotos" fill={SENADO_COLOR} radius={[4, 4, 0, 0]} opacity={0.7} />
+            <Tooltip content={<EnhancedTooltip rows={(payload) => {
+              return payload.map((p) => ({
+                label: p.dataKey === "camaraVotos" ? "Votos Câmara" : "Votos Senado",
+                value: Number(p.value).toLocaleString("pt-BR"),
+                color: p.fill || p.color,
+              }));
+            }} />} />
+            <Legend content={renderLegend(barToggle.hidden, barToggle.toggle)} />
+            {hasCamara && !barToggle.hidden.has("camaraVotos") && <Bar dataKey="camaraVotos" name="Votos Câmara" fill={CAMARA_COLOR} radius={[4, 4, 0, 0]} opacity={0.7} />}
+            {!barToggle.hidden.has("senadoVotos") && <Bar dataKey="senadoVotos" name="Votos Senado" fill={SENADO_COLOR} radius={[4, 4, 0, 0]} opacity={0.7} />}
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
