@@ -108,9 +108,16 @@ export function DeputyCard({ deputado, analise, onClick, isFavorito, onToggleFav
 
       {analise ? (
         <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
-          <span className={`text-[10px] font-black uppercase tracking-widest ${classTextColors[analise.classificacao]}`}>
-            {analise.classificacao}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-black uppercase tracking-widest ${classTextColors[analise.classificacao]}`}>
+              {analise.classificacao}
+            </span>
+            {analise.classificacao === "Sem Dados" && analise.situacao && (
+              <span className="text-[9px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {analise.situacao === "Vacância" ? "Vago" : analise.situacao === "Suplência" ? "Não exerce" : analise.situacao === "Afastado" ? "Afastado" : analise.situacao === "Exercício" ? "Sem votações" : analise.situacao}
+              </span>
+            )}
+          </div>
           <span className="text-[9px] font-medium text-muted-foreground">
             {analise.total_votos} votos úteis
           </span>
