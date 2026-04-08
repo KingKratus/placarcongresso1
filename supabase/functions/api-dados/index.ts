@@ -23,16 +23,16 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Extract API key from Authorization header or query param
+    // Extract API key from Authorization header only
     const url = new URL(req.url);
-    let apiKey = url.searchParams.get("apikey");
+    let apiKey: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (!apiKey && authHeader?.startsWith("Bearer ")) {
+    if (authHeader?.startsWith("Bearer ")) {
       apiKey = authHeader.replace("Bearer ", "");
     }
 
     if (!apiKey) {
-      return jsonResponse({ error: "API key required. Pass via ?apikey= or Authorization: Bearer <key>" }, 401);
+      return jsonResponse({ error: "API key required. Pass via Authorization: Bearer <key>" }, 401);
     }
 
     // Validate API key
