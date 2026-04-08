@@ -89,6 +89,8 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
     for (const curr of analises) {
       const prev = prevMap.get(curr.deputado_id);
       if (!prev) continue;
+      // Skip deputies with very few votes in either year (unreliable scores)
+      if (Number(curr.total_votos) < 10 || Number(prev.total_votos) < 10) continue;
       const delta = Number(curr.score) - Number(prev.score);
       if (Math.abs(delta) < 3) continue;
       results.push({

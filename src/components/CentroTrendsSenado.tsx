@@ -116,10 +116,11 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
     for (const curr of analises) {
       const prev = prevMap.get(curr.senador_id);
       if (!prev) continue;
+      // Skip senators with very few votes in either year (unreliable scores)
+      if (Number(curr.total_votos) < 5 || Number(prev.total_votos) < 5) continue;
       const scoreCurr = Number(curr.score);
       const scorePrev = Number(prev.score);
       const delta = scoreCurr - scorePrev;
-      // Only show meaningful changes (>3 points)
       if (Math.abs(delta) < 3) continue;
 
       results.push({
