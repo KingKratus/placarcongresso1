@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { SankeyMigration } from "@/components/insights/SankeyMigration";
 
 type Analise = Tables<"analises_deputados">;
 
@@ -104,6 +105,23 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   }, [analises, prevAnalises]);
 
   const classChanges = useMemo(() => migrations.filter((m) => m.classPrev !== m.classCurr), [migrations]);
+
+  // Sankey flow data: count transitions between classifications
+  const sankeyFlows = useMemo(() => {
+    if (prevAnalises.length === 0) return [];
+    const prevMap = new Map(prevAnalises.map((a) => [a.deputado_id, a]));
+    const flowMap: Record<string, number> = {};
+    for (const curr of analises) {
+      const prev = prevMap.get(curr.deputado_id);
+      if (!prev) continue;
+      const key = `${prev.classificacao}→${curr.classificacao}`;
+      flowMap[key] = (flowMap[key] || 0) + 1;
+    }
+    return Object.entries(flowMap).map(([key, count]) => {
+      const [from, to] = key.split("→");
+      return { from, to, count };
+    });
+  }, [analises, prevAnalises]);
 
   if (centroDeputados.length === 0) {
     return (
@@ -202,6 +220,16 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
             <p className="text-sm text-muted-foreground text-center py-6">Sem dados para {compareYear}.</p>
           ) : (
             <div className="space-y-4">
+              {/* Sankey diagram */}
+              {sankeyFlows.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    Fluxo de Migração
+                  </p>
+                  <SankeyMigration flows={sankeyFlows} yearFrom={compareYear} yearTo={ano} casa="camara" />
+                </div>
+              )}
+
               {classChanges.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
