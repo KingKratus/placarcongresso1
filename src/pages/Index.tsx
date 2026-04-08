@@ -6,7 +6,6 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { StatsPanel } from "@/components/StatsPanel";
 import { SyncHistoryPanel } from "@/components/SyncHistoryPanel";
-import { AdminBulkSync } from "@/components/AdminBulkSync";
 import { DeputyCard } from "@/components/DeputyCard";
 import { RankingTable } from "@/components/RankingTable";
 import { PartyChart } from "@/components/PartyChart";
@@ -118,7 +117,6 @@ const Index = () => {
       {user && (
         <>
           <SyncHistoryPanel />
-          <AdminBulkSync userId={user.id} />
           <Button variant="outline" className="w-full" onClick={() => exportAnalisesCsv(analises, ano)} disabled={analises.length === 0}>
             <Download size={14} className="mr-2" /> Exportar CSV
           </Button>

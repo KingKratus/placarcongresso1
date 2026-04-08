@@ -11,6 +11,7 @@ import SenadorDetail from "./pages/SenadorDetail";
 import Perfil from "./pages/Perfil";
 import NotFound from "./pages/NotFound";
 import Documentacao from "./pages/Documentacao";
+import Admin from "./pages/Admin";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/senado" element={<Senado />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/documentacao" element={<Documentacao />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/deputado/:id" element={<DeputadoDetail />} />
           <Route path="/senador/:id" element={<SenadorDetail />} />
           <Route path="/perfil" element={<Perfil />} />
