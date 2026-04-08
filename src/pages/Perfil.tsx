@@ -218,9 +218,10 @@ const Perfil = () => {
                 <ExternalLink size={12} /> Como usar
               </h4>
               <div className="text-[11px] text-muted-foreground space-y-1">
-                <p><strong>Base URL:</strong> <code className="bg-muted px-1 rounded">api-dados</code></p>
-                <p><strong>Params:</strong> <code className="bg-muted px-1 rounded">?apikey=SUA_KEY&casa=camara&ano=2025&tipo=analises</code></p>
-                <p><strong>Tipos:</strong> <code className="bg-muted px-1 rounded">analises</code> | <code className="bg-muted px-1 rounded">votacoes</code> | <code className="bg-muted px-1 rounded">votos</code></p>
+                <p><strong>Header:</strong> <code className="bg-muted px-1 rounded">Authorization: Bearer SUA_KEY</code></p>
+                <p><strong>Exemplo:</strong></p>
+                <code className="bg-muted px-1 rounded text-[10px] block mt-1">curl -H "Authorization: Bearer SUA_KEY" "api-dados?casa=camara&ano=2025&tipo=analises"</code>
+                <p className="mt-1"><strong>Tipos:</strong> <code className="bg-muted px-1 rounded">analises</code> | <code className="bg-muted px-1 rounded">votacoes</code> | <code className="bg-muted px-1 rounded">votos</code></p>
               </div>
             </div>
           </CardContent>
