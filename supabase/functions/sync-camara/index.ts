@@ -89,11 +89,15 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const apikeyHeader = req.headers.get("apikey");
     const token = authHeader?.replace("Bearer ", "") || "";
-    // Service-level: service_role key, matching apikey, or cron (no auth)
-    const isServiceRole = !authHeader 
-      || token === supabaseServiceKey 
+    // Service-level: service_role key or matching apikey (for cron jobs)
+    const isServiceRole = token === supabaseServiceKey 
       || (apikeyHeader && token === apikeyHeader)
-      || (apikeyHeader && apikeyHeader.length > 100);
+      || (apikeyHeader && apikeyHeader === supabaseServiceKey);
+
+    // Block fully unauthenticated requests
+    if (!authHeader && !apikeyHeader) {
+      return jsonResponse({ error: "Authentication required" }, 401);
+    }
     const bodyText = await req.text();
 
     if (!isServiceRole) {
