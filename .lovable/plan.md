@@ -1,56 +1,56 @@
 
 
-# Plano: Aba Admin + Correção de Bugs
+# Plano: Melhorias UX/UI na Aba Insights
 
-## Bugs Identificados
+## Resumo
 
-1. **Runtime Error: "Rendered more hooks than during the previous render"** em `Senado.tsx` (linha 104). Provavelmente causado por hook condicional ou ordem de hooks alterada em edição anterior. Precisa investigar e corrigir.
+Implementar 3 melhorias de interatividade nos gráficos da aba Insights, conforme o relatório do usuário.
 
-2. **15 sync_runs presas com status "running"** há mais de 30 minutos. Devem ser marcadas como "error" ou "stale". A aba Admin terá um botão para limpar esses registros.
+## Alterações
 
-3. **Câmara 2024 sem dados**: Não há registros em `analises_deputados` para 2024 com sync completa (query mostra 572 registros, 0 sem dados - OK, mas não há sync_runs para 2024). Precisa sync 2024.
+### 1. Tooltips Detalhados (todos os gráficos)
 
-4. **Câmara 2026 tem 40 erros e 12 running presos** nos sync_runs.
+Enriquecer os tooltips existentes para mostrar informações adicionais:
 
-## Nova Página: `/admin`
+- **Pie Charts (Classificação)**: Mostrar valor absoluto + percentual (ex: "Governo: 245 deputados (48%)")
+- **Bar Charts (Top 10, Partidos, Divergência)**: Mostrar partido, casa, score E número de votos/parlamentares quando disponível
+- **Line Charts (Tendência, Volume)**: Mostrar volume de votações ao lado do percentual de alinhamento
+- **Histograma**: Mostrar total por faixa e percentual do total
 
-Uma página dedicada para administradores com as seguintes seções:
+Criar um componente `EnhancedTooltip` reutilizável para padronizar o estilo visual dos tooltips com fundo escuro, bordas arredondadas e informações organizadas.
 
-### Seção 1: Visão Geral do Sistema
-- Contagem de registros por tabela (analises, votacoes, votos)
-- Cobertura por ano/casa (deputados analisados, sem dados, etc.)
-- Sync runs com status breakdown
+**Arquivo**: `src/pages/Insights.tsx` (tooltips inline) + `src/components/insights/EnhancedTooltip.tsx` (novo)
 
-### Seção 2: Gerenciamento de Syncs
-- Mover o `AdminBulkSync` existente para esta página (remover das sidebars de Index/Senado)
-- Adicionar botão "Limpar syncs presas" (marcar running > 30min como error)
-- Histórico completo de syncs (não apenas últimos 30)
+### 2. Filtros Globais Dinâmicos
 
-### Seção 3: Gerenciamento de Usuários
-- Lista de admins atuais
-- (Futuro: adicionar/remover admins)
+Adicionar filtros de **Partido** e **UF** no topo da página Insights (ao lado do seletor de Ano já existente) que afetam TODAS as abas simultaneamente:
 
-### Seção 4: Diagnóstico de Dados
-- Parlamentares "Sem Dados" por ano com detalhes
-- Botão de re-sync individual por ano
+- Adicionar `Select` para Partido (extraído dos dados carregados) e UF
+- Filtrar `deputados` e `senadores` nos `useMemo` existentes antes de calcular agregações
+- Os filtros são aplicados via `useMemo` sobre os dados já carregados (sem novas queries)
 
-## Alterações Técnicas
+**Arquivo**: `src/pages/Insights.tsx`
+
+### 3. Legendas Clicáveis (Toggle de séries)
+
+Nos gráficos comparativos Câmara vs Senado, permitir clicar na legenda para ocultar/exibir uma casa:
+
+- Adicionar estado `hiddenSeries` com `useState<Set<string>>`
+- Nos `Legend`, usar `onClick` handler para toggle
+- Nas `Bar`/`Line`, renderizar condicionalmente baseado no set
+- Aplicar opacidade visual na legenda quando série está oculta
+- Aplicar nos gráficos: Partidos, Divergência, Volume, Histograma, PeriodAlignmentChart
+
+**Arquivos**: `src/pages/Insights.tsx`, `src/components/insights/PeriodAlignmentChart.tsx`
+
+## Detalhes Técnicos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/Admin.tsx` | Nova página com tabs: Visão Geral, Syncs, Dados, Usuários |
-| `src/pages/Senado.tsx` | Corrigir bug de hooks (investigar linha 104) |
-| `src/pages/Index.tsx` | Remover AdminBulkSync da sidebar (mover para Admin) |
-| `src/pages/Senado.tsx` | Remover AdminBulkSync da sidebar |
-| `src/components/Navbar.tsx` | Adicionar link "Admin" visível apenas para admins |
-| `src/App.tsx` | Adicionar rota `/admin` |
-| Migration SQL | Nenhuma necessária - usaremos `has_role` existente |
+| `src/components/insights/EnhancedTooltip.tsx` | Novo componente de tooltip customizado |
+| `src/pages/Insights.tsx` | Filtros globais, tooltips aprimorados, legendas clicáveis |
+| `src/components/insights/PeriodAlignmentChart.tsx` | Legendas clicáveis, tooltip aprimorado |
+| `src/components/insights/AlignmentTrendChart.tsx` | Tooltip aprimorado |
 
-## Sugestões de Novas Funcionalidades
-
-1. **Limpeza automática de sync_runs presas** - trigger ou cron que marca como error após timeout
-2. **Notificações de sync** - alertar admin quando sync falha
-3. **Dashboard de cobertura temporal** - visualizar gaps de dados por mês
-4. **Export de dados administrativos** - CSV com relatório de saúde do sistema
-5. **Rate limiting visual** - mostrar cooldown restante para cada casa/ano
+Nenhuma alteração de banco de dados necessária. Todas as melhorias são puramente de frontend.
 
