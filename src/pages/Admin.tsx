@@ -109,11 +109,11 @@ const Admin = () => {
   const cleanStuckRuns = async () => {
     setCleaningStuck(true);
     try {
-      const { error } = await supabase.functions.invoke("api-dados", {
+      const { data, error } = await supabase.functions.invoke("admin-actions", {
         body: { action: "clean-stuck-runs" },
       });
       if (error) throw error;
-      toast({ title: "Syncs presas limpas", description: `${stuckCount} registros atualizados.` });
+      toast({ title: "Syncs presas limpas", description: `${data?.cleaned || 0} registros atualizados.` });
       await loadSyncRuns();
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
