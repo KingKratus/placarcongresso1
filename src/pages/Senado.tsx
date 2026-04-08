@@ -6,7 +6,6 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { StatsPanelSenado } from "@/components/StatsPanelSenado";
 import { SyncHistoryPanel } from "@/components/SyncHistoryPanel";
-import { AdminBulkSync } from "@/components/AdminBulkSync";
 import { SenadorCard } from "@/components/SenadorCard";
 import { RankingTableSenado } from "@/components/RankingTableSenado";
 import { PartyChartSenado } from "@/components/PartyChartSenado";
@@ -120,7 +119,6 @@ const Senado = () => {
       {user && (
         <>
           <SyncHistoryPanel />
-          <AdminBulkSync userId={user.id} />
           <Button variant="outline" className="w-full" onClick={() => exportAnalisesSenadorCsv(analises, ano)} disabled={analises.length === 0}>
             <Download size={14} className="mr-2" /> Exportar CSV
           </Button>

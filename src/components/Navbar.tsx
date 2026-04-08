@@ -1,6 +1,7 @@
-import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User, Heart, SlidersHorizontal, X } from "lucide-react";
-import { useState } from "react";
+import { ShieldCheck, Search, RefreshCcw, LogIn, LogOut, User, Heart, SlidersHorizontal, X, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,11 +47,19 @@ export function Navbar({
   const isMobile = useIsMobile();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
+  useEffect(() => {
+    if (!user) { setIsAdminUser(false); return; }
+    supabase.rpc("has_role", { _role: "admin" as const }).then(({ data }) => setIsAdminUser(!!data));
+  }, [user]);
+
   const isSenado = casa === "senado" || location.pathname.startsWith("/senado");
   const isInsights = location.pathname === "/insights";
   const isDocs = location.pathname === "/documentacao";
   const isPerfil = location.pathname === "/perfil";
-  const isCamara = !isSenado && !isInsights && !isDocs && !isPerfil;
+  const isAdminPage = location.pathname === "/admin";
+  const isCamara = !isSenado && !isInsights && !isDocs && !isPerfil && !isAdminPage;
 
   const searchPlaceholder = isSenado ? "Buscar senador..." : isInsights ? "Buscar..." : "Buscar deputado...";
 
@@ -108,6 +117,7 @@ export function Navbar({
               { path: "/senado", label: "Senado", active: isSenado },
               { path: "/insights", label: "Insights", active: isInsights },
               { path: "/documentacao", label: "Docs", active: isDocs },
+              ...(isAdminUser ? [{ path: "/admin", label: "Admin", active: isAdminPage }] : []),
             ].map((tab) => (
               <button
                 key={tab.path}
