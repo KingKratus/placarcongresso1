@@ -1,56 +1,39 @@
 
+# Plano: Melhorias na Aba Tendências
 
-# Plano: Melhorias UX/UI na Aba Insights
+## 1. Diagrama de Sankey — Fluxo de Migração
 
-## Resumo
+Adicionar um diagrama visual de fluxo mostrando quantos parlamentares migraram entre classificações (Governo → Centro → Oposição) entre dois anos selecionados.
 
-Implementar 3 melhorias de interatividade nos gráficos da aba Insights, conforme o relatório do usuário.
+**Implementação:**
+- Usar a biblioteca `recharts` que já está instalada — porém recharts NÃO tem componente Sankey nativo.
+- Alternativa: Criar um **diagrama de fluxo visual customizado** usando SVG puro (sem dependência extra), com nós (Governo/Centro/Oposição) à esquerda (ano anterior) e direita (ano atual), conectados por faixas proporcionais ao número de parlamentares.
+- O diagrama será adicionado **acima** da lista de migração existente, complementando-a (não substituindo).
+- Dados já disponíveis: as migrations calculadas nos componentes atuais já têm `classPrev` e `classCurr`.
 
-## Alterações
+**Arquivos:**
+- `src/components/insights/SankeyMigration.tsx` — Novo componente SVG reutilizável
+- `src/components/CentroTrendsCamara.tsx` — Integrar o Sankey na seção "Migração entre Anos"
+- `src/components/CentroTrendsSenado.tsx` — Idem para Senado
 
-### 1. Tooltips Detalhados (todos os gráficos)
+## 2. Filtros por Tema — ⚠️ Limitação de Dados
 
-Enriquecer os tooltips existentes para mostrar informações adicionais:
+**Problema:** O banco de dados atual NÃO possui categorização temática das votações. As tabelas `votacoes` e `votacoes_senado` têm `proposicao_tipo` e `proposicao_ementa` mas não um campo de tema/categoria (econômico, social, fiscal, etc.).
 
-- **Pie Charts (Classificação)**: Mostrar valor absoluto + percentual (ex: "Governo: 245 deputados (48%)")
-- **Bar Charts (Top 10, Partidos, Divergência)**: Mostrar partido, casa, score E número de votos/parlamentares quando disponível
-- **Line Charts (Tendência, Volume)**: Mostrar volume de votações ao lado do percentual de alinhamento
-- **Histograma**: Mostrar total por faixa e percentual do total
+**Proposta viável:** Implementar um filtro por **tipo de proposição** (`proposicao_tipo`: PEC, PL, MPV, PDL, etc.) como proxy inicial para análise temática. Isso já permite separar, por exemplo, Medidas Provisórias (frequentemente econômicas) de PLs ordinários.
 
-Criar um componente `EnhancedTooltip` reutilizável para padronizar o estilo visual dos tooltips com fundo escuro, bordas arredondadas e informações organizadas.
+- Adicionar um Select de filtro por tipo de proposição na seção de tendências
+- Recalcular os scores e migrações apenas com votações do tipo selecionado
+- Isso requer uma query adicional que cruza `votos_deputados` + `votacoes` para filtrar
 
-**Arquivo**: `src/pages/Insights.tsx` (tooltips inline) + `src/components/insights/EnhancedTooltip.tsx` (novo)
-
-### 2. Filtros Globais Dinâmicos
-
-Adicionar filtros de **Partido** e **UF** no topo da página Insights (ao lado do seletor de Ano já existente) que afetam TODAS as abas simultaneamente:
-
-- Adicionar `Select` para Partido (extraído dos dados carregados) e UF
-- Filtrar `deputados` e `senadores` nos `useMemo` existentes antes de calcular agregações
-- Os filtros são aplicados via `useMemo` sobre os dados já carregados (sem novas queries)
-
-**Arquivo**: `src/pages/Insights.tsx`
-
-### 3. Legendas Clicáveis (Toggle de séries)
-
-Nos gráficos comparativos Câmara vs Senado, permitir clicar na legenda para ocultar/exibir uma casa:
-
-- Adicionar estado `hiddenSeries` com `useState<Set<string>>`
-- Nos `Legend`, usar `onClick` handler para toggle
-- Nas `Bar`/`Line`, renderizar condicionalmente baseado no set
-- Aplicar opacidade visual na legenda quando série está oculta
-- Aplicar nos gráficos: Partidos, Divergência, Volume, Histograma, PeriodAlignmentChart
-
-**Arquivos**: `src/pages/Insights.tsx`, `src/components/insights/PeriodAlignmentChart.tsx`
-
-## Detalhes Técnicos
+**Arquivos:**
+- `src/components/CentroTrendsCamara.tsx` — Adicionar filtro por tipo
+- `src/components/CentroTrendsSenado.tsx` — Idem
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/insights/EnhancedTooltip.tsx` | Novo componente de tooltip customizado |
-| `src/pages/Insights.tsx` | Filtros globais, tooltips aprimorados, legendas clicáveis |
-| `src/components/insights/PeriodAlignmentChart.tsx` | Legendas clicáveis, tooltip aprimorado |
-| `src/components/insights/AlignmentTrendChart.tsx` | Tooltip aprimorado |
+| `src/components/insights/SankeyMigration.tsx` | Novo — Diagrama SVG de fluxo de migração |
+| `src/components/CentroTrendsCamara.tsx` | Integrar Sankey + filtro por tipo de proposição |
+| `src/components/CentroTrendsSenado.tsx` | Integrar Sankey + filtro por tipo de proposição |
 
-Nenhuma alteração de banco de dados necessária. Todas as melhorias são puramente de frontend.
-
+Nenhuma migração de banco necessária.
