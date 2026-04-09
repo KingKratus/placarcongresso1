@@ -50,6 +50,8 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   const [compareYear, setCompareYear] = useState<number>(ano - 1);
   const [prevAnalises, setPrevAnalises] = useState<Analise[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
+  const [temaFilter, setTemaFilter] = useState("all");
+  const { temasAtivos, classifying, classify, temas: temasData } = useVotacaoTemas(ano, "camara");
 
   const fetchPrevYear = useCallback(async (y: number) => {
     setLoadingPrev(true);
