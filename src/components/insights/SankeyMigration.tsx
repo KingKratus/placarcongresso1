@@ -173,7 +173,8 @@ export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
                 d={path}
                 fill={link.color}
                 opacity={FLOW_OPACITY}
-                className="transition-opacity hover:opacity-50"
+                className="transition-all duration-500 hover:opacity-50"
+                style={{ transition: "d 0.5s ease-out, opacity 0.5s ease-out" }}
               >
                 <title>{`${link.from} → ${link.to}: ${link.count} ${casa === "camara" ? "deputados" : "senadores"}`}</title>
               </path>
