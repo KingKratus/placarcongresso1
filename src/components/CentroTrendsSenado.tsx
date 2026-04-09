@@ -30,6 +30,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { SankeyMigration } from "@/components/insights/SankeyMigration";
+import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
 
 type Analise = Tables<"analises_senadores">;
 
