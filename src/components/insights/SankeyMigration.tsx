@@ -141,7 +141,16 @@ export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
 
   return (
     <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full max-w-[600px] mx-auto" style={{ minHeight: 200 }}>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="w-full max-w-[600px] mx-auto"
+        style={{
+          minHeight: 200,
+          opacity: animating ? 0 : 1,
+          transform: animating ? "translateY(8px)" : "translateY(0)",
+          transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
+        }}
+      >
         {/* Year labels */}
         <text x={LEFT_X + NODE_W / 2} y={14} textAnchor="middle" className="fill-muted-foreground text-[11px] font-bold">{yearFrom}</text>
         <text x={RIGHT_X + NODE_W / 2} y={14} textAnchor="middle" className="fill-muted-foreground text-[11px] font-bold">{yearTo}</text>
