@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 
 interface MigrationFlow {
   from: string;
@@ -31,6 +31,20 @@ const LEFT_X = 60;
 const RIGHT_X = WIDTH - 60 - NODE_W;
 
 export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
+  const [animating, setAnimating] = useState(false);
+  const prevKey = useRef(`${yearFrom}-${yearTo}`);
+
+  // Trigger animation on year change
+  useEffect(() => {
+    const key = `${yearFrom}-${yearTo}`;
+    if (key !== prevKey.current) {
+      prevKey.current = key;
+      setAnimating(true);
+      const timer = setTimeout(() => setAnimating(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [yearFrom, yearTo]);
+
   const { leftNodes, rightNodes, links } = useMemo(() => {
     // Aggregate totals per class on each side
     const leftTotals: Record<string, number> = {};
@@ -127,7 +141,16 @@ export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
 
   return (
     <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full max-w-[600px] mx-auto" style={{ minHeight: 200 }}>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="w-full max-w-[600px] mx-auto"
+        style={{
+          minHeight: 200,
+          opacity: animating ? 0 : 1,
+          transform: animating ? "translateY(8px)" : "translateY(0)",
+          transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
+        }}
+      >
         {/* Year labels */}
         <text x={LEFT_X + NODE_W / 2} y={14} textAnchor="middle" className="fill-muted-foreground text-[11px] font-bold">{yearFrom}</text>
         <text x={RIGHT_X + NODE_W / 2} y={14} textAnchor="middle" className="fill-muted-foreground text-[11px] font-bold">{yearTo}</text>
@@ -150,7 +173,8 @@ export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
                 d={path}
                 fill={link.color}
                 opacity={FLOW_OPACITY}
-                className="transition-opacity hover:opacity-50"
+                className="transition-all duration-500 hover:opacity-50"
+                style={{ transition: "d 0.5s ease-out, opacity 0.5s ease-out" }}
               >
                 <title>{`${link.from} → ${link.to}: ${link.count} ${casa === "camara" ? "deputados" : "senadores"}`}</title>
               </path>

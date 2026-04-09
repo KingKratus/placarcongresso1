@@ -1,18 +1,20 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History,
+  TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History, Sparkles, Tag,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { SankeyMigration } from "@/components/insights/SankeyMigration";
+import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
 
 type Analise = Tables<"analises_deputados">;
 
@@ -48,6 +50,8 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   const [compareYear, setCompareYear] = useState<number>(ano - 1);
   const [prevAnalises, setPrevAnalises] = useState<Analise[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
+  const [temaFilter, setTemaFilter] = useState("all");
+  const { temasAtivos, classifying, classify, temas: temasData } = useVotacaoTemas(ano, "camara");
 
   const fetchPrevYear = useCallback(async (y: number) => {
     setLoadingPrev(true);
@@ -142,6 +146,35 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Theme filter */}
+      <Card>
+        <CardContent className="p-3 flex flex-wrap items-center gap-2">
+          <Tag size={14} className="text-primary shrink-0" />
+          <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground shrink-0">Tema:</span>
+          <Select value={temaFilter} onValueChange={setTemaFilter}>
+            <SelectTrigger className="w-[160px] h-8 text-xs"><SelectValue placeholder="Todos os temas" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">Todos os temas</SelectItem>
+              {temasAtivos.map((t) => (
+                <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline" size="sm"
+            className="h-8 text-xs gap-1"
+            onClick={classify}
+            disabled={classifying}
+          >
+            <Sparkles size={12} className={classifying ? "animate-spin" : ""} />
+            {classifying ? "Classificando..." : temasAtivos.length > 0 ? "Reclassificar" : "Classificar com IA"}
+          </Button>
+          {temasAtivos.length > 0 && (
+            <span className="text-[9px] text-muted-foreground">{temasData.length} votações classificadas</span>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="border-governo/30 bg-governo/5">
