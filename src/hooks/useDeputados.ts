@@ -45,7 +45,15 @@ export function useDeputados(legislatura?: number) {
         const partData = await partRes.json();
         if (!depData.dados) throw new Error("API não retornou dados.");
         if (!controller.signal.aborted) {
-          setDeputados(depData.dados || []);
+          // Deduplicate deputies by id to avoid React key warnings
+          const rawDeps: Deputado[] = depData.dados || [];
+          const seen = new Set<number>();
+          const uniqueDeps = rawDeps.filter((d) => {
+            if (seen.has(d.id)) return false;
+            seen.add(d.id);
+            return true;
+          });
+          setDeputados(uniqueDeps);
           setPartidos(partData.dados || []);
         }
       } catch (err: any) {
