@@ -321,6 +321,36 @@ export type Database = {
         }
         Relationships: []
       }
+      votacao_temas: {
+        Row: {
+          ano: number
+          casa: string
+          confianca: number
+          created_at: string
+          id: string
+          tema: string
+          votacao_id: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          confianca?: number
+          created_at?: string
+          id?: string
+          tema: string
+          votacao_id: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          confianca?: number
+          created_at?: string
+          id?: string
+          tema?: string
+          votacao_id?: string
+        }
+        Relationships: []
+      }
       votacoes: {
         Row: {
           ano: number
