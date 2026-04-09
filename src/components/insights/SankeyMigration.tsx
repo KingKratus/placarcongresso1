@@ -31,6 +31,20 @@ const LEFT_X = 60;
 const RIGHT_X = WIDTH - 60 - NODE_W;
 
 export function SankeyMigration({ flows, yearFrom, yearTo, casa }: Props) {
+  const [animating, setAnimating] = useState(false);
+  const prevKey = useRef(`${yearFrom}-${yearTo}`);
+
+  // Trigger animation on year change
+  useEffect(() => {
+    const key = `${yearFrom}-${yearTo}`;
+    if (key !== prevKey.current) {
+      prevKey.current = key;
+      setAnimating(true);
+      const timer = setTimeout(() => setAnimating(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [yearFrom, yearTo]);
+
   const { leftNodes, rightNodes, links } = useMemo(() => {
     // Aggregate totals per class on each side
     const leftTotals: Record<string, number> = {};
