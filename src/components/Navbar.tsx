@@ -132,14 +132,15 @@ export function Navbar({
           </div>
         </div>
 
+        {/* Search - always visible */}
+        <div className="relative">
+          <Search className="absolute left-3 top-2 text-muted-foreground" size={14} />
+          <Input placeholder={searchPlaceholder} className="pl-9 h-8 text-xs" value={searchTerm} onChange={(e) => onSearchChange(e.target.value)} />
+        </div>
+
         {/* Filters - collapsible on mobile */}
         {(!isMobile || filtersOpen) && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-2 text-muted-foreground" size={14} />
-              <Input placeholder={searchPlaceholder} className="pl-9 h-8 text-xs" value={searchTerm} onChange={(e) => onSearchChange(e.target.value)} />
-            </div>
-
             <Select value={String(ano)} onValueChange={(v) => onAnoChange(Number(v))}>
               <SelectTrigger className="w-20 sm:w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
