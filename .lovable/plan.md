@@ -1,39 +1,64 @@
 
-# Plano: Melhorias na Aba Tendências
 
-## 1. Diagrama de Sankey — Fluxo de Migração
+# Plano: Melhorias Diversas - Insights, Mobile, IA e Temas
 
-Adicionar um diagrama visual de fluxo mostrando quantos parlamentares migraram entre classificações (Governo → Centro → Oposição) entre dois anos selecionados.
+## Resumo
 
-**Implementação:**
-- Usar a biblioteca `recharts` que já está instalada — porém recharts NÃO tem componente Sankey nativo.
-- Alternativa: Criar um **diagrama de fluxo visual customizado** usando SVG puro (sem dependência extra), com nós (Governo/Centro/Oposição) à esquerda (ano anterior) e direita (ano atual), conectados por faixas proporcionais ao número de parlamentares.
-- O diagrama será adicionado **acima** da lista de migração existente, complementando-a (não substituindo).
-- Dados já disponíveis: as migrations calculadas nos componentes atuais já têm `classPrev` e `classCurr`.
+5 melhorias: (1) badges de tema nos gráficos Insights, (2) integração OpenRouter para análise/chat, (3) painel de distribuição temática com pizza, (4) busca sempre visível no mobile, (5) testes das funcionalidades existentes.
 
-**Arquivos:**
-- `src/components/insights/SankeyMigration.tsx` — Novo componente SVG reutilizável
-- `src/components/CentroTrendsCamara.tsx` — Integrar o Sankey na seção "Migração entre Anos"
-- `src/components/CentroTrendsSenado.tsx` — Idem para Senado
+## 1. Badges de Tema nas Votações (Insights)
 
-## 2. Filtros por Tema — ⚠️ Limitação de Dados
+Adicionar badges coloridos por tema na aba **Projetos** (`ProjetosTab.tsx`), onde as votações individuais são listadas. Usar o hook `useVotacaoTemas` para obter o mapa de temas e exibir um `Badge` colorido ao lado de cada votação.
 
-**Problema:** O banco de dados atual NÃO possui categorização temática das votações. As tabelas `votacoes` e `votacoes_senado` têm `proposicao_tipo` e `proposicao_ementa` mas não um campo de tema/categoria (econômico, social, fiscal, etc.).
+- Criar mapa de cores por tema (Econômico = azul, Social = roxo, etc.)
+- Integrar `useVotacaoTemas` no `ProjetosTab`
+- Exibir badge ao lado da ementa de cada votação
 
-**Proposta viável:** Implementar um filtro por **tipo de proposição** (`proposicao_tipo`: PEC, PL, MPV, PDL, etc.) como proxy inicial para análise temática. Isso já permite separar, por exemplo, Medidas Provisórias (frequentemente econômicas) de PLs ordinários.
+**Arquivo**: `src/components/insights/ProjetosTab.tsx`
 
-- Adicionar um Select de filtro por tipo de proposição na seção de tendências
-- Recalcular os scores e migrações apenas com votações do tipo selecionado
-- Isso requer uma query adicional que cruza `votos_deputados` + `votacoes` para filtrar
+## 2. Integração OpenRouter para Análise e Perguntas
 
-**Arquivos:**
-- `src/components/CentroTrendsCamara.tsx` — Adicionar filtro por tipo
-- `src/components/CentroTrendsSenado.tsx` — Idem
+Armazenar a chave OpenRouter como secret (`OPENROUTER_API_KEY`). Criar uma edge function `ask-ai` que aceita uma pergunta + contexto de dados legislativos e retorna análise via OpenRouter. No frontend, adicionar um componente de chat/perguntas na aba Insights.
+
+- Solicitar secret via `add_secret`
+- Edge function: `supabase/functions/ask-ai/index.ts` — proxy para OpenRouter API
+- Componente frontend: input de pergunta + resposta com markdown
+- Integrar na página Insights como nova aba ou painel lateral
+
+**Arquivos**: `supabase/functions/ask-ai/index.ts` (novo), `src/components/insights/AskAI.tsx` (novo), `src/pages/Insights.tsx`
+
+## 3. Painel de Distribuição Temática (Pizza)
+
+Adicionar nova aba "Temas" ou seção na aba Visão Geral com gráfico de pizza mostrando distribuição de temas das votações do ano selecionado. Usar `useVotacaoTemas` para obter os dados, com botão para classificar automaticamente se ainda não classificado.
+
+- `PieChart` com as contagens por tema
+- Filtros Câmara/Senado
+- Botão "Classificar com IA" quando sem dados
+
+**Arquivo**: `src/pages/Insights.tsx` (nova aba "Temas")
+
+## 4. Busca Sempre Visível no Mobile
+
+Remover a condição `(!isMobile || filtersOpen)` apenas para o campo de busca. A busca ficará sempre visível, enquanto os filtros de Ano/Partido/Classificação continuam colapsáveis.
+
+- Extrair o input de busca para fora do bloco condicional
+- Manter os selects dentro do bloco colapsável
+
+**Arquivo**: `src/components/Navbar.tsx`
+
+## 5. Teste e Verificação
+
+Verificar as funcionalidades existentes (Sankey, classificação temática, busca) via ferramentas de debug após implementação.
+
+## Detalhes Técnicos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/insights/SankeyMigration.tsx` | Novo — Diagrama SVG de fluxo de migração |
-| `src/components/CentroTrendsCamara.tsx` | Integrar Sankey + filtro por tipo de proposição |
-| `src/components/CentroTrendsSenado.tsx` | Integrar Sankey + filtro por tipo de proposição |
+| `src/components/Navbar.tsx` | Busca sempre visível no mobile |
+| `src/components/insights/ProjetosTab.tsx` | Badges de tema |
+| `src/pages/Insights.tsx` | Nova aba Temas com pizza chart |
+| `supabase/functions/ask-ai/index.ts` | Novo — proxy OpenRouter |
+| `src/components/insights/AskAI.tsx` | Novo — componente de perguntas IA |
 
-Nenhuma migração de banco necessária.
+**Nota de segurança**: A chave OpenRouter será armazenada como secret do projeto, acessível apenas via edge functions. Nunca exposta no frontend.
+
