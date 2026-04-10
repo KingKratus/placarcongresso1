@@ -18,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VotacaoCamara, VotacaoSenado } from "@/hooks/useInsightsData";
+import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
+import { TEMA_COLORS } from "@/components/insights/ThemeDistribution";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -102,6 +104,9 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
   const [voteBreakdown, setVoteBreakdown] = useState<VoteBreakdown | null>(null);
   const [loadingVotes, setLoadingVotes] = useState(false);
   const [voteSearch, setVoteSearch] = useState("");
+
+  const camaraTemas = useVotacaoTemas(ano, "camara");
+  const senadoTemas = useVotacaoTemas(ano, "senado");
 
   const allProjects = useMemo<UnifiedProject[]>(() => {
     const cam = votacoesCamara.map((v): UnifiedProject => ({
