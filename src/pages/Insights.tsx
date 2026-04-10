@@ -8,6 +8,8 @@ import { AlignmentSimulation } from "@/components/insights/AlignmentSimulation";
 import { ProjetosTab } from "@/components/insights/ProjetosTab";
 import { BrazilMap } from "@/components/insights/BrazilMap";
 import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
+import { AskAI } from "@/components/insights/AskAI";
+import { ThemeDistribution } from "@/components/insights/ThemeDistribution";
 import {
   EnhancedTooltip,
   topBottomTooltipRows,
@@ -25,7 +27,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
 const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
@@ -352,8 +354,10 @@ export default function Insights() {
               <TabsTrigger value="estados" className="gap-2"><Map size={14} /> Estados</TabsTrigger>
               <TabsTrigger value="divergencia" className="gap-2"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
+              <TabsTrigger value="temas" className="gap-2"><Tags size={14} /> Temas</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
               <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
+              <TabsTrigger value="ask-ai" className="gap-2"><MessageSquare size={14} /> IA</TabsTrigger>
               <TabsTrigger value="ao-vivo" className="gap-2"><Radio size={14} /> Ao Vivo</TabsTrigger>
             </TabsList>
 
@@ -539,9 +543,19 @@ export default function Insights() {
               <AlignmentSimulation allYearsDeputados={allYearsDeputados} allYearsSenadores={allYearsSenadores} />
             </TabsContent>
 
+            {/* Temas */}
+            <TabsContent value="temas">
+              <ThemeDistribution ano={ano} />
+            </TabsContent>
+
             {/* Projetos */}
             <TabsContent value="projetos">
               <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} ano={ano} />
+            </TabsContent>
+
+            {/* IA */}
+            <TabsContent value="ask-ai">
+              <AskAI context={`Ano: ${ano}, Deputados: ${stats.totalDep}, Senadores: ${stats.totalSen}, Média Câmara: ${stats.avgDep.toFixed(1)}%, Média Senado: ${stats.avgSen.toFixed(1)}%, Votações Câmara: ${stats.totalVotCam}, Votações Senado: ${stats.totalVotSen}`} />
             </TabsContent>
 
             {/* Ao Vivo */}
