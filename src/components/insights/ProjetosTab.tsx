@@ -524,8 +524,20 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                     <TableCell className="text-xs font-medium">{p.tipo}</TableCell>
                     <TableCell className="text-xs">{p.numero}</TableCell>
                     <TableCell className="text-xs max-w-[350px]">
-                      <div className="truncate" title={p.ementa !== "—" ? p.ementa : p.descricao}>
-                        {p.ementa !== "—" ? p.ementa : p.descricao}
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate" title={p.ementa !== "—" ? p.ementa : p.descricao}>
+                          {p.ementa !== "—" ? p.ementa : p.descricao}
+                        </span>
+                        {(() => {
+                          const tema = p.casa === "Câmara" ? camaraTemas.temaMap.get(p.idVotacao) : senadoTemas.temaMap.get(p.idVotacao);
+                          if (!tema) return null;
+                          return (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0 border-none" style={{
+                              backgroundColor: `${TEMA_COLORS[tema] || "#999"}20`,
+                              color: TEMA_COLORS[tema] || "#999",
+                            }}>{tema}</Badge>
+                          );
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">{p.dataFormatted}</TableCell>
