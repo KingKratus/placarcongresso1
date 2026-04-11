@@ -555,7 +555,7 @@ export default function Insights() {
 
             {/* IA */}
             <TabsContent value="ask-ai">
-              <AskAI context={`Ano: ${ano}, Deputados: ${stats.totalDep}, Senadores: ${stats.totalSen}, Média Câmara: ${stats.avgDep.toFixed(1)}%, Média Senado: ${stats.avgSen.toFixed(1)}%, Votações Câmara: ${stats.totalVotCam}, Votações Senado: ${stats.totalVotSen}`} />
+              <AskAI context={`Ano: ${ano}, Deputados: ${stats.totalDep}, Senadores: ${stats.totalSen}, Média Câmara: ${stats.avgDep.toFixed(1)}%, Média Senado: ${stats.avgSen.toFixed(1)}%, Votações Câmara: ${stats.totalVotCam}, Votações Senado: ${stats.totalVotSen}`} userId={user?.id} />
             </TabsContent>
 
             {/* Ao Vivo */}
