@@ -20,8 +20,8 @@ serve(async (req) => {
       });
     }
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const systemPrompt = `Você é um analista legislativo brasileiro especializado. Analise dados do Congresso Nacional (Câmara e Senado) com precisão e clareza.
 
@@ -35,13 +35,11 @@ ${context ? `\nDados adicionais do contexto atual:\n${context}` : ""}
 
 Responda sempre em português brasileiro. Use markdown para formatação. Seja objetivo e analítico.`;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://placarcongresso1.lovable.app",
-        "X-Title": "Monitor Legislativo",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
@@ -61,13 +59,13 @@ Responda sempre em português brasileiro. Use markdown para formatação. Seja o
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes no OpenRouter." }), {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
-      console.error("OpenRouter error:", response.status, t);
+      console.error("AI gateway error:", response.status, t);
       return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
