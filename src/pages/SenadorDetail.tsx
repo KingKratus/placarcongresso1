@@ -396,6 +396,20 @@ export default function SenadorDetail() {
                   <SelectItem value="nao">Não</SelectItem>
                 </SelectContent>
               </Select>
+
+              {availableThemes.length > 0 && (
+                <Select value={themeFilter} onValueChange={setThemeFilter}>
+                  <SelectTrigger className="w-36 h-9 text-xs">
+                    <SelectValue placeholder="Tema" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Temas</SelectItem>
+                    {availableThemes.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -439,7 +453,7 @@ export default function SenadorDetail() {
               {paginatedVotos.map((v) => {
                 const votacao = votacaoMap[v.codigo_sessao_votacao];
                 const depNorm = normalizeVotoLabel(v.voto);
-
+                const tema = temaMap[v.codigo_sessao_votacao];
                 const materiaLabel =
                   votacao?.sigla_materia && votacao?.numero_materia
                     ? `${votacao.sigla_materia} ${votacao.numero_materia}${
