@@ -500,6 +500,11 @@ export default function SenadorDetail() {
                               {votacao.resultado === "A" ? "Aprovada" : votacao.resultado === "R" ? "Rejeitada" : votacao.resultado}
                             </Badge>
                           )}
+                          {tema && (
+                            <Badge className={`text-[8px] px-1.5 py-0 border-0 ${THEME_COLORS[tema] || "bg-muted text-muted-foreground"}`}>
+                              {tema}
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
