@@ -41,6 +41,20 @@ type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
 type Votacao = Tables<"votacoes">;
 type Orientacao = Tables<"orientacoes">;
+type VotacaoTema = Tables<"votacao_temas">;
+
+const THEME_COLORS: Record<string, string> = {
+  "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "Social": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  "Segurança": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  "Educação": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  "Saúde": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  "Meio Ambiente": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  "Infraestrutura": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "Político-Institucional": "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+  "Trabalhista": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  "Tributário": "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+};
 
 const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
   Governo: { color: "text-governo", icon: UserCheck, bg: "bg-governo/10" },
@@ -86,6 +100,7 @@ export default function DeputadoDetail() {
   const [votos, setVotos] = useState<VotoDeputado[]>([]);
   const [votacoes, setVotacoes] = useState<Votacao[]>([]);
   const [orientacoes, setOrientacoes] = useState<Orientacao[]>([]);
+  const [temas, setTemas] = useState<VotacaoTema[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
 
@@ -93,6 +108,7 @@ export default function DeputadoDetail() {
   const [yearFilter, setYearFilter] = useState("all");
   const [voteTypeFilter, setVoteTypeFilter] = useState("all");
   const [alignmentFilter, setAlignmentFilter] = useState("all");
+  const [themeFilter, setThemeFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
@@ -128,6 +144,16 @@ export default function DeputadoDetail() {
         }
         setVotacoes(allVotacoes);
         setOrientacoes(allOrientacoes);
+
+        // Fetch themes
+        const votIds = allVotacoes.map(v => v.id_votacao);
+        const allTemas: VotacaoTema[] = [];
+        for (let i = 0; i < votIds.length; i += 100) {
+          const batch = votIds.slice(i, i + 100);
+          const { data: tData } = await supabase.from("votacao_temas").select("*").in("votacao_id", batch);
+          if (tData) allTemas.push(...tData);
+        }
+        setTemas(allTemas);
       }
 
       setLoading(false);
