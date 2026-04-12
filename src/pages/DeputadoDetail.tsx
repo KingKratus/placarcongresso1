@@ -499,6 +499,7 @@ export default function DeputadoDetail() {
                 const depNorm = normalizeVotoLabel(v.voto);
                 const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
                 const isAligned = depNorm && govNorm && depNorm === govNorm;
+                const tema = temaMap[v.id_votacao];
 
                 const camaraUrl = `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
 
@@ -543,6 +544,12 @@ export default function DeputadoDetail() {
                           )}
                           <Badge variant="outline" className="text-[8px] px-1 py-0">
                             {v.ano}
+                          </Badge>
+                          {tema && (
+                            <Badge className={`text-[8px] px-1.5 py-0 border-0 ${THEME_COLORS[tema] || "bg-muted text-muted-foreground"}`}>
+                              {tema}
+                            </Badge>
+                          )}
                           </Badge>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
                              <a
