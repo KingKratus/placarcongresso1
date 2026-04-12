@@ -173,6 +173,16 @@ export default function SenadorDetail() {
     return m;
   }, [votacoes]);
 
+  const temaMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    temas.forEach((t) => (m[t.votacao_id] = t.tema));
+    return m;
+  }, [temas]);
+
+  const availableThemes = useMemo(() => {
+    return [...new Set(temas.map(t => t.tema))].sort();
+  }, [temas]);
+
   const filteredVotos = useMemo(() => {
     return votos.filter((v) => {
       if (yearFilter !== "all" && v.ano !== Number(yearFilter)) return false;
@@ -181,6 +191,11 @@ export default function SenadorDetail() {
         const norm = normalizeVotoLabel(v.voto);
         if (voteTypeFilter === "sim" && norm !== "sim") return false;
         if (voteTypeFilter === "nao" && norm !== "não") return false;
+      }
+
+      if (themeFilter !== "all") {
+        const tema = temaMap[v.codigo_sessao_votacao];
+        if (tema !== themeFilter) return false;
       }
 
       if (searchText.trim()) {
@@ -199,11 +214,11 @@ export default function SenadorDetail() {
 
       return true;
     });
-  }, [votos, yearFilter, voteTypeFilter, searchText, votacaoMap]);
+  }, [votos, yearFilter, voteTypeFilter, themeFilter, searchText, votacaoMap, temaMap]);
 
   useEffect(() => {
     setPage(0);
-  }, [yearFilter, voteTypeFilter, searchText]);
+  }, [yearFilter, voteTypeFilter, themeFilter, searchText]);
 
   const totalPages = Math.ceil(filteredVotos.length / ITEMS_PER_PAGE);
   const paginatedVotos = filteredVotos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
