@@ -137,6 +137,16 @@ export default function SenadorDetail() {
           if (data) allVotacoes.push(...data);
         }
         setVotacoes(allVotacoes);
+
+        // Fetch themes
+        const votIds = allVotacoes.map(v => v.codigo_sessao_votacao);
+        const allTemas: VotacaoTema[] = [];
+        for (let i = 0; i < votIds.length; i += 100) {
+          const batch = votIds.slice(i, i + 100);
+          const { data: tData } = await supabase.from("votacao_temas").select("*").in("votacao_id", batch);
+          if (tData) allTemas.push(...tData);
+        }
+        setTemas(allTemas);
       }
 
       setLoading(false);
