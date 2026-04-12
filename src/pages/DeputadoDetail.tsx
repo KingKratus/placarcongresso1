@@ -550,7 +550,6 @@ export default function DeputadoDetail() {
                               {tema}
                             </Badge>
                           )}
-                          </Badge>
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
                              <a
                                href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + (votacao.proposicao_ano ? "/" + votacao.proposicao_ano : ""))}`}
