@@ -439,6 +439,20 @@ export default function DeputadoDetail() {
                   <SelectItem value="desalinhado">Desalinhado</SelectItem>
                 </SelectContent>
               </Select>
+
+              {availableThemes.length > 0 && (
+                <Select value={themeFilter} onValueChange={setThemeFilter}>
+                  <SelectTrigger className="w-36 h-9 text-xs">
+                    <SelectValue placeholder="Tema" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Temas</SelectItem>
+                    {availableThemes.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardContent>
         </Card>
