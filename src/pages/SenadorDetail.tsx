@@ -40,6 +40,20 @@ import {
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
 type VotacaoSenado = Tables<"votacoes_senado">;
+type VotacaoTema = Tables<"votacao_temas">;
+
+const THEME_COLORS: Record<string, string> = {
+  "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "Social": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  "Segurança": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  "Educação": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  "Saúde": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  "Meio Ambiente": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  "Infraestrutura": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "Político-Institucional": "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+  "Trabalhista": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  "Tributário": "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+};
 
 const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
   Governo: { color: "text-governo", icon: UserCheck, bg: "bg-governo/10" },
@@ -84,11 +98,13 @@ export default function SenadorDetail() {
   const [analises, setAnalises] = useState<Analise[]>([]);
   const [votos, setVotos] = useState<VotoSenador[]>([]);
   const [votacoes, setVotacoes] = useState<VotacaoSenado[]>([]);
+  const [temas, setTemas] = useState<VotacaoTema[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
 
   const [yearFilter, setYearFilter] = useState("all");
   const [voteTypeFilter, setVoteTypeFilter] = useState("all");
+  const [themeFilter, setThemeFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
