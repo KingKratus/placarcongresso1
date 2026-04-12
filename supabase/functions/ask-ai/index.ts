@@ -9,7 +9,7 @@ const corsHeaders = {
 
 async function fetchDataContext(): Promise<string> {
   const url = Deno.env.get("SUPABASE_URL")!;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const key = Deno.env.get("SUPABASE_ANON_KEY")!;
   const sb = createClient(url, key);
 
   const [camara, senado, temas, orientacoes] = await Promise.all([
