@@ -40,6 +40,20 @@ import {
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
 type VotacaoSenado = Tables<"votacoes_senado">;
+type VotacaoTema = Tables<"votacao_temas">;
+
+const THEME_COLORS: Record<string, string> = {
+  "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "Social": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  "Segurança": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  "Educação": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  "Saúde": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  "Meio Ambiente": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  "Infraestrutura": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "Político-Institucional": "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+  "Trabalhista": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  "Tributário": "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+};
 
 const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
   Governo: { color: "text-governo", icon: UserCheck, bg: "bg-governo/10" },
@@ -84,11 +98,13 @@ export default function SenadorDetail() {
   const [analises, setAnalises] = useState<Analise[]>([]);
   const [votos, setVotos] = useState<VotoSenador[]>([]);
   const [votacoes, setVotacoes] = useState<VotacaoSenado[]>([]);
+  const [temas, setTemas] = useState<VotacaoTema[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
 
   const [yearFilter, setYearFilter] = useState("all");
   const [voteTypeFilter, setVoteTypeFilter] = useState("all");
+  const [themeFilter, setThemeFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
@@ -121,6 +137,16 @@ export default function SenadorDetail() {
           if (data) allVotacoes.push(...data);
         }
         setVotacoes(allVotacoes);
+
+        // Fetch themes
+        const votIds = allVotacoes.map(v => v.codigo_sessao_votacao);
+        const allTemas: VotacaoTema[] = [];
+        for (let i = 0; i < votIds.length; i += 100) {
+          const batch = votIds.slice(i, i + 100);
+          const { data: tData } = await supabase.from("votacao_temas").select("*").in("votacao_id", batch);
+          if (tData) allTemas.push(...tData);
+        }
+        setTemas(allTemas);
       }
 
       setLoading(false);
@@ -147,6 +173,16 @@ export default function SenadorDetail() {
     return m;
   }, [votacoes]);
 
+  const temaMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    temas.forEach((t) => (m[t.votacao_id] = t.tema));
+    return m;
+  }, [temas]);
+
+  const availableThemes = useMemo(() => {
+    return [...new Set(temas.map(t => t.tema))].sort();
+  }, [temas]);
+
   const filteredVotos = useMemo(() => {
     return votos.filter((v) => {
       if (yearFilter !== "all" && v.ano !== Number(yearFilter)) return false;
@@ -155,6 +191,11 @@ export default function SenadorDetail() {
         const norm = normalizeVotoLabel(v.voto);
         if (voteTypeFilter === "sim" && norm !== "sim") return false;
         if (voteTypeFilter === "nao" && norm !== "não") return false;
+      }
+
+      if (themeFilter !== "all") {
+        const tema = temaMap[v.codigo_sessao_votacao];
+        if (tema !== themeFilter) return false;
       }
 
       if (searchText.trim()) {
@@ -173,11 +214,11 @@ export default function SenadorDetail() {
 
       return true;
     });
-  }, [votos, yearFilter, voteTypeFilter, searchText, votacaoMap]);
+  }, [votos, yearFilter, voteTypeFilter, themeFilter, searchText, votacaoMap, temaMap]);
 
   useEffect(() => {
     setPage(0);
-  }, [yearFilter, voteTypeFilter, searchText]);
+  }, [yearFilter, voteTypeFilter, themeFilter, searchText]);
 
   const totalPages = Math.ceil(filteredVotos.length / ITEMS_PER_PAGE);
   const paginatedVotos = filteredVotos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
@@ -355,6 +396,20 @@ export default function SenadorDetail() {
                   <SelectItem value="nao">Não</SelectItem>
                 </SelectContent>
               </Select>
+
+              {availableThemes.length > 0 && (
+                <Select value={themeFilter} onValueChange={setThemeFilter}>
+                  <SelectTrigger className="w-36 h-9 text-xs">
+                    <SelectValue placeholder="Tema" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Temas</SelectItem>
+                    {availableThemes.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -398,7 +453,7 @@ export default function SenadorDetail() {
               {paginatedVotos.map((v) => {
                 const votacao = votacaoMap[v.codigo_sessao_votacao];
                 const depNorm = normalizeVotoLabel(v.voto);
-
+                const tema = temaMap[v.codigo_sessao_votacao];
                 const materiaLabel =
                   votacao?.sigla_materia && votacao?.numero_materia
                     ? `${votacao.sigla_materia} ${votacao.numero_materia}${
@@ -443,6 +498,11 @@ export default function SenadorDetail() {
                               className="text-[9px]"
                             >
                               {votacao.resultado === "A" ? "Aprovada" : votacao.resultado === "R" ? "Rejeitada" : votacao.resultado}
+                            </Badge>
+                          )}
+                          {tema && (
+                            <Badge className={`text-[8px] px-1.5 py-0 border-0 ${THEME_COLORS[tema] || "bg-muted text-muted-foreground"}`}>
+                              {tema}
                             </Badge>
                           )}
                         </div>

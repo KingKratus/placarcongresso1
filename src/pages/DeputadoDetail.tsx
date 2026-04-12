@@ -41,6 +41,20 @@ type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
 type Votacao = Tables<"votacoes">;
 type Orientacao = Tables<"orientacoes">;
+type VotacaoTema = Tables<"votacao_temas">;
+
+const THEME_COLORS: Record<string, string> = {
+  "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "Social": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  "Segurança": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  "Educação": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  "Saúde": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  "Meio Ambiente": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  "Infraestrutura": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "Político-Institucional": "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
+  "Trabalhista": "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  "Tributário": "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+};
 
 const classConfig: Record<string, { color: string; icon: any; bg: string }> = {
   Governo: { color: "text-governo", icon: UserCheck, bg: "bg-governo/10" },
@@ -86,6 +100,7 @@ export default function DeputadoDetail() {
   const [votos, setVotos] = useState<VotoDeputado[]>([]);
   const [votacoes, setVotacoes] = useState<Votacao[]>([]);
   const [orientacoes, setOrientacoes] = useState<Orientacao[]>([]);
+  const [temas, setTemas] = useState<VotacaoTema[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
 
@@ -93,6 +108,7 @@ export default function DeputadoDetail() {
   const [yearFilter, setYearFilter] = useState("all");
   const [voteTypeFilter, setVoteTypeFilter] = useState("all");
   const [alignmentFilter, setAlignmentFilter] = useState("all");
+  const [themeFilter, setThemeFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
@@ -128,6 +144,16 @@ export default function DeputadoDetail() {
         }
         setVotacoes(allVotacoes);
         setOrientacoes(allOrientacoes);
+
+        // Fetch themes
+        const votIds = allVotacoes.map(v => v.id_votacao);
+        const allTemas: VotacaoTema[] = [];
+        for (let i = 0; i < votIds.length; i += 100) {
+          const batch = votIds.slice(i, i + 100);
+          const { data: tData } = await supabase.from("votacao_temas").select("*").in("votacao_id", batch);
+          if (tData) allTemas.push(...tData);
+        }
+        setTemas(allTemas);
       }
 
       setLoading(false);
@@ -163,20 +189,27 @@ export default function DeputadoDetail() {
     return m;
   }, [orientacoes]);
 
+  const temaMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    temas.forEach((t) => (m[t.votacao_id] = t.tema));
+    return m;
+  }, [temas]);
+
+  const availableThemes = useMemo(() => {
+    return [...new Set(temas.map(t => t.tema))].sort();
+  }, [temas]);
+
   // Apply filters
   const filteredVotos = useMemo(() => {
     return votos.filter((v) => {
-      // Year filter
       if (yearFilter !== "all" && v.ano !== Number(yearFilter)) return false;
 
-      // Vote type filter
       if (voteTypeFilter !== "all") {
         const norm = normalizeVotoLabel(v.voto);
         if (voteTypeFilter === "sim" && norm !== "sim") return false;
         if (voteTypeFilter === "nao" && norm !== "não") return false;
       }
 
-      // Alignment filter
       if (alignmentFilter !== "all") {
         const depNorm = normalizeVotoLabel(v.voto);
         const govOrient = govOrientMap[v.id_votacao];
@@ -186,7 +219,11 @@ export default function DeputadoDetail() {
         if (alignmentFilter === "desalinhado" && (isAligned || !govNorm)) return false;
       }
 
-      // Search text
+      if (themeFilter !== "all") {
+        const tema = temaMap[v.id_votacao];
+        if (tema !== themeFilter) return false;
+      }
+
       if (searchText.trim()) {
         const votacao = votacaoMap[v.id_votacao];
         const haystack = [
@@ -203,12 +240,12 @@ export default function DeputadoDetail() {
 
       return true;
     });
-  }, [votos, yearFilter, voteTypeFilter, alignmentFilter, searchText, govOrientMap, votacaoMap]);
+  }, [votos, yearFilter, voteTypeFilter, alignmentFilter, themeFilter, searchText, govOrientMap, votacaoMap, temaMap]);
 
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [yearFilter, voteTypeFilter, alignmentFilter, searchText]);
+  }, [yearFilter, voteTypeFilter, alignmentFilter, themeFilter, searchText]);
 
   const totalPages = Math.ceil(filteredVotos.length / ITEMS_PER_PAGE);
   const paginatedVotos = filteredVotos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
@@ -402,6 +439,20 @@ export default function DeputadoDetail() {
                   <SelectItem value="desalinhado">Desalinhado</SelectItem>
                 </SelectContent>
               </Select>
+
+              {availableThemes.length > 0 && (
+                <Select value={themeFilter} onValueChange={setThemeFilter}>
+                  <SelectTrigger className="w-36 h-9 text-xs">
+                    <SelectValue placeholder="Tema" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Temas</SelectItem>
+                    {availableThemes.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -448,6 +499,7 @@ export default function DeputadoDetail() {
                 const depNorm = normalizeVotoLabel(v.voto);
                 const govNorm = govOrient ? normalizeVotoLabel(govOrient) : null;
                 const isAligned = depNorm && govNorm && depNorm === govNorm;
+                const tema = temaMap[v.id_votacao];
 
                 const camaraUrl = `https://www.camara.leg.br/internet/votacao/mostraVotacao.asp?ideVotacao=${v.id_votacao}`;
 
@@ -493,6 +545,11 @@ export default function DeputadoDetail() {
                           <Badge variant="outline" className="text-[8px] px-1 py-0">
                             {v.ano}
                           </Badge>
+                          {tema && (
+                            <Badge className={`text-[8px] px-1.5 py-0 border-0 ${THEME_COLORS[tema] || "bg-muted text-muted-foreground"}`}>
+                              {tema}
+                            </Badge>
+                          )}
                           {votacao?.proposicao_tipo && votacao?.proposicao_numero && (
                              <a
                                href={`https://www.camara.leg.br/busca-portal/proposicoes/pesquisa-simplificada?q=${encodeURIComponent(votacao.proposicao_tipo + " " + votacao.proposicao_numero + (votacao.proposicao_ano ? "/" + votacao.proposicao_ano : ""))}`}
