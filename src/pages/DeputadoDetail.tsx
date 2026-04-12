@@ -189,20 +189,27 @@ export default function DeputadoDetail() {
     return m;
   }, [orientacoes]);
 
+  const temaMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    temas.forEach((t) => (m[t.votacao_id] = t.tema));
+    return m;
+  }, [temas]);
+
+  const availableThemes = useMemo(() => {
+    return [...new Set(temas.map(t => t.tema))].sort();
+  }, [temas]);
+
   // Apply filters
   const filteredVotos = useMemo(() => {
     return votos.filter((v) => {
-      // Year filter
       if (yearFilter !== "all" && v.ano !== Number(yearFilter)) return false;
 
-      // Vote type filter
       if (voteTypeFilter !== "all") {
         const norm = normalizeVotoLabel(v.voto);
         if (voteTypeFilter === "sim" && norm !== "sim") return false;
         if (voteTypeFilter === "nao" && norm !== "não") return false;
       }
 
-      // Alignment filter
       if (alignmentFilter !== "all") {
         const depNorm = normalizeVotoLabel(v.voto);
         const govOrient = govOrientMap[v.id_votacao];
@@ -212,7 +219,11 @@ export default function DeputadoDetail() {
         if (alignmentFilter === "desalinhado" && (isAligned || !govNorm)) return false;
       }
 
-      // Search text
+      if (themeFilter !== "all") {
+        const tema = temaMap[v.id_votacao];
+        if (tema !== themeFilter) return false;
+      }
+
       if (searchText.trim()) {
         const votacao = votacaoMap[v.id_votacao];
         const haystack = [
@@ -229,12 +240,12 @@ export default function DeputadoDetail() {
 
       return true;
     });
-  }, [votos, yearFilter, voteTypeFilter, alignmentFilter, searchText, govOrientMap, votacaoMap]);
+  }, [votos, yearFilter, voteTypeFilter, alignmentFilter, themeFilter, searchText, govOrientMap, votacaoMap, temaMap]);
 
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [yearFilter, voteTypeFilter, alignmentFilter, searchText]);
+  }, [yearFilter, voteTypeFilter, alignmentFilter, themeFilter, searchText]);
 
   const totalPages = Math.ceil(filteredVotos.length / ITEMS_PER_PAGE);
   const paginatedVotos = filteredVotos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
