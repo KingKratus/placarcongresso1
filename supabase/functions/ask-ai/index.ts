@@ -12,62 +12,168 @@ async function fetchDataContext(): Promise<string> {
   const key = Deno.env.get("SUPABASE_ANON_KEY")!;
   const sb = createClient(url, key);
 
-  const [camara, senado, temas, orientacoes] = await Promise.all([
-    sb.from("analises_deputados").select("deputado_nome, deputado_partido, deputado_uf, classificacao, score, total_votos, ano").order("score", { ascending: false }).limit(500),
-    sb.from("analises_senadores").select("senador_nome, senador_partido, senador_uf, classificacao, score, total_votos, ano").order("score", { ascending: false }).limit(300),
-    sb.from("votacao_temas").select("tema, casa, ano").limit(2000),
-    sb.from("orientacoes").select("sigla_orgao_politico, orientacao_voto").limit(100),
+  const [camara, senado, temas, votacoesCamara, votacoesSenado] = await Promise.all([
+    sb.from("analises_deputados")
+      .select("deputado_nome, deputado_partido, deputado_uf, classificacao, score, total_votos, votos_alinhados, ano")
+      .order("score", { ascending: false }).limit(800),
+    sb.from("analises_senadores")
+      .select("senador_nome, senador_partido, senador_uf, classificacao, score, total_votos, votos_alinhados, ano")
+      .order("score", { ascending: false }).limit(500),
+    sb.from("votacao_temas").select("tema, casa, ano").limit(3000),
+    sb.from("votacoes")
+      .select("id_votacao, descricao, proposicao_tipo, proposicao_numero, proposicao_ementa, ano, data, sigla_orgao")
+      .order("data", { ascending: false }).limit(200),
+    sb.from("votacoes_senado")
+      .select("codigo_sessao_votacao, descricao, sigla_materia, numero_materia, ementa, resultado, ano, data")
+      .order("data", { ascending: false }).limit(200),
   ]);
 
-  // Summarize by party
-  const partyStats: Record<string, { scores: number[]; count: number; class: Record<string, number> }> = {};
-  for (const d of camara.data || []) {
-    const p = d.deputado_partido || "?";
-    if (!partyStats[p]) partyStats[p] = { scores: [], count: 0, class: {} };
-    partyStats[p].scores.push(Number(d.score));
-    partyStats[p].count++;
-    partyStats[p].class[d.classificacao] = (partyStats[p].class[d.classificacao] || 0) + 1;
-  }
+  const camaraData = camara.data || [];
+  const senadoData = senado.data || [];
+  const temasData = temas.data || [];
 
-  const partySummary = Object.entries(partyStats)
-    .map(([p, s]) => {
-      const avg = (s.scores.reduce((a, b) => a + b, 0) / s.scores.length).toFixed(1);
-      const mainClass = Object.entries(s.class).sort((a, b) => b[1] - a[1])[0]?.[0] || "?";
-      return `${p}: ${avg}% média, ${s.count} dep., maioria ${mainClass}`;
-    })
-    .join("\n");
+  // All years
+  const allYears = [...new Set([
+    ...camaraData.map(d => d.ano),
+    ...senadoData.map(d => d.ano),
+  ])].sort();
 
-  // Theme summary
-  const themeCounts: Record<string, number> = {};
-  for (const t of temas.data || []) {
-    themeCounts[t.tema] = (themeCounts[t.tema] || 0) + 1;
-  }
-  const themeSummary = Object.entries(themeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, c]) => `${t}: ${c} votações`)
-    .join(", ");
+  // Per-year party stats (Câmara)
+  const yearPartyBlocks: string[] = [];
+  for (const year of allYears) {
+    const yearDeps = camaraData.filter(d => d.ano === year);
+    const yearSens = senadoData.filter(s => s.ano === year);
+    if (yearDeps.length === 0 && yearSens.length === 0) continue;
 
-  // Years available
-  const years = [...new Set((camara.data || []).map(d => d.ano))].sort();
+    // Party aggregation for this year
+    const ps: Record<string, { scores: number[]; count: number; cls: Record<string, number>; votos: number }> = {};
+    for (const d of yearDeps) {
+      const p = d.deputado_partido || "?";
+      if (!ps[p]) ps[p] = { scores: [], count: 0, cls: {}, votos: 0 };
+      ps[p].scores.push(Number(d.score));
+      ps[p].count++;
+      ps[p].votos += Number(d.total_votos);
+      ps[p].cls[d.classificacao] = (ps[p].cls[d.classificacao] || 0) + 1;
+    }
 
-  return `
-DADOS REAIS DO BANCO DE DADOS (use para responder):
+    const partySummary = Object.entries(ps)
+      .sort((a, b) => {
+        const avgA = a[1].scores.reduce((x, y) => x + y, 0) / a[1].scores.length;
+        const avgB = b[1].scores.reduce((x, y) => x + y, 0) / b[1].scores.length;
+        return avgB - avgA;
+      })
+      .map(([p, s]) => {
+        const avg = (s.scores.reduce((a, b) => a + b, 0) / s.scores.length).toFixed(1);
+        const mainClass = Object.entries(s.cls).sort((a, b) => b[1] - a[1])[0]?.[0] || "?";
+        return `  ${p}: ${avg}% média, ${s.count} dep., ${s.votos} votos totais, maioria ${mainClass}`;
+      })
+      .join("\n");
 
-Anos disponíveis: ${years.join(", ")}
+    const top5Deps = yearDeps.slice(0, 5)
+      .map(d => `  - ${d.deputado_nome} (${d.deputado_partido}/${d.deputado_uf}): ${Number(d.score).toFixed(1)}% alinhamento, ${d.total_votos} votos`)
+      .join("\n");
 
-Resumo por partido (Câmara):
+    const bottom5Deps = [...yearDeps].sort((a, b) => Number(a.score) - Number(b.score)).slice(0, 5)
+      .map(d => `  - ${d.deputado_nome} (${d.deputado_partido}/${d.deputado_uf}): ${Number(d.score).toFixed(1)}% alinhamento`)
+      .join("\n");
+
+    const top5Sens = yearSens.slice(0, 5)
+      .map(s => `  - ${s.senador_nome} (${s.senador_partido}/${s.senador_uf}): ${Number(s.score).toFixed(1)}% alinhamento, ${s.total_votos} votos`)
+      .join("\n");
+
+    const bottom5Sens = [...yearSens].sort((a, b) => Number(a.score) - Number(b.score)).slice(0, 5)
+      .map(s => `  - ${s.senador_nome} (${s.senador_partido}/${s.senador_uf}): ${Number(s.score).toFixed(1)}% alinhamento`)
+      .join("\n");
+
+    // Classification distribution
+    const clsDist: Record<string, number> = {};
+    for (const d of yearDeps) clsDist[d.classificacao] = (clsDist[d.classificacao] || 0) + 1;
+    const clsSummary = Object.entries(clsDist).map(([c, n]) => `${c}: ${n}`).join(", ");
+
+    // Theme distribution for this year
+    const yearTemas = temasData.filter(t => t.ano === year);
+    const tc: Record<string, number> = {};
+    for (const t of yearTemas) tc[t.tema] = (tc[t.tema] || 0) + 1;
+    const themeSummary = Object.entries(tc).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}: ${c}`).join(", ");
+
+    yearPartyBlocks.push(`
+═══ ANO ${year} ═══
+Câmara: ${yearDeps.length} deputados analisados | Senado: ${yearSens.length} senadores
+Classificação Câmara: ${clsSummary}
+
+Partidos (Câmara, ordenados por governismo):
 ${partySummary}
 
-Top 10 deputados mais governistas:
-${(camara.data || []).slice(0, 10).map(d => `- ${d.deputado_nome} (${d.deputado_partido}/${d.deputado_uf}): ${Number(d.score).toFixed(1)}% - ${d.classificacao}`).join("\n")}
+Top 5 mais governistas (Câmara):
+${top5Deps}
 
-Top 10 senadores mais governistas:
-${(senado.data || []).slice(0, 10).map(s => `- ${s.senador_nome} (${s.senador_partido}/${s.senador_uf}): ${Number(s.score).toFixed(1)}% - ${s.classificacao}`).join("\n")}
+Top 5 mais oposicionistas (Câmara):
+${bottom5Deps}
 
-Distribuição temática das votações: ${themeSummary}
+Top 5 mais governistas (Senado):
+${top5Sens}
 
-Total deputados analisados: ${(camara.data || []).length}
-Total senadores analisados: ${(senado.data || []).length}
+Top 5 mais oposicionistas (Senado):
+${bottom5Sens}
+
+Temas das votações em ${year}: ${themeSummary || "Sem dados temáticos"}
+`);
+  }
+
+  // Recent votacoes (Câmara)
+  const recentVotCamara = (votacoesCamara.data || []).slice(0, 15)
+    .map(v => `  - [${v.ano}] ${v.proposicao_tipo || ""} ${v.proposicao_numero || ""}: ${(v.proposicao_ementa || v.descricao || "").slice(0, 120)}`)
+    .join("\n");
+
+  // Recent votacoes (Senado)
+  const recentVotSenado = (votacoesSenado.data || []).slice(0, 15)
+    .map(v => `  - [${v.ano}] ${v.sigla_materia || ""} ${v.numero_materia || ""}: ${(v.ementa || v.descricao || "").slice(0, 120)} → ${v.resultado || "?"}`)
+    .join("\n");
+
+  // Cross-year party evolution
+  const partyEvolution: Record<string, Record<number, number>> = {};
+  for (const d of camaraData) {
+    const p = d.deputado_partido || "?";
+    if (!partyEvolution[p]) partyEvolution[p] = {};
+    if (!partyEvolution[p][d.ano]) partyEvolution[p][d.ano] = 0;
+    partyEvolution[p][d.ano] += Number(d.score);
+  }
+  const partyCounts: Record<string, Record<number, number>> = {};
+  for (const d of camaraData) {
+    const p = d.deputado_partido || "?";
+    if (!partyCounts[p]) partyCounts[p] = {};
+    partyCounts[p][d.ano] = (partyCounts[p][d.ano] || 0) + 1;
+  }
+
+  const majorParties = Object.entries(partyCounts)
+    .filter(([, yc]) => Object.values(yc).some(c => c >= 5))
+    .map(([p]) => p);
+
+  const evolutionLines = majorParties.map(p => {
+    const yearAvgs = allYears
+      .filter(y => partyCounts[p]?.[y])
+      .map(y => `${y}: ${(partyEvolution[p][y] / partyCounts[p][y]).toFixed(1)}%`);
+    return `  ${p}: ${yearAvgs.join(" → ")}`;
+  }).join("\n");
+
+  return `
+DADOS REAIS DO BANCO DE DADOS DO CONGRESSO NACIONAL BRASILEIRO
+(Use SEMPRE estes dados para embasar suas respostas)
+
+Anos disponíveis: ${allYears.join(", ")}
+Total deputados analisados: ${camaraData.length}
+Total senadores analisados: ${senadoData.length}
+
+${yearPartyBlocks.join("\n")}
+
+═══ EVOLUÇÃO DO GOVERNISMO POR PARTIDO (médias anuais) ═══
+${evolutionLines}
+
+═══ VOTAÇÕES RECENTES DA CÂMARA ═══
+${recentVotCamara}
+
+═══ VOTAÇÕES RECENTES DO SENADO ═══
+${recentVotSenado}
 `;
 }
 
@@ -88,7 +194,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Fetch real data context from database
     let dataContext = "";
     try {
       dataContext = await fetchDataContext();
@@ -96,19 +201,30 @@ serve(async (req) => {
       console.error("Failed to fetch data context:", e);
     }
 
-    const systemPrompt = `Você é um analista legislativo brasileiro especializado com acesso a dados REAIS do Congresso Nacional. Use SEMPRE os dados fornecidos abaixo para embasar suas respostas.
+    const systemPrompt = `Você é o **Placar do Congresso AI**, um analista legislativo brasileiro especializado com acesso a dados REAIS e atualizados do Congresso Nacional (Câmara dos Deputados e Senado Federal).
 
 ${dataContext}
 
-${context ? `\nContexto adicional:\n${context}` : ""}
+${context ? `\nContexto adicional do usuário:\n${context}` : ""}
 
-REGRAS:
-- Responda SEMPRE em português brasileiro
-- Use markdown para formatação (negrito, listas, tabelas)
-- Cite dados específicos (nomes, partidos, scores) quando disponíveis
-- Seja preciso e analítico, nunca invente dados
-- Se não tiver dados suficientes, diga claramente
-- Use emojis para tornar a resposta mais visual (📊 📈 🏛️ etc)`;
+CAPACIDADES:
+- Analisar alinhamento de parlamentares com o governo por ano (2023-2026)
+- Comparar partidos e sua evolução ao longo dos anos
+- Identificar tendências de governismo/oposição
+- Analisar distribuição temática das votações
+- Detalhar votações específicas recentes
+- Comparar Câmara vs Senado
+
+REGRAS OBRIGATÓRIAS:
+1. Responda SEMPRE em português brasileiro
+2. Use markdown para formatação: **negrito**, listas, tabelas quando apropriado
+3. Cite dados específicos (nomes, partidos, scores, anos) — NUNCA invente dados
+4. Quando o usuário perguntar sobre um ano específico, use os dados daquele ano
+5. Se não tiver dados suficientes para responder, diga claramente o que falta
+6. Use emojis para tornar a resposta mais visual: 📊 📈 🏛️ ⚖️ 🗳️ 🔍
+7. Ao comparar anos, mostre a evolução numérica com diferenças percentuais
+8. Sempre contextualize: explique o que significa "governista" (vota alinhado com orientação do governo)
+9. Mantenha tom profissional mas acessível — o público são cidadãos interessados em política`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
