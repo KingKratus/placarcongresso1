@@ -241,6 +241,48 @@ export type Database = {
         }
         Relationships: []
       }
+      proposicoes_parlamentares: {
+        Row: {
+          ano: number
+          casa: string
+          created_at: string
+          data_apresentacao: string | null
+          ementa: string | null
+          id: string
+          numero: string
+          parlamentar_id: number
+          tema: string | null
+          tipo: string
+          url: string | null
+        }
+        Insert: {
+          ano: number
+          casa: string
+          created_at?: string
+          data_apresentacao?: string | null
+          ementa?: string | null
+          id?: string
+          numero: string
+          parlamentar_id: number
+          tema?: string | null
+          tipo: string
+          url?: string | null
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          created_at?: string
+          data_apresentacao?: string | null
+          ementa?: string | null
+          id?: string
+          numero?: string
+          parlamentar_id?: number
+          tema?: string | null
+          tipo?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           casa: string
