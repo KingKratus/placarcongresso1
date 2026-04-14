@@ -36,6 +36,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProposicoesTab } from "@/components/ProposicoesTab";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
@@ -323,6 +325,7 @@ export default function DeputadoDetail() {
       <main className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3">
+
           <Card className={cfg.bg}>
             <CardContent className="p-4 text-center">
               <p className="text-2xl font-black">{Number(currentAnalise.score).toFixed(1)}%</p>
@@ -457,7 +460,14 @@ export default function DeputadoDetail() {
           </CardContent>
         </Card>
 
-        {/* Voting list with pagination */}
+        {/* Tabs: Votações and Proposições */}
+        <Tabs defaultValue="votacoes" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="votacoes" className="text-xs">Votações ({filteredVotos.length})</TabsTrigger>
+            <TabsTrigger value="proposicoes" className="text-xs">Proposições Legislativas</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="votacoes">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -617,6 +627,12 @@ export default function DeputadoDetail() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="proposicoes">
+            <ProposicoesTab parlamentarId={depId} casa="camara" nome={currentAnalise.deputado_nome} />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, Users, LogIn, Key, Copy, Check, Trash2, Plus, ExternalLink } from "lucide-react";
+import { Heart, Users, LogIn, Key, Copy, Check, Trash2, Plus, ExternalLink, Bot } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { DeputyCard } from "@/components/DeputyCard";
 import { SenadorCard } from "@/components/SenadorCard";
@@ -34,6 +34,8 @@ const Perfil = () => {
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
+  const [customAiKey, setCustomAiKey] = useState(() => localStorage.getItem("custom_ai_key") || "");
+  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem("custom_ai_provider") || "openai");
 
   const fetchApiKeys = useCallback(async () => {
     if (!user) return;
@@ -224,6 +226,52 @@ const Perfil = () => {
                 <p className="mt-1"><strong>Tipos:</strong> <code className="bg-muted px-1 rounded">analises</code> | <code className="bg-muted px-1 rounded">votacoes</code> | <code className="bg-muted px-1 rounded">votos</code></p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Custom AI Key */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+              <Bot size={16} className="text-primary" /> Chave de IA Própria
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Use sua própria chave de API para fazer perguntas ilimitadas à IA sobre os dados públicos da plataforma.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <select
+                className="h-9 text-xs rounded-md border border-input bg-background px-3"
+                value={aiProvider}
+                onChange={(e) => {
+                  setAiProvider(e.target.value);
+                  localStorage.setItem("custom_ai_provider", e.target.value);
+                }}
+              >
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="google">Google (Gemini)</option>
+              </select>
+              <Input
+                type="password"
+                placeholder={aiProvider === "openai" ? "sk-..." : "AIza..."}
+                value={customAiKey}
+                onChange={(e) => setCustomAiKey(e.target.value)}
+                className="flex-1 h-9 text-sm font-mono"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  localStorage.setItem("custom_ai_key", customAiKey);
+                  toast({ title: customAiKey ? "Chave salva!" : "Chave removida", description: customAiKey ? "O chat usará sua chave de IA." : "O chat voltará a usar o padrão." });
+                }}
+              >
+                Salvar
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              A chave é salva localmente no navegador e usada diretamente na edge function. Para remover, limpe o campo e salve.
+            </p>
           </CardContent>
         </Card>
 
