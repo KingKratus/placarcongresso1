@@ -36,6 +36,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProposicoesTab } from "@/components/ProposicoesTab";
 
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
@@ -414,7 +416,13 @@ export default function SenadorDetail() {
           </CardContent>
         </Card>
 
-        {/* Voting list */}
+        <Tabs defaultValue="votacoes" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="votacoes" className="text-xs">Votações ({filteredVotos.length})</TabsTrigger>
+            <TabsTrigger value="proposicoes" className="text-xs">Proposições Legislativas</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="votacoes">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -553,6 +561,12 @@ export default function SenadorDetail() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="proposicoes">
+            <ProposicoesTab parlamentarId={senId} casa="senado" nome={currentAnalise.senador_nome} />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
