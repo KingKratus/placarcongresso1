@@ -106,13 +106,21 @@ export function AskAI({ context, userId, floating }: Props) {
     let currentConvId = activeConvId;
 
     try {
+      const customAiKey = localStorage.getItem("custom_ai_key") || "";
+      const customAiProvider = localStorage.getItem("custom_ai_provider") || "openai";
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: updatedMessages, context }),
+        body: JSON.stringify({
+          messages: updatedMessages,
+          context,
+          custom_api_key: customAiKey || undefined,
+          custom_provider: customAiKey ? customAiProvider : undefined,
+        }),
       });
 
       if (!resp.ok || !resp.body) {
