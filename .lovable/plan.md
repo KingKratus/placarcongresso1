@@ -1,64 +1,82 @@
-
-
-# Plano: Melhorias Diversas - Insights, Mobile, IA e Temas
+# Plano: Proposições Legislativas com IA no Perfil do Parlamentar
 
 ## Resumo
 
-5 melhorias: (1) badges de tema nos gráficos Insights, (2) integração OpenRouter para análise/chat, (3) painel de distribuição temática com pizza, (4) busca sempre visível no mobile, (5) testes das funcionalidades existentes.
+Adicionar uma nova seção nas páginas de perfil de deputados e senadores que busca proposições legislativas (PL, PEC, PRC, PLP, etc.) da API oficial da Câmara/Senado, classifica tematicamente com IA, e gera insights automáticos por tema. A IA do chat flutuante tambem podera buscar proposicoes de parlamentares especificos.
 
-## 1. Badges de Tema nas Votações (Insights)
+## 1. Nova Edge Function: `fetch-proposicoes`
 
-Adicionar badges coloridos por tema na aba **Projetos** (`ProjetosTab.tsx`), onde as votações individuais são listadas. Usar o hook `useVotacaoTemas` para obter o mapa de temas e exibir um `Badge` colorido ao lado de cada votação.
+Cria uma edge function que busca proposicoes legislativas de um parlamentar via APIs publicas:
 
-- Criar mapa de cores por tema (Econômico = azul, Social = roxo, etc.)
-- Integrar `useVotacaoTemas` no `ProjetosTab`
-- Exibir badge ao lado da ementa de cada votação
+- **Camara**: `https://dadosabertos.camara.leg.br/api/v2/proposicoes?idDeputadoAutor={id}`
+- **Senado**: `https://legis.senado.leg.br/dadosabertos/materia/pesquisa/lista?codigoParticipante={id}`
 
-**Arquivo**: `src/components/insights/ProjetosTab.tsx`
+A function retorna as proposicoes ja classificadas tematicamente pela IA (Gemini Flash Lite), com cache no banco para evitar re-classificacao.
 
-## 2. Integração OpenRouter para Análise e Perguntas
+**Arquivo**: `supabase/functions/fetch-proposicoes/index.ts`
 
-Armazenar a chave OpenRouter como secret (`OPENROUTER_API_KEY`). Criar uma edge function `ask-ai` que aceita uma pergunta + contexto de dados legislativos e retorna análise via OpenRouter. No frontend, adicionar um componente de chat/perguntas na aba Insights.
+## 2. Nova Tabela: `proposicoes_parlamentares`
 
-- Solicitar secret via `add_secret`
-- Edge function: `supabase/functions/ask-ai/index.ts` — proxy para OpenRouter API
-- Componente frontend: input de pergunta + resposta com markdown
-- Integrar na página Insights como nova aba ou painel lateral
+Armazena proposicoes ja buscadas e classificadas como cache:
 
-**Arquivos**: `supabase/functions/ask-ai/index.ts` (novo), `src/components/insights/AskAI.tsx` (novo), `src/pages/Insights.tsx`
+- `parlamentar_id` (integer)
+- `casa` (text: camara/senado)
+- `tipo` (text: PL, PEC, PRC, etc.)
+- `numero` (text)
+- `ano` (integer)
+- `ementa` (text)
+- `tema` (text, classificado por IA)
+- `url` (text)
+- `data_apresentacao` (timestamp)
 
-## 3. Painel de Distribuição Temática (Pizza)
+RLS: publicamente legivel, insert/update apenas via service role.
 
-Adicionar nova aba "Temas" ou seção na aba Visão Geral com gráfico de pizza mostrando distribuição de temas das votações do ano selecionado. Usar `useVotacaoTemas` para obter os dados, com botão para classificar automaticamente se ainda não classificado.
+## 3. Nova Edge Function: `insights-proposicoes`
 
-- `PieChart` com as contagens por tema
-- Filtros Câmara/Senado
-- Botão "Classificar com IA" quando sem dados
+Recebe um `parlamentar_id` + `casa` e gera insights com Gemini Flash:
 
-**Arquivo**: `src/pages/Insights.tsx` (nova aba "Temas")
+- Resumo tematico das proposicoes
+- Areas de foco do parlamentar
+- Tendencias ao longo dos mandatos
+- Retorna texto markdown com a analise
 
-## 4. Busca Sempre Visível no Mobile
+**Arquivo**: `supabase/functions/insights-proposicoes/index.ts`
 
-Remover a condição `(!isMobile || filtersOpen)` apenas para o campo de busca. A busca ficará sempre visível, enquanto os filtros de Ano/Partido/Classificação continuam colapsáveis.
+## 4. UI: Aba "Proposicoes" no Perfil do Parlamentar
 
-- Extrair o input de busca para fora do bloco condicional
-- Manter os selects dentro do bloco colapsável
+Adiciona uma aba/secao nova em `DeputadoDetail.tsx` e `SenadorDetail.tsx`:
 
-**Arquivo**: `src/components/Navbar.tsx`
+- Listagem de proposicoes com badges tematicos coloridos
+- Filtros por tipo (PL, PEC, PRC, PLP), ano e tema
+- Busca textual na ementa
+- Botao "Gerar Insights com IA" que chama a edge function e exibe analise em markdown
+- Resumo estatistico: contagem por tipo e por tema (mini grafico de barras)
 
-## 5. Teste e Verificação
+## 5. Contexto do Chat Flutuante
 
-Verificar as funcionalidades existentes (Sankey, classificação temática, busca) via ferramentas de debug após implementação.
+Atualizar `ask-ai` para incluir proposicoes do parlamentar quando o usuario estiver no perfil:
 
-## Detalhes Técnicos
+- O `FloatingChat` passara contexto da pagina atual (id do parlamentar, casa)
+- A edge function buscara proposicoes da tabela cache para enriquecer o contexto
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/Navbar.tsx` | Busca sempre visível no mobile |
-| `src/components/insights/ProjetosTab.tsx` | Badges de tema |
-| `src/pages/Insights.tsx` | Nova aba Temas com pizza chart |
-| `supabase/functions/ask-ai/index.ts` | Novo — proxy OpenRouter |
-| `src/components/insights/AskAI.tsx` | Novo — componente de perguntas IA |
+## Detalhes Tecnicos
 
-**Nota de segurança**: A chave OpenRouter será armazenada como secret do projeto, acessível apenas via edge functions. Nunca exposta no frontend.
 
+| Componente      | Arquivo                                            | Mudanca                               |
+| --------------- | -------------------------------------------------- | ------------------------------------- |
+| Edge Function   | `supabase/functions/fetch-proposicoes/index.ts`    | Novo - busca + classifica proposicoes |
+| Edge Function   | `supabase/functions/insights-proposicoes/index.ts` | Novo - gera insights por IA           |
+| Migration       | `supabase/migrations/...`                          | Tabela `proposicoes_parlamentares`    |
+| Deputado Detail | `src/pages/DeputadoDetail.tsx`                     | Nova secao Proposicoes com tabs       |
+| Senador Detail  | `src/pages/SenadorDetail.tsx`                      | Nova secao Proposicoes com tabs       |
+| Floating Chat   | `src/components/FloatingChat.tsx`                  | Passa contexto da pagina atual        |
+| Ask AI          | `supabase/functions/ask-ai/index.ts`               | Aceita contexto de parlamentar        |
+
+
+**Modelo IA**: Gemini 2.5 Flash Lite para classificacao tematica (rapido/barato), Gemini 2.5 Flash para insights narrativos.
+
+&nbsp;
+
+&nbsp;
+
+Add opção de colocar chave API para a pessoa usar sua própria IA pra fazer perguntas sobre os dados públicos da plataforma. 
