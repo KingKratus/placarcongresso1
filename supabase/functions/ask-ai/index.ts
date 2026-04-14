@@ -183,7 +183,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, context } = await req.json();
+    const { messages, context, custom_api_key, custom_provider } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages array is required" }), {
         status: 400,
@@ -192,7 +192,7 @@ serve(async (req) => {
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!LOVABLE_API_KEY && !custom_api_key) throw new Error("No API key available");
 
     let dataContext = "";
     try {
@@ -226,14 +226,35 @@ REGRAS OBRIGATÓRIAS:
 8. Sempre contextualize: explique o que significa "governista" (vota alinhado com orientação do governo)
 9. Mantenha tom profissional mas acessível — o público são cidadãos interessados em política`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Determine API endpoint and key
+    let apiUrl: string;
+    let apiKey: string;
+    let model: string;
+
+    if (custom_api_key) {
+      if (custom_provider === "google") {
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`;
+        apiKey = custom_api_key;
+        model = "gemini-2.5-flash";
+      } else {
+        apiUrl = "https://api.openai.com/v1/chat/completions";
+        apiKey = custom_api_key;
+        model = "gpt-4o-mini";
+      }
+    } else {
+      apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      apiKey = LOVABLE_API_KEY!;
+      model = "google/gemini-2.5-flash";
+    }
+
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages,
