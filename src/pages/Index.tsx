@@ -41,6 +41,8 @@ const Index = () => {
   const [bancadaFilter, setBancadaFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
+  const [alignParty, setAlignParty] = useState("all");
+  const [alignParlamentar, setAlignParlamentar] = useState("all");
 
   const legislatura = titulares ? 57 : undefined;
   const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);
@@ -77,6 +79,46 @@ const Index = () => {
     return map;
   }, [analises]);
 
+  // Compute party average scores for comparison
+  const partyAvgMap = useMemo(() => {
+    const map: Record<string, { sum: number; count: number }> = {};
+    analises.forEach(a => {
+      const p = a.deputado_partido || "";
+      if (!map[p]) map[p] = { sum: 0, count: 0 };
+      map[p].sum += Number(a.score);
+      map[p].count++;
+    });
+    const result: Record<string, number> = {};
+    Object.entries(map).forEach(([p, v]) => { result[p] = v.sum / v.count; });
+    return result;
+  }, [analises]);
+
+  // Reference parliamentarian score
+  const refParlamentarScore = useMemo(() => {
+    if (alignParlamentar === "all") return null;
+    const a = analises.find(a => a.deputado_id === Number(alignParlamentar));
+    return a ? Number(a.score) : null;
+  }, [analises, alignParlamentar]);
+
+  // Compute effective score for a deputy (considering alignment filters)
+  const getEffectiveScore = (depId: number): number | null => {
+    const analise = analiseMap[depId];
+    if (!analise) return null;
+    const score = Number(analise.score);
+    
+    if (alignParty !== "all") {
+      const partyAvg = partyAvgMap[alignParty];
+      if (partyAvg !== undefined) {
+        // Similarity = 100 - |score - partyAvg|
+        return Math.max(0, 100 - Math.abs(score - partyAvg));
+      }
+    }
+    if (refParlamentarScore !== null) {
+      return Math.max(0, 100 - Math.abs(score - refParlamentarScore));
+    }
+    return score;
+  };
+
   const filteredDeputies = useMemo(() => {
     let result = deputados.filter((d) => {
       const matchName = d.nome.toLowerCase().includes(searchTerm.toLowerCase());
@@ -85,17 +127,26 @@ const Index = () => {
       const matchBancada = bancadaFilter === "all" || getBancada(d.siglaPartido) === bancadaFilter;
       const analise = analiseMap[d.id];
       const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
-      const score = analise ? Number(analise.score) : -1;
-      const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
+      const effScore = getEffectiveScore(d.id);
+      const matchScore = effScore === null || (effScore >= scoreRange[0] && effScore <= scoreRange[1]);
       return matchName && matchParty && matchUf && matchBancada && matchClass && matchScore;
     });
 
     result.sort((a, b) => {
       const aA = analiseMap[a.id];
       const bA = analiseMap[b.id];
+      const useEffective = alignParty !== "all" || alignParlamentar !== "all";
       switch (sortBy) {
-        case "score-desc": return (Number(bA?.score ?? -1)) - (Number(aA?.score ?? -1));
-        case "score-asc": return (Number(aA?.score ?? 999)) - (Number(bA?.score ?? 999));
+        case "score-desc": {
+          const aS = useEffective ? (getEffectiveScore(a.id) ?? -1) : Number(aA?.score ?? -1);
+          const bS = useEffective ? (getEffectiveScore(b.id) ?? -1) : Number(bA?.score ?? -1);
+          return bS - aS;
+        }
+        case "score-asc": {
+          const aS = useEffective ? (getEffectiveScore(a.id) ?? 999) : Number(aA?.score ?? 999);
+          const bS = useEffective ? (getEffectiveScore(b.id) ?? 999) : Number(bA?.score ?? 999);
+          return aS - bS;
+        }
         case "partido": return (a.siglaPartido || "").localeCompare(b.siglaPartido || "");
         case "uf": return (a.siglaUf || "").localeCompare(b.siglaUf || "");
         default: return a.nome.localeCompare(b.nome);
@@ -103,7 +154,7 @@ const Index = () => {
     });
 
     return result;
-  }, [deputados, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap]);
+  }, [deputados, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap, alignParty, alignParlamentar, partyAvgMap, refParlamentarScore]);
 
   const sidebarContent = (
     <>
@@ -191,6 +242,10 @@ const Index = () => {
                 onTitularesChange={setTitulares}
                 bancadaFilter={bancadaFilter}
                 onBancadaFilterChange={setBancadaFilter}
+                alignParty={alignParty}
+                onAlignPartyChange={setAlignParty}
+                alignParlamentar={alignParlamentar}
+                onAlignParlamentarChange={setAlignParlamentar}
               />
               <div className="flex items-center justify-between bg-card p-3 sm:p-4 rounded-xl border border-border">
                 <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
