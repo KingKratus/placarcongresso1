@@ -40,6 +40,8 @@ const Senado = () => {
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
   const [bancadaFilter, setBancadaFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [alignParty, setAlignParty] = useState("all");
+  const [alignParlamentar, setAlignParlamentar] = useState("all");
 
   const { senadores, partidos, loading: senLoading } = useSenadores();
   const { analises, loading: analLoading, syncing, error, syncSenadores, refetch } = useAnalisesSenado(ano);
@@ -75,6 +77,37 @@ const Senado = () => {
     return map;
   }, [analises]);
 
+  const partyAvgMap = useMemo(() => {
+    const map: Record<string, { sum: number; count: number }> = {};
+    analises.forEach(a => {
+      const p = a.senador_partido || "";
+      if (!map[p]) map[p] = { sum: 0, count: 0 };
+      map[p].sum += Number(a.score);
+      map[p].count++;
+    });
+    const result: Record<string, number> = {};
+    Object.entries(map).forEach(([p, v]) => { result[p] = v.sum / v.count; });
+    return result;
+  }, [analises]);
+
+  const refParlamentarScore = useMemo(() => {
+    if (alignParlamentar === "all") return null;
+    const a = analises.find(a => a.senador_id === Number(alignParlamentar));
+    return a ? Number(a.score) : null;
+  }, [analises, alignParlamentar]);
+
+  const getEffectiveScore = (senId: number): number | null => {
+    const analise = analiseMap[senId];
+    if (!analise) return null;
+    const score = Number(analise.score);
+    if (alignParty !== "all") {
+      const partyAvg = partyAvgMap[alignParty];
+      if (partyAvg !== undefined) return Math.max(0, 100 - Math.abs(score - partyAvg));
+    }
+    if (refParlamentarScore !== null) return Math.max(0, 100 - Math.abs(score - refParlamentarScore));
+    return score;
+  };
+
   const filteredSenadores = useMemo(() => {
     let result = senadores.filter((s) => {
       const matchName = s.nome.toLowerCase().includes(searchTerm.toLowerCase());
@@ -83,17 +116,26 @@ const Senado = () => {
       const matchBancada = bancadaFilter === "all" || getBancada(s.siglaPartido) === bancadaFilter;
       const analise = analiseMap[s.id];
       const matchClass = classFilter === "all" || analise?.classificacao === classFilter;
-      const score = analise ? Number(analise.score) : -1;
-      const matchScore = score < 0 || (score >= scoreRange[0] && score <= scoreRange[1]);
+      const effScore = getEffectiveScore(s.id);
+      const matchScore = effScore === null || (effScore >= scoreRange[0] && effScore <= scoreRange[1]);
       return matchName && matchParty && matchUf && matchBancada && matchClass && matchScore;
     });
 
     result.sort((a, b) => {
       const aA = analiseMap[a.id];
       const bA = analiseMap[b.id];
+      const useEffective = alignParty !== "all" || alignParlamentar !== "all";
       switch (sortBy) {
-        case "score-desc": return (Number(bA?.score ?? -1)) - (Number(aA?.score ?? -1));
-        case "score-asc": return (Number(aA?.score ?? 999)) - (Number(bA?.score ?? 999));
+        case "score-desc": {
+          const aS = useEffective ? (getEffectiveScore(a.id) ?? -1) : Number(aA?.score ?? -1);
+          const bS = useEffective ? (getEffectiveScore(b.id) ?? -1) : Number(bA?.score ?? -1);
+          return bS - aS;
+        }
+        case "score-asc": {
+          const aS = useEffective ? (getEffectiveScore(a.id) ?? 999) : Number(aA?.score ?? 999);
+          const bS = useEffective ? (getEffectiveScore(b.id) ?? 999) : Number(bA?.score ?? 999);
+          return aS - bS;
+        }
         case "partido": return (a.siglaPartido || "").localeCompare(b.siglaPartido || "");
         case "uf": return (a.siglaUf || "").localeCompare(b.siglaUf || "");
         default: return a.nome.localeCompare(b.nome);
@@ -101,7 +143,7 @@ const Senado = () => {
     });
 
     return result;
-  }, [senadores, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap]);
+  }, [senadores, searchTerm, partyFilter, ufFilter, bancadaFilter, classFilter, scoreRange, sortBy, analiseMap, alignParty, alignParlamentar, partyAvgMap, refParlamentarScore]);
 
   const partidosForNavbar = partidos.map((p, i) => ({ id: i, sigla: p.sigla, nome: p.sigla }));
 
@@ -190,6 +232,10 @@ const Senado = () => {
                 onSortByChange={setSortBy}
                 bancadaFilter={bancadaFilter}
                 onBancadaFilterChange={setBancadaFilter}
+                alignParty={alignParty}
+                onAlignPartyChange={setAlignParty}
+                alignParlamentar={alignParlamentar}
+                onAlignParlamentarChange={setAlignParlamentar}
               />
               <div className="flex items-center justify-between bg-card p-3 sm:p-4 rounded-xl border border-border">
                 <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">

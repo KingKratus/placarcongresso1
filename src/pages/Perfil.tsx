@@ -215,15 +215,116 @@ const Perfil = () => {
               </div>
             )}
 
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-              <h4 className="text-xs font-bold text-foreground mb-1 flex items-center gap-1">
-                <ExternalLink size={12} /> Como usar
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-4">
+              <h4 className="text-xs font-bold text-foreground mb-2 flex items-center gap-1">
+                <ExternalLink size={12} /> Documentação da API
               </h4>
-              <div className="text-[11px] text-muted-foreground space-y-1">
-                <p><strong>Header:</strong> <code className="bg-muted px-1 rounded">Authorization: Bearer SUA_KEY</code></p>
-                <p><strong>Exemplo:</strong></p>
-                <code className="bg-muted px-1 rounded text-[10px] block mt-1">curl -H "Authorization: Bearer SUA_KEY" "api-dados?casa=camara&ano=2025&tipo=analises"</code>
-                <p className="mt-1"><strong>Tipos:</strong> <code className="bg-muted px-1 rounded">analises</code> | <code className="bg-muted px-1 rounded">votacoes</code> | <code className="bg-muted px-1 rounded">votos</code></p>
+
+              {/* Authentication */}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-foreground">1. Autenticação</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Inclua sua chave no header <code className="bg-muted px-1 rounded">Authorization</code>:
+                </p>
+                <code className="bg-muted px-2 py-1 rounded text-[10px] block font-mono">
+                  Authorization: Bearer pk_sua_chave_aqui
+                </code>
+              </div>
+
+              {/* Base URL */}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-foreground">2. URL Base</p>
+                <code className="bg-muted px-2 py-1 rounded text-[10px] block font-mono break-all">
+                  {import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados
+                </code>
+              </div>
+
+              {/* Parameters */}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-foreground">3. Parâmetros</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] text-muted-foreground">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-1 pr-2 font-bold text-foreground">Param</th>
+                        <th className="text-left py-1 pr-2 font-bold text-foreground">Valores</th>
+                        <th className="text-left py-1 font-bold text-foreground">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                      <tr className="border-b border-border/50">
+                        <td className="py-1 pr-2"><code className="bg-muted px-1 rounded">casa</code></td>
+                        <td className="py-1 pr-2">camara | senado</td>
+                        <td className="py-1 font-sans">Casa legislativa</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1 pr-2"><code className="bg-muted px-1 rounded">ano</code></td>
+                        <td className="py-1 pr-2">2023-2026</td>
+                        <td className="py-1 font-sans">Ano da análise</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1 pr-2"><code className="bg-muted px-1 rounded">tipo</code></td>
+                        <td className="py-1 pr-2">analises | votacoes | votos</td>
+                        <td className="py-1 font-sans">Tipo de dados</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 pr-2"><code className="bg-muted px-1 rounded">partido</code></td>
+                        <td className="py-1 pr-2">PT, PL, etc.</td>
+                        <td className="py-1 font-sans">Filtro opcional por partido</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Examples */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-foreground">4. Exemplos</p>
+                <div className="space-y-1.5">
+                  <div>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase">Rankings de deputados 2025:</p>
+                    <code className="bg-muted px-2 py-1 rounded text-[9px] block font-mono break-all mt-0.5">
+                      curl -H "Authorization: Bearer SUA_KEY" "{import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados?casa=camara&ano=2025&tipo=analises"
+                    </code>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase">Votações do senado 2024:</p>
+                    <code className="bg-muted px-2 py-1 rounded text-[9px] block font-mono break-all mt-0.5">
+                      curl -H "Authorization: Bearer SUA_KEY" "{import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados?casa=senado&ano=2024&tipo=votacoes"
+                    </code>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase">Votos individuais do PT na câmara:</p>
+                    <code className="bg-muted px-2 py-1 rounded text-[9px] block font-mono break-all mt-0.5">
+                      curl -H "Authorization: Bearer SUA_KEY" "{import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados?casa=camara&ano=2025&tipo=votos&partido=PT"
+                    </code>
+                  </div>
+                </div>
+              </div>
+
+              {/* Response format */}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-foreground">5. Formato de Resposta</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Todas as respostas são JSON. O tipo <code className="bg-muted px-1 rounded">analises</code> retorna campos como:
+                </p>
+                <code className="bg-muted px-2 py-1 rounded text-[9px] block font-mono whitespace-pre">{`{
+  "deputado_nome": "...",
+  "deputado_partido": "PT",
+  "score": 97.5,
+  "classificacao": "Governo",
+  "votos_alinhados": 39,
+  "total_votos": 40
+}`}</code>
+              </div>
+
+              {/* Rate limits */}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-foreground">6. Limites</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Máximo de 1000 registros por requisição. Para datasets maiores, filtre por partido ou ano específico.
+                  Não há limite de requisições por hora, mas use com responsabilidade.
+                </p>
               </div>
             </div>
           </CardContent>

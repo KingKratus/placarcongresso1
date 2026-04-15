@@ -9,9 +9,13 @@ import {
 } from "@/components/ui/select";
 import {
   Search, FileText, Sparkles, Loader2, ExternalLink, ChevronLeft, ChevronRight, Filter,
-  BarChart3,
+  BarChart3, TrendingUp,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  LineChart, Line, Legend,
+} from "recharts";
 
 const THEME_COLORS: Record<string, string> = {
   "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -30,6 +34,14 @@ const THEME_COLORS: Record<string, string> = {
   "Agropecuária": "bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-200",
   "Defesa": "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
 };
+
+const CHART_COLORS = [
+  "hsl(210, 70%, 50%)", "hsl(280, 60%, 55%)", "hsl(0, 70%, 50%)",
+  "hsl(40, 80%, 50%)", "hsl(160, 70%, 40%)", "hsl(120, 50%, 40%)",
+  "hsl(30, 80%, 50%)", "hsl(215, 20%, 50%)", "hsl(190, 70%, 40%)",
+  "hsl(340, 70%, 50%)", "hsl(320, 60%, 55%)", "hsl(260, 60%, 55%)",
+  "hsl(230, 70%, 55%)", "hsl(80, 50%, 45%)", "hsl(0, 0%, 50%)",
+];
 
 const ITEMS_PER_PAGE = 15;
 
@@ -150,6 +162,45 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [proposicoes]);
 
+  // Evolution by year chart data
+  const yearEvolutionData = useMemo(() => {
+    const years = [...new Set(proposicoes.map(p => p.ano))].sort();
+    return years.map(ano => {
+      const yearProps = proposicoes.filter(p => p.ano === ano);
+      return { ano, total: yearProps.length };
+    });
+  }, [proposicoes]);
+
+  // Theme evolution by year (line chart)
+  const themeEvolutionData = useMemo(() => {
+    const topThemes = themeStats.slice(0, 6).map(([t]) => t);
+    const years = [...new Set(proposicoes.map(p => p.ano))].sort();
+    return years.map(ano => {
+      const entry: Record<string, any> = { ano };
+      topThemes.forEach(tema => {
+        entry[tema] = proposicoes.filter(p => p.ano === ano && (p.tema || "Outros") === tema).length;
+      });
+      return entry;
+    });
+  }, [proposicoes, themeStats]);
+
+  const topThemeNames = useMemo(() => themeStats.slice(0, 6).map(([t]) => t), [themeStats]);
+
+  // Type by year stacked bar
+  const typeByYearData = useMemo(() => {
+    const years = [...new Set(proposicoes.map(p => p.ano))].sort();
+    const topTypes = typeStats.slice(0, 6).map(([t]) => t);
+    return years.map(ano => {
+      const entry: Record<string, any> = { ano };
+      topTypes.forEach(tipo => {
+        entry[tipo] = proposicoes.filter(p => p.ano === ano && p.tipo === tipo).length;
+      });
+      return entry;
+    });
+  }, [proposicoes, typeStats]);
+
+  const topTypeNames = useMemo(() => typeStats.slice(0, 6).map(([t]) => t), [typeStats]);
+
   if (loading) {
     return (
       <Card>
@@ -211,6 +262,113 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Evolution Charts */}
+      {yearEvolutionData.length > 1 && (
+        <div className="grid md:grid-cols-2 gap-3">
+          {/* Propositions by year */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <TrendingUp size={14} /> Evolução por Ano
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={yearEvolutionData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                  />
+                  <Bar dataKey="total" name="Proposições" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Theme evolution (line chart) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <BarChart3 size={14} /> Temas por Ano
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={themeEvolutionData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "11px",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "10px" }} />
+                  {topThemeNames.map((tema, i) => (
+                    <Line
+                      key={tema}
+                      type="monotone"
+                      dataKey={tema}
+                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Type by Year stacked bar */}
+      {typeByYearData.length > 1 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+              <FileText size={14} /> Tipos por Ano
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={typeByYearData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "11px",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "10px" }} />
+                {topTypeNames.map((tipo, i) => (
+                  <Bar
+                    key={tipo}
+                    dataKey={tipo}
+                    stackId="a"
+                    fill={CHART_COLORS[i % CHART_COLORS.length]}
+                    radius={i === topTypeNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Theme and Type distribution */}
       <div className="grid md:grid-cols-2 gap-3">
