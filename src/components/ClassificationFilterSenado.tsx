@@ -1,4 +1,5 @@
-import { UserCheck, UserMinus, UserX, Users, HelpCircle, ArrowUpDown } from "lucide-react";
+import { useMemo } from "react";
+import { UserCheck, UserMinus, UserX, Users, HelpCircle, ArrowUpDown, GitCompareArrows } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -21,6 +22,10 @@ interface ClassificationFilterSenadoProps {
   onSortByChange?: (v: string) => void;
   bancadaFilter?: string;
   onBancadaFilterChange?: (v: string) => void;
+  alignParty?: string;
+  onAlignPartyChange?: (v: string) => void;
+  alignParlamentar?: string;
+  onAlignParlamentarChange?: (v: string) => void;
 }
 
 const UFS = [
@@ -48,11 +53,27 @@ export function ClassificationFilterSenado({
   onSortByChange,
   bancadaFilter = "all",
   onBancadaFilterChange,
+  alignParty = "all",
+  onAlignPartyChange,
+  alignParlamentar = "all",
+  onAlignParlamentarChange,
 }: ClassificationFilterSenadoProps) {
   const counts: Record<string, number> = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
   analises.forEach((a) => {
     if (counts[a.classificacao] !== undefined) counts[a.classificacao]++;
   });
+
+  const partidos = useMemo(() => {
+    const set = new Set<string>();
+    analises.forEach(a => { if (a.senador_partido) set.add(a.senador_partido); });
+    return [...set].sort();
+  }, [analises]);
+
+  const parlamentares = useMemo(() => {
+    return analises
+      .map(a => ({ id: a.senador_id, nome: a.senador_nome, partido: a.senador_partido }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [analises]);
 
   return (
     <div className="space-y-3">
@@ -132,6 +153,43 @@ export function ClassificationFilterSenado({
           </Select>
         )}
       </div>
+
+      {/* Alignment comparison filters */}
+      {(onAlignPartyChange || onAlignParlamentarChange) && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase shrink-0">
+            <GitCompareArrows size={12} /> Comparar:
+          </div>
+          {onAlignPartyChange && (
+            <Select value={alignParty} onValueChange={onAlignPartyChange}>
+              <SelectTrigger className="w-full sm:w-40 h-8 text-xs">
+                <SelectValue placeholder="Alinhar c/ partido" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alinhamento Governo</SelectItem>
+                {partidos.map((p) => (
+                  <SelectItem key={p} value={p}>vs Média {p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {onAlignParlamentarChange && (
+            <Select value={alignParlamentar} onValueChange={onAlignParlamentarChange}>
+              <SelectTrigger className="w-full sm:w-48 h-8 text-xs">
+                <SelectValue placeholder="Alinhar c/ parlamentar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Sem comparação</SelectItem>
+                {parlamentares.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.nome} ({p.partido})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
 
       {onScoreRangeChange && scoreRange && (
         <div className="flex items-center gap-3">
