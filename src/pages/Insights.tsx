@@ -307,7 +307,7 @@ export default function Insights() {
         user={user} onSignIn={signInWithGoogle} onSignOut={signOut} casa="camara"
       />
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header with global filters */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
