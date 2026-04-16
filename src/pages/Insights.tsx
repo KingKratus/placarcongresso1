@@ -268,6 +268,36 @@ export default function Insights() {
     return { totalDep, totalSen, avgDep, avgSen, totalVotCam: votacoesCamara.length, totalVotSen: votacoesSenado.length };
   }, [deputados, senadores, votacoesCamara, votacoesSenado]);
 
+  // Polarization index: distance between Gov mean and Opposição mean (0-100, higher = more polarized)
+  const polarization = useMemo(() => {
+    const all = [
+      ...deputados.map(d => ({ score: Number(d.score), cls: d.classificacao })),
+      ...senadores.map(s => ({ score: Number(s.score), cls: s.classificacao })),
+    ];
+    const gov = all.filter(x => x.cls === "Governo");
+    const opo = all.filter(x => x.cls === "Oposição");
+    const cen = all.filter(x => x.cls === "Centro");
+    const avg = (arr: typeof all) => arr.length ? arr.reduce((s, x) => s + x.score, 0) / arr.length : 0;
+    const govAvg = avg(gov);
+    const opoAvg = avg(opo);
+    const cenAvg = avg(cen);
+    const distance = Math.abs(govAvg - opoAvg);
+    // Standard deviation across all
+    const overall = all.length ? all.reduce((s, x) => s + x.score, 0) / all.length : 0;
+    const variance = all.length ? all.reduce((s, x) => s + Math.pow(x.score - overall, 2), 0) / all.length : 0;
+    const stdDev = Math.sqrt(variance);
+    return {
+      index: Math.round(distance),
+      govAvg: Math.round(govAvg * 10) / 10,
+      opoAvg: Math.round(opoAvg * 10) / 10,
+      cenAvg: Math.round(cenAvg * 10) / 10,
+      stdDev: Math.round(stdDev * 10) / 10,
+      govCount: gov.length,
+      opoCount: opo.length,
+      cenCount: cen.length,
+    };
+  }, [deputados, senadores]);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar
