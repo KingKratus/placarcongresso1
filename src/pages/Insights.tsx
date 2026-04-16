@@ -87,6 +87,7 @@ export default function Insights() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [partidoFilter, setPartidoFilter] = useState("all");
   const [ufFilter, setUfFilter] = useState("all");
+  const [casaFilter, setCasaFilter] = useState<"ambos" | "camara" | "senado">("ambos");
   const { deputados: rawDeputados, senadores: rawSenadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
 
@@ -113,20 +114,22 @@ export default function Insights() {
 
   // Global filtered data
   const deputados = useMemo(() => {
+    if (casaFilter === "senado") return [];
     return rawDeputados.filter((d) => {
       if (partidoFilter !== "all" && d.deputado_partido !== partidoFilter) return false;
       if (ufFilter !== "all" && d.deputado_uf !== ufFilter) return false;
       return true;
     });
-  }, [rawDeputados, partidoFilter, ufFilter]);
+  }, [rawDeputados, partidoFilter, ufFilter, casaFilter]);
 
   const senadores = useMemo(() => {
+    if (casaFilter === "camara") return [];
     return rawSenadores.filter((s) => {
       if (partidoFilter !== "all" && s.senador_partido !== partidoFilter) return false;
       if (ufFilter !== "all" && s.senador_uf !== ufFilter) return false;
       return true;
     });
-  }, [rawSenadores, partidoFilter, ufFilter]);
+  }, [rawSenadores, partidoFilter, ufFilter, casaFilter]);
 
   // Classification distribution
   const classDistCamara = useMemo(() => {
@@ -265,6 +268,36 @@ export default function Insights() {
     return { totalDep, totalSen, avgDep, avgSen, totalVotCam: votacoesCamara.length, totalVotSen: votacoesSenado.length };
   }, [deputados, senadores, votacoesCamara, votacoesSenado]);
 
+  // Polarization index: distance between Gov mean and Opposição mean (0-100, higher = more polarized)
+  const polarization = useMemo(() => {
+    const all = [
+      ...deputados.map(d => ({ score: Number(d.score), cls: d.classificacao })),
+      ...senadores.map(s => ({ score: Number(s.score), cls: s.classificacao })),
+    ];
+    const gov = all.filter(x => x.cls === "Governo");
+    const opo = all.filter(x => x.cls === "Oposição");
+    const cen = all.filter(x => x.cls === "Centro");
+    const avg = (arr: typeof all) => arr.length ? arr.reduce((s, x) => s + x.score, 0) / arr.length : 0;
+    const govAvg = avg(gov);
+    const opoAvg = avg(opo);
+    const cenAvg = avg(cen);
+    const distance = Math.abs(govAvg - opoAvg);
+    // Standard deviation across all
+    const overall = all.length ? all.reduce((s, x) => s + x.score, 0) / all.length : 0;
+    const variance = all.length ? all.reduce((s, x) => s + Math.pow(x.score - overall, 2), 0) / all.length : 0;
+    const stdDev = Math.sqrt(variance);
+    return {
+      index: Math.round(distance),
+      govAvg: Math.round(govAvg * 10) / 10,
+      opoAvg: Math.round(opoAvg * 10) / 10,
+      cenAvg: Math.round(cenAvg * 10) / 10,
+      stdDev: Math.round(stdDev * 10) / 10,
+      govCount: gov.length,
+      opoCount: opo.length,
+      cenCount: cen.length,
+    };
+  }, [deputados, senadores]);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar
@@ -274,7 +307,7 @@ export default function Insights() {
         user={user} onSignIn={signInWithGoogle} onSignOut={signOut} casa="camara"
       />
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header with global filters */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -286,6 +319,14 @@ export default function Insights() {
               <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={casaFilter} onValueChange={(v: any) => setCasaFilter(v)}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ambos">Ambas Casas</SelectItem>
+                <SelectItem value="camara">Só Câmara</SelectItem>
+                <SelectItem value="senado">Só Senado</SelectItem>
               </SelectContent>
             </Select>
             <Select value={partidoFilter} onValueChange={setPartidoFilter}>
@@ -302,9 +343,9 @@ export default function Insights() {
                 {availableUfs.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
               </SelectContent>
             </Select>
-            {(partidoFilter !== "all" || ufFilter !== "all") && (
+            {(partidoFilter !== "all" || ufFilter !== "all" || casaFilter !== "ambos") && (
               <button
-                onClick={() => { setPartidoFilter("all"); setUfFilter("all"); }}
+                onClick={() => { setPartidoFilter("all"); setUfFilter("all"); setCasaFilter("ambos"); }}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
               >
                 Limpar filtros
@@ -312,6 +353,43 @@ export default function Insights() {
             )}
           </div>
         </div>
+
+        {/* Polarization & dispersion card */}
+        {!loading && (deputados.length + senadores.length) > 0 && (
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp size={14} className="text-primary" /> Índice de Polarização
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="text-center">
+                  <p className="text-3xl sm:text-4xl font-black text-primary">{polarization.index}</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Distância Gov-Opo</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--governo))" }}>{polarization.govAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Gov ({polarization.govCount})</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--centro))" }}>{polarization.cenAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Centro ({polarization.cenCount})</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--oposicao))" }}>{polarization.opoAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Opos ({polarization.opoCount})</p>
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground text-center mt-3">
+                Desvio padrão: <span className="font-bold text-foreground">{polarization.stdDev}pp</span> —{" "}
+                {polarization.index >= 60 ? <span className="text-oposicao font-bold">Altamente polarizado</span> :
+                 polarization.index >= 40 ? <span className="text-centro font-bold">Polarização moderada</span> :
+                 <span className="text-governo font-bold">Baixa polarização</span>}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {!loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">

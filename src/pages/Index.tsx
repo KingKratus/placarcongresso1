@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target, ChevronDown,
+  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target, ChevronDown, X, Layers,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanel } from "@/components/StatsPanel";
 import { SyncHistoryPanel } from "@/components/SyncHistoryPanel";
@@ -43,14 +44,63 @@ const Index = () => {
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
   const [alignParty, setAlignParty] = useState("all");
   const [alignParlamentar, setAlignParlamentar] = useState("all");
+  const [periodMode, setPeriodMode] = useState<"single" | "all">("single");
+  const [aggAnalises, setAggAnalises] = useState<any[] | null>(null);
+  const [aggLoading, setAggLoading] = useState(false);
 
   const legislatura = titulares ? 57 : undefined;
   const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);
-  const { analises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
+  const { analises: yearAnalises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
   const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
   const { toggleFavorito, isFavorito } = useFavoritos(user?.id);
   const syncRun = useSyncRun();
+
+  // Fetch and merge multi-year data when periodMode === "all"
+  useEffect(() => {
+    if (periodMode !== "all") { setAggAnalises(null); return; }
+    let cancelled = false;
+    (async () => {
+      setAggLoading(true);
+      const { data } = await supabase
+        .from("analises_deputados")
+        .select("*")
+        .in("ano", [2023, 2024, 2025, 2026])
+        .limit(10000);
+      if (cancelled) return;
+      // Aggregate: weight by total_votos
+      const byId: Record<number, any> = {};
+      (data || []).forEach((a: any) => {
+        const id = a.deputado_id;
+        if (!byId[id]) {
+          byId[id] = { ...a, _scoreSum: 0, _wSum: 0, total_votos: 0, votos_alinhados: 0 };
+        }
+        const w = Number(a.total_votos) || 0;
+        byId[id]._scoreSum += Number(a.score) * w;
+        byId[id]._wSum += w;
+        byId[id].total_votos += Number(a.total_votos) || 0;
+        byId[id].votos_alinhados += Number(a.votos_alinhados) || 0;
+        // Always keep latest metadata
+        if (a.ano >= byId[id].ano) {
+          byId[id].deputado_nome = a.deputado_nome;
+          byId[id].deputado_partido = a.deputado_partido;
+          byId[id].deputado_uf = a.deputado_uf;
+          byId[id].deputado_foto = a.deputado_foto;
+          byId[id].classificacao = a.classificacao;
+          byId[id].ano = a.ano;
+        }
+      });
+      const merged = Object.values(byId).map((a: any) => ({
+        ...a,
+        score: a._wSum > 0 ? Math.round((a._scoreSum / a._wSum) * 10) / 10 : 0,
+      }));
+      setAggAnalises(merged);
+      setAggLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [periodMode]);
+
+  const analises = periodMode === "all" && aggAnalises ? aggAnalises : yearAnalises;
 
   const handleSync = async () => {
     const runId = crypto.randomUUID();
@@ -247,11 +297,37 @@ const Index = () => {
                 alignParlamentar={alignParlamentar}
                 onAlignParlamentarChange={setAlignParlamentar}
               />
+              {/* Period mode + comparison banner */}
+              <div className="flex flex-wrap items-center gap-2 bg-card p-2 sm:p-3 rounded-xl border border-border">
+                <Layers size={14} className="text-primary shrink-0" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground shrink-0">Período:</span>
+                <Button size="sm" variant={periodMode === "single" ? "default" : "outline"} className="h-7 text-[10px] sm:text-xs" onClick={() => setPeriodMode("single")}>
+                  Apenas {ano}
+                </Button>
+                <Button size="sm" variant={periodMode === "all" ? "default" : "outline"} className="h-7 text-[10px] sm:text-xs" onClick={() => setPeriodMode("all")} disabled={aggLoading}>
+                  {aggLoading ? "Carregando..." : "Acumulado 2023-2026"}
+                </Button>
+                {(alignParty !== "all" || alignParlamentar !== "all") && (
+                  <div className="ml-auto flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-full px-2 py-0.5">
+                    <GitCompareArrows size={11} className="text-primary" />
+                    <span className="text-[10px] font-bold text-primary">
+                      {alignParty !== "all"
+                        ? `vs Média ${alignParty} (${(partyAvgMap[alignParty] || 0).toFixed(1)}%)`
+                        : `vs ${analises.find(a => a.deputado_id === Number(alignParlamentar))?.deputado_nome?.split(" ").slice(0,2).join(" ") || "Parl."}`}
+                    </span>
+                    <button onClick={() => { setAlignParty("all"); setAlignParlamentar("all"); }} className="text-primary hover:text-primary/70">
+                      <X size={11} />
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between bg-card p-3 sm:p-4 rounded-xl border border-border">
                 <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users size={14} className="text-primary" /> {filteredDeputies.length} deputados
                 </h2>
-                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-2 sm:px-3 py-1 rounded-full uppercase tracking-widest">{ano}</span>
+                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-2 sm:px-3 py-1 rounded-full uppercase tracking-widest">
+                  {periodMode === "all" ? "2023-2026" : ano}
+                </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-10 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar">
                 {filteredDeputies.map((dep) => (
