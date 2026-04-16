@@ -181,7 +181,7 @@ function PartyColumn({ title, icon, parties, accentClass, onDeputyClick }: {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="max-h-[60vh]">
+        <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
           <div className="px-4 pb-4 space-y-4">
             {parties.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">Nenhum partido nesta categoria</p>
@@ -227,7 +227,7 @@ function PartyColumn({ title, icon, parties, accentClass, onDeputyClick }: {
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );
