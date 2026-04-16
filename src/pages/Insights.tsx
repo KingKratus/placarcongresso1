@@ -321,6 +321,14 @@ export default function Insights() {
                 {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={casaFilter} onValueChange={(v: any) => setCasaFilter(v)}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ambos">Ambas Casas</SelectItem>
+                <SelectItem value="camara">Só Câmara</SelectItem>
+                <SelectItem value="senado">Só Senado</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={partidoFilter} onValueChange={setPartidoFilter}>
               <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Partido" /></SelectTrigger>
               <SelectContent>
@@ -335,9 +343,9 @@ export default function Insights() {
                 {availableUfs.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
               </SelectContent>
             </Select>
-            {(partidoFilter !== "all" || ufFilter !== "all") && (
+            {(partidoFilter !== "all" || ufFilter !== "all" || casaFilter !== "ambos") && (
               <button
-                onClick={() => { setPartidoFilter("all"); setUfFilter("all"); }}
+                onClick={() => { setPartidoFilter("all"); setUfFilter("all"); setCasaFilter("ambos"); }}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
               >
                 Limpar filtros
@@ -345,6 +353,43 @@ export default function Insights() {
             )}
           </div>
         </div>
+
+        {/* Polarization & dispersion card */}
+        {!loading && (deputados.length + senadores.length) > 0 && (
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp size={14} className="text-primary" /> Índice de Polarização
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="text-center">
+                  <p className="text-3xl sm:text-4xl font-black text-primary">{polarization.index}</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Distância Gov-Opo</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--governo))" }}>{polarization.govAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Gov ({polarization.govCount})</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--centro))" }}>{polarization.cenAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Centro ({polarization.cenCount})</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black" style={{ color: "hsl(var(--oposicao))" }}>{polarization.opoAvg}%</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase">Média Opos ({polarization.opoCount})</p>
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground text-center mt-3">
+                Desvio padrão: <span className="font-bold text-foreground">{polarization.stdDev}pp</span> —{" "}
+                {polarization.index >= 60 ? <span className="text-oposicao font-bold">Altamente polarizado</span> :
+                 polarization.index >= 40 ? <span className="text-centro font-bold">Polarização moderada</span> :
+                 <span className="text-governo font-bold">Baixa polarização</span>}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {!loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
