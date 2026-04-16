@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target, ChevronDown,
+  Users, Search, AlertTriangle, Download, BarChart2, Trophy, GitCompareArrows, Target, ChevronDown, X, Layers,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Navbar } from "@/components/Navbar";
 import { StatsPanel } from "@/components/StatsPanel";
 import { SyncHistoryPanel } from "@/components/SyncHistoryPanel";
@@ -43,14 +44,63 @@ const Index = () => {
   const [govMethod, setGovMethod] = useState<"lider" | "partido-gov">("lider");
   const [alignParty, setAlignParty] = useState("all");
   const [alignParlamentar, setAlignParlamentar] = useState("all");
+  const [periodMode, setPeriodMode] = useState<"single" | "all">("single");
+  const [aggAnalises, setAggAnalises] = useState<any[] | null>(null);
+  const [aggLoading, setAggLoading] = useState(false);
 
   const legislatura = titulares ? 57 : undefined;
   const { deputados, partidos, loading: depLoading } = useDeputados(legislatura);
-  const { analises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
+  const { analises: yearAnalises, loading: analLoading, syncing, error, syncDeputados, refetch } = useAnalises(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
   const { lastSync, canSync, remainingSeconds, refetchStatus } = useSyncStatus("camara", user?.id);
   const { toggleFavorito, isFavorito } = useFavoritos(user?.id);
   const syncRun = useSyncRun();
+
+  // Fetch and merge multi-year data when periodMode === "all"
+  useEffect(() => {
+    if (periodMode !== "all") { setAggAnalises(null); return; }
+    let cancelled = false;
+    (async () => {
+      setAggLoading(true);
+      const { data } = await supabase
+        .from("analises_deputados")
+        .select("*")
+        .in("ano", [2023, 2024, 2025, 2026])
+        .limit(10000);
+      if (cancelled) return;
+      // Aggregate: weight by total_votos
+      const byId: Record<number, any> = {};
+      (data || []).forEach((a: any) => {
+        const id = a.deputado_id;
+        if (!byId[id]) {
+          byId[id] = { ...a, _scoreSum: 0, _wSum: 0, total_votos: 0, votos_alinhados: 0 };
+        }
+        const w = Number(a.total_votos) || 0;
+        byId[id]._scoreSum += Number(a.score) * w;
+        byId[id]._wSum += w;
+        byId[id].total_votos += Number(a.total_votos) || 0;
+        byId[id].votos_alinhados += Number(a.votos_alinhados) || 0;
+        // Always keep latest metadata
+        if (a.ano >= byId[id].ano) {
+          byId[id].deputado_nome = a.deputado_nome;
+          byId[id].deputado_partido = a.deputado_partido;
+          byId[id].deputado_uf = a.deputado_uf;
+          byId[id].deputado_foto = a.deputado_foto;
+          byId[id].classificacao = a.classificacao;
+          byId[id].ano = a.ano;
+        }
+      });
+      const merged = Object.values(byId).map((a: any) => ({
+        ...a,
+        score: a._wSum > 0 ? Math.round((a._scoreSum / a._wSum) * 10) / 10 : 0,
+      }));
+      setAggAnalises(merged);
+      setAggLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [periodMode]);
+
+  const analises = periodMode === "all" && aggAnalises ? aggAnalises : yearAnalises;
 
   const handleSync = async () => {
     const runId = crypto.randomUUID();
