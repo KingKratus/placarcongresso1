@@ -87,6 +87,7 @@ export default function Insights() {
   const [ano, setAno] = useState(new Date().getFullYear());
   const [partidoFilter, setPartidoFilter] = useState("all");
   const [ufFilter, setUfFilter] = useState("all");
+  const [casaFilter, setCasaFilter] = useState<"ambos" | "camara" | "senado">("ambos");
   const { deputados: rawDeputados, senadores: rawSenadores, votacoesCamara, votacoesSenado, allYearsDeputados, allYearsSenadores, loading } = useInsightsData(ano);
   const { user, signInWithGoogle, signOut } = useAuth();
 
@@ -113,20 +114,22 @@ export default function Insights() {
 
   // Global filtered data
   const deputados = useMemo(() => {
+    if (casaFilter === "senado") return [];
     return rawDeputados.filter((d) => {
       if (partidoFilter !== "all" && d.deputado_partido !== partidoFilter) return false;
       if (ufFilter !== "all" && d.deputado_uf !== ufFilter) return false;
       return true;
     });
-  }, [rawDeputados, partidoFilter, ufFilter]);
+  }, [rawDeputados, partidoFilter, ufFilter, casaFilter]);
 
   const senadores = useMemo(() => {
+    if (casaFilter === "camara") return [];
     return rawSenadores.filter((s) => {
       if (partidoFilter !== "all" && s.senador_partido !== partidoFilter) return false;
       if (ufFilter !== "all" && s.senador_uf !== ufFilter) return false;
       return true;
     });
-  }, [rawSenadores, partidoFilter, ufFilter]);
+  }, [rawSenadores, partidoFilter, ufFilter, casaFilter]);
 
   // Classification distribution
   const classDistCamara = useMemo(() => {
