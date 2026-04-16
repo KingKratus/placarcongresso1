@@ -285,11 +285,42 @@ const Senado = () => {
                 alignParlamentar={alignParlamentar}
                 onAlignParlamentarChange={setAlignParlamentar}
               />
+              {/* Period mode + comparison banner */}
+              <div className="flex flex-wrap items-center gap-2 bg-card p-2 sm:p-3 rounded-xl border border-border">
+                <Layers size={14} className="text-primary shrink-0" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground shrink-0">Período:</span>
+                <Button size="sm" variant={periodMode === "single" ? "default" : "outline"} className="h-7 text-[10px] sm:text-xs" onClick={() => setPeriodMode("single")}>
+                  Apenas {ano}
+                </Button>
+                <Button size="sm" variant={periodMode === "all" ? "default" : "outline"} className="h-7 text-[10px] sm:text-xs" onClick={() => setPeriodMode("all")} disabled={aggLoading}>
+                  {aggLoading ? "Carregando..." : "Acumulado 2023-2026"}
+                </Button>
+                {periodMode === "all" && (
+                  <span className="text-[9px] text-muted-foreground hidden sm:inline">
+                    (mais preciso p/ Senado)
+                  </span>
+                )}
+                {(alignParty !== "all" || alignParlamentar !== "all") && (
+                  <div className="ml-auto flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-full px-2 py-0.5">
+                    <GitCompareArrows size={11} className="text-primary" />
+                    <span className="text-[10px] font-bold text-primary">
+                      {alignParty !== "all"
+                        ? `vs Média ${alignParty} (${(partyAvgMap[alignParty] || 0).toFixed(1)}%)`
+                        : `vs ${analises.find(a => a.senador_id === Number(alignParlamentar))?.senador_nome?.split(" ").slice(0,2).join(" ") || "Parl."}`}
+                    </span>
+                    <button onClick={() => { setAlignParty("all"); setAlignParlamentar("all"); }} className="text-primary hover:text-primary/70">
+                      <X size={11} />
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between bg-card p-3 sm:p-4 rounded-xl border border-border">
                 <h2 className="text-xs sm:text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users size={14} className="text-primary" /> {filteredSenadores.length} senadores
                 </h2>
-                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-2 sm:px-3 py-1 rounded-full uppercase tracking-widest">{ano}</span>
+                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-2 sm:px-3 py-1 rounded-full uppercase tracking-widest">
+                  {periodMode === "all" ? "2023-2026" : ano}
+                </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-10 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar">
                 {filteredSenadores.map((sen) => (
