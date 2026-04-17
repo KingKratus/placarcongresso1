@@ -1,75 +1,52 @@
-The user wants three things:
+The user wants a comprehensive parliamentary performance score system with 4 dimensions (Alignment, Presence, Impact, Engagement), customizable weights, and the ability to reset to defaults. Let me plan this concisely.
 
-1. Test the alignment comparison filters (vs Média PL, vs specific parliamentarian) on the main page to verify frontend behavior
-2. Add more insights to the Tendências tab and more options to the Insights page (with mobile sizing fixes)
-3. Fix scrolling issue on the "Comparar partidos" blocks
+Existing infrastructure: alignment (A) is already calculated via `analises_deputados.score`. Need to add P, I, E from new API endpoints.
 
-Let me explore the relevant files quickly.
+## Plano: Score de Desempenho Parlamentar (P-Score)
 
-## Plan: Melhorias em Insights, Tendências, Comparações e Mobile
+### 1. Nova Tabela: `deputy_performance_scores`
 
-### 1. Verificação dos Filtros de Alinhamento (Câmara)
+Armazena as 4 dimensões + score final por deputado/ano:
 
-Testar end-to-end na preview:
+- `deputado_id`, `ano`, `casa`
+- `score_alinhamento` (A) — vem de `analises_deputados.score`
+- `score_presenca` (P) — % presença em sessões
+- `score_impacto` (I) — peso(tipo) × status × abrangência das proposições
+- `score_engajamento` (E) — comissões + relatorias
+- `score_total` (P normalizado 0-100)
+- `dados_brutos` (jsonb — sessoes_total, sessoes_presente, relatorias, etc.)
 
-- Aplicar "Comparar: vs Média PL" + ordenar por Score ↓ para confirmar que os deputados mais alinhados ao PL aparecem primeiro
-- Aplicar "Comparar: vs [parlamentar específico]" e validar que a similaridade é calculada corretamente
-- Confirmar que badges/scores no `DeputyCard` refletem o score efetivo (similaridade)
+RLS: leitura pública, escrita só service role.
 
-Se o `DeputyCard` mostra apenas o score bruto, adicionar um indicador visual de "modo comparação ativo" no header da listagem mostrando a referência usada.
+### 2. Nova Edge Function: `calculate-performance`
 
-### 2. Fix Scroll na Comparação de Partidos
+Batch para todos os 513 deputados (e senadores em fase 2):
 
-**Arquivo**: `src/components/ComparisonView.tsx` (e `ComparisonViewSenado.tsx`)
+- Busca presença: `GET /deputados/{id}/eventos` + cruzar com `/eventos/{id}/votantes`
+- Busca proposições: já temos em `proposicoes_parlamentares` (adicionar campos `status_tramitacao` e `peso_tipo`)
+- Busca comissões: `GET /deputados/{id}/orgaos` + `/orgaos/{id}/eventos`
+- Aplica fórmulas com pesos padrão
+- Normaliza P_final (0-100) usando min-max do conjunto
+- Cron diário via pg_cron (1x/dia, 03:00 UTC)
 
-- Os blocos de seleção de partidos não têm scroll quando muitos partidos são listados
-- Adicionar `max-h-[60vh] overflow-y-auto` nas listas de partidos selecionáveis
-- Garantir scrollbar customizada visível no mobile
+### 3. Atualizar `fetch-proposicoes` (enriquecer)
 
-### 3. Mais Insights na Aba Tendências
+Adicionar à tabela `proposicoes_parlamentares`:
 
-**Arquivo**: `src/components/CentroTrendsCamara.tsx` (e versão Senado se existir)
-Adicionar novos cards/gráficos:
+- `status_tramitacao` (Aprovada/Em tramitação/Arquivada)
+- `peso_tipo` calculado (PEC=1.0, PL=0.6, PDL=0.4, REQ=0.1)
+- Usar tema já classificado para `abrangencia_tema`
 
-- **Migração de classificação**: deputados que mudaram de Governo↔Centro↔Oposição entre anos
-- **Top 5 mais voláteis**: maior variação de score entre períodos
-- **Concentração regional**: heatmap simples de score médio por UF
-- **Evolução do bloco Centro**: linha temporal de quantos deputados são "Centro" por mês/trimestre
+### 4. UI: Nova Aba "Desempenho" no Perfil
 
-### 4. Mais Opções na Aba Insights
-
-**Arquivo**: `src/pages/Insights.tsx` e componentes em `src/components/insights/`
-Adicionar:
-
-- **Seletor de período** (2023/2024/2025/2026 + "Todos") aplicado a todos os gráficos
-- **Filtro por casa** (Câmara/Senado/Ambos) global
-- **Novo card "Polarização"**: índice calculado pela distância entre médias Gov vs Oposição
-- **Novo card "Top Temas em Disputa"**: temas com maior dispersão de votos
-- **Export PDF/PNG** dos insights principais
-
-### 5. Ajustes Mobile (viewport 375px)
-
-- `src/pages/Insights.tsx`: reduzir paddings (`p-2 sm:p-4`), font-sizes (`text-xs sm:text-sm`), e empilhar grids em 1 coluna abaixo de 640px
-- Tabs com scroll horizontal já existente — garantir que novos cards tenham `overflow-x-auto`
-- Gráficos Recharts: usar `ResponsiveContainer` com `aspect={1.2}` no mobile
-- `CentroTrendsCamara`: ajustar grids para `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
-
-### Detalhes Técnicos
-
-
-| Arquivo                                   | Mudança                                                    |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `src/components/ComparisonView.tsx`       | Adicionar scroll nas listas de partidos                    |
-| `src/components/ComparisonViewSenado.tsx` | Mesmo fix de scroll                                        |
-| `src/components/CentroTrendsCamara.tsx`   | Novos cards: migração, voláteis, regional, evolução Centro |
-| `src/pages/Insights.tsx`                  | Seletor período/casa global, ajustes mobile                |
-| `src/components/insights/`                | Novo card Polarização, Temas em Disputa                    |
-| `src/pages/Index.tsx`                     | Indicador visual de modo comparação ativo                  |
-| Browser test                              | Validar filtros vs Média PL e vs parlamentar               |
-
-
-**Sem mudanças de schema** — todos os novos insights derivam dos dados já existentes em `analises_deputados`, `analises_senadores`, `votacao_temas` e `votacoes`.
+`DeputadoDetail.tsx` e `SenadorDetail.tsx` gan
 
 &nbsp;
 
- Quanto na Aba Câmara dos Deputados e Senado add opção de ver alinhamento também de um ano pro ano e de anos pros outros já que locais como o Senado está bem distorcido por ter poucas votações. 
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+Scan bugs also
