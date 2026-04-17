@@ -73,7 +73,7 @@ export function RankingTable({ analises }: RankingTableProps) {
                     <p className="text-[10px] text-muted-foreground">{p.partido} - {p.uf}</p>
                   </div>
                   {Number(p.score_total) >= top10Threshold && top10Threshold > 0 && (
-                    <Badge className="text-[9px] bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30">Top 10%</Badge>
+                    <Badge className="text-[9px] bg-accent text-accent-foreground border-border">Top 10%</Badge>
                   )}
                   <span className="text-sm font-black text-primary tabular-nums">
                     {Number(p.score_total).toFixed(1)}
