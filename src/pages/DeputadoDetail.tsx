@@ -38,6 +38,7 @@ import {
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProposicoesTab } from "@/components/ProposicoesTab";
+import { PerformanceTab } from "@/components/PerformanceTab";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
@@ -462,10 +463,18 @@ export default function DeputadoDetail() {
 
         {/* Tabs: Votações and Proposições */}
         <Tabs defaultValue="votacoes" className="w-full">
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 flex-wrap h-auto">
             <TabsTrigger value="votacoes" className="text-xs">Votações ({filteredVotos.length})</TabsTrigger>
-            <TabsTrigger value="proposicoes" className="text-xs">Proposições Legislativas</TabsTrigger>
+            <TabsTrigger value="proposicoes" className="text-xs">Proposições</TabsTrigger>
+            <TabsTrigger value="desempenho" className="text-xs">Desempenho</TabsTrigger>
           </TabsList>
+          <TabsContent value="desempenho">
+            <PerformanceTab
+              parlamentar_id={depId}
+              casa="camara"
+              ano={analises[0]?.ano ?? new Date().getFullYear()}
+            />
+          </TabsContent>
 
           <TabsContent value="votacoes">
         <Card>
