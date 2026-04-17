@@ -179,6 +179,63 @@ export type Database = {
         }
         Relationships: []
       }
+      deputy_performance_scores: {
+        Row: {
+          ano: number
+          casa: string
+          created_at: string
+          dados_brutos: Json | null
+          foto: string | null
+          id: string
+          nome: string | null
+          parlamentar_id: number
+          partido: string | null
+          score_alinhamento: number
+          score_engajamento: number
+          score_impacto: number
+          score_presenca: number
+          score_total: number
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          created_at?: string
+          dados_brutos?: Json | null
+          foto?: string | null
+          id?: string
+          nome?: string | null
+          parlamentar_id: number
+          partido?: string | null
+          score_alinhamento?: number
+          score_engajamento?: number
+          score_impacto?: number
+          score_presenca?: number
+          score_total?: number
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          created_at?: string
+          dados_brutos?: Json | null
+          foto?: string | null
+          id?: string
+          nome?: string | null
+          parlamentar_id?: number
+          partido?: string | null
+          score_alinhamento?: number
+          score_engajamento?: number
+          score_impacto?: number
+          score_presenca?: number
+          score_total?: number
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       orientacoes: {
         Row: {
           created_at: string
@@ -251,6 +308,8 @@ export type Database = {
           id: string
           numero: string
           parlamentar_id: number
+          peso_tipo: number | null
+          status_tramitacao: string | null
           tema: string | null
           tipo: string
           url: string | null
@@ -264,6 +323,8 @@ export type Database = {
           id?: string
           numero: string
           parlamentar_id: number
+          peso_tipo?: number | null
+          status_tramitacao?: string | null
           tema?: string | null
           tipo: string
           url?: string | null
@@ -277,6 +338,8 @@ export type Database = {
           id?: string
           numero?: string
           parlamentar_id?: number
+          peso_tipo?: number | null
+          status_tramitacao?: string | null
           tema?: string | null
           tipo?: string
           url?: string | null
