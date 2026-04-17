@@ -165,12 +165,7 @@ export default function Desempenho() {
           </CardContent>
         </Card>
 
-        <PerformanceWeightsCustomizer
-          weights={weights}
-          onChange={update}
-          onReset={reset}
-          isDefault={isDefault}
-        />
+        <PerformanceWeightsCustomizer onChange={update} />
 
         <Card>
           <CardHeader className="pb-3">
