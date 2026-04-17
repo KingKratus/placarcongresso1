@@ -12,6 +12,7 @@ import Perfil from "./pages/Perfil";
 import NotFound from "./pages/NotFound";
 import Documentacao from "./pages/Documentacao";
 import Admin from "./pages/Admin";
+import Desempenho from "./pages/Desempenho";
 import { FloatingChat } from "./components/FloatingChat";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/insights" element={<Insights />} />
           <Route path="/documentacao" element={<Documentacao />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/desempenho" element={<Desempenho />} />
           <Route path="/deputado/:id" element={<DeputadoDetail />} />
           <Route path="/senador/:id" element={<SenadorDetail />} />
           <Route path="/perfil" element={<Perfil />} />
