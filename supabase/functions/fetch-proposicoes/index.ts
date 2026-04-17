@@ -14,6 +14,23 @@ interface Proposicao {
   ementa: string;
   url: string;
   data_apresentacao: string | null;
+  status_tramitacao?: string | null;
+  proposicao_id?: number;
+}
+
+const PESO_TIPO: Record<string, number> = {
+  PEC: 1.0, PLP: 0.8, PL: 0.6, MPV: 0.7, PDL: 0.4, PRC: 0.4, REQ: 0.1,
+};
+
+function normalizeStatus(raw: string | null | undefined): string {
+  if (!raw) return "Em tramitação";
+  const s = raw.toLowerCase();
+  if (s.includes("promulgad") || s.includes("transformad") || s.includes("sancionad")) return "Aprovada";
+  if (s.includes("aprovad")) return "Aprovada";
+  if (s.includes("arquivad")) return "Arquivada";
+  if (s.includes("rejeit")) return "Rejeitada";
+  if (s.includes("retirad")) return "Retirada";
+  return "Em tramitação";
 }
 
 async function fetchCamaraProposicoes(deputadoId: number): Promise<Proposicao[]> {
@@ -36,6 +53,8 @@ async function fetchCamaraProposicoes(deputadoId: number): Promise<Proposicao[]>
           ementa: p.ementa || "",
           url: p.urlInteiroTeor || `https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=${p.id}`,
           data_apresentacao: p.dataApresentacao || null,
+          proposicao_id: p.id,
+          status_tramitacao: p.descricaoSituacao || null,
         });
       }
     } catch (e) {
@@ -179,6 +198,8 @@ serve(async (req) => {
       tema: themes[`${p.tipo}-${p.numero}-${p.ano}`] || "Outros",
       url: p.url,
       data_apresentacao: p.data_apresentacao,
+      status_tramitacao: normalizeStatus(p.status_tramitacao),
+      peso_tipo: PESO_TIPO[p.tipo] ?? 0.3,
     }));
 
     // Upsert in batches
