@@ -116,6 +116,7 @@ export function Navbar({
               { path: "/", label: "Câmara", active: isCamara },
               { path: "/senado", label: "Senado", active: isSenado },
               { path: "/insights", label: "Insights", active: isInsights },
+              { path: "/desempenho", label: "Desempenho", active: location.pathname === "/desempenho" },
               { path: "/documentacao", label: "Docs", active: isDocs },
               ...(isAdminUser ? [{ path: "/admin", label: "Admin", active: isAdminPage }] : []),
             ].map((tab) => (
