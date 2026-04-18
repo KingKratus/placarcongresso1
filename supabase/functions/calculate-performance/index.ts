@@ -81,6 +81,43 @@ async function calcEngagement(parlamentar_id: number): Promise<{ score: number; 
   }
 }
 
+async function calcSenadoEngagement(senador_id: number): Promise<{ score: number; raw: any }> {
+  try {
+    const url = `https://legis.senado.leg.br/dadosabertos/senador/${senador_id}/comissoes?v=5`;
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) return { score: 0.3, raw: { error: r.status } };
+    const j = await r.json();
+    const comissoes = j?.MembroComissaoParlamentar?.Parlamentar?.MembroComissoes?.Comissao || [];
+    const arr = Array.isArray(comissoes) ? comissoes : [comissoes];
+    const total = arr.length;
+    const isRelator = arr.filter((c: any) => /titular|presid|relator/i.test(c?.DescricaoParticipacao || "")).length;
+    const score = Math.min(1, total / 6 + isRelator * 0.1);
+    return { score, raw: { comissoes: total, titular_presid: isRelator } };
+  } catch {
+    return { score: 0.3, raw: {} };
+  }
+}
+
+async function calcSenadoPresence(senador_id: number, ano: number): Promise<{ score: number; raw: any }> {
+  try {
+    const url = `https://legis.senado.leg.br/dadosabertos/senador/${senador_id}/votacoes?ano=${ano}&v=5`;
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) return { score: 0.5, raw: { error: r.status } };
+    const j = await r.json();
+    const votacoes = j?.VotacaoParlamentar?.Parlamentar?.Votacoes?.Votacao || [];
+    const arr = Array.isArray(votacoes) ? votacoes : [votacoes];
+    const total = arr.length;
+    const presentes = arr.filter((v: any) => {
+      const voto = (v?.SiglaVoto || v?.DescricaoVoto || "").toString().toUpperCase();
+      return voto && !/AUSENTE|N\.COMP|NAO COMP/i.test(voto);
+    }).length;
+    if (total === 0) return { score: 0.5, raw: { total: 0 } };
+    return { score: presentes / total, raw: { total, presentes } };
+  } catch {
+    return { score: 0.5, raw: {} };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -115,8 +152,8 @@ serve(async (req) => {
       const pid = a[idCol];
       const A = (a.score || 0) / 100;
       const [presObj, engObj, impObj] = await Promise.all([
-        casa === "camara" ? calcPresence(pid, ano) : Promise.resolve({ score: 0.5, raw: {} }),
-        casa === "camara" ? calcEngagement(pid) : Promise.resolve({ score: 0.3, raw: {} }),
+        casa === "camara" ? calcPresence(pid, ano) : calcSenadoPresence(pid, ano),
+        casa === "camara" ? calcEngagement(pid) : calcSenadoEngagement(pid),
         calcImpact(sb, pid, casa, ano),
       ]);
       const total = (A * 0.25 + presObj.score * 0.25 + impObj.score * 0.30 + engObj.score * 0.20) * 100;
