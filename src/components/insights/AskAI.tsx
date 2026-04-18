@@ -309,7 +309,9 @@ export function AskAI({ context, userId, floating }: Props) {
                   <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <Loader2 size={14} className="text-primary animate-spin" />
                   </div>
-                  <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">Pensando...</div>
+                  <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
+                    {toolStatus || "Pensando..."}
+                  </div>
                 </div>
               )}
             </div>
