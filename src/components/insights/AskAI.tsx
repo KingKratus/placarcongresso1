@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Loader2, Sparkles, Plus, Trash2, MessageSquare, History } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles, Plus, Trash2, MessageSquare, History, Wrench } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 
@@ -38,6 +40,8 @@ export function AskAI({ context, userId, floating }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,11 +105,28 @@ export function AskAI({ context, userId, floating }: Props) {
     setMessages(updatedMessages);
     setInput("");
     setIsLoading(true);
+    setToolStatus(null);
 
-    let assistantSoFar = "";
     let currentConvId = activeConvId;
 
     try {
+      // Modo avançado: tool-calling não-streaming
+      if (advancedMode) {
+        setToolStatus("Pesquisando dados e web...");
+        const { data, error } = await supabase.functions.invoke("ask-ai-tools", {
+          body: { messages: updatedMessages },
+        });
+        if (error) throw error;
+        const finalContent = data?.content || "Sem resposta";
+        const finalMsgs: Msg[] = [...updatedMessages, { role: "assistant", content: finalContent }];
+        setMessages(finalMsgs);
+        currentConvId = await saveConversation(finalMsgs, currentConvId);
+        setIsLoading(false);
+        setToolStatus(null);
+        return;
+      }
+
+      // Modo padrão: streaming
       const customAiKey = localStorage.getItem("custom_ai_key") || "";
       const customAiProvider = localStorage.getItem("custom_ai_provider") || "openai";
 
@@ -131,6 +152,7 @@ export function AskAI({ context, userId, floating }: Props) {
         return;
       }
 
+      let assistantSoFar = "";
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
@@ -172,7 +194,6 @@ export function AskAI({ context, userId, floating }: Props) {
         }
       }
 
-      // Save after complete
       const finalMsgs = [...updatedMessages, { role: "assistant" as const, content: assistantSoFar }];
       currentConvId = await saveConversation(finalMsgs, currentConvId);
     } catch (e) {
@@ -180,6 +201,7 @@ export function AskAI({ context, userId, floating }: Props) {
       setMessages(prev => [...prev, { role: "assistant", content: "❌ Erro de conexão com o serviço de IA." }]);
     } finally {
       setIsLoading(false);
+      setToolStatus(null);
     }
   };
 
@@ -206,7 +228,19 @@ export function AskAI({ context, userId, floating }: Props) {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Powered by Lovable AI · Faça perguntas sobre o Congresso</p>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <p className="text-xs text-muted-foreground">Powered by Lovable AI</p>
+          <div className="flex items-center gap-2">
+            <Wrench size={12} className={advancedMode ? "text-primary" : "text-muted-foreground"} />
+            <Label htmlFor="adv-mode" className="text-[10px] cursor-pointer">Análise avançada</Label>
+            <Switch id="adv-mode" checked={advancedMode} onCheckedChange={setAdvancedMode} className="scale-75" />
+          </div>
+        </div>
+        {advancedMode && (
+          <p className="text-[10px] text-primary/80 mt-1">
+            🔧 Modo com web search + leitura segura do banco (sem streaming, mais lento)
+          </p>
+        )}
       </CardHeader>
       <CardContent className="flex-1 flex flex-col min-h-0 gap-3">
         {showHistory && userId ? (
@@ -275,7 +309,9 @@ export function AskAI({ context, userId, floating }: Props) {
                   <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <Loader2 size={14} className="text-primary animate-spin" />
                   </div>
-                  <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">Pensando...</div>
+                  <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">
+                    {toolStatus || "Pensando..."}
+                  </div>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Shield, Database, RefreshCcw, Users, AlertTriangle, Loader2, Trash2, BarChart2 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { AdminBulkSync } from "@/components/AdminBulkSync";
+import { AdminPerformanceSync } from "@/components/AdminPerformanceSync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -250,6 +251,8 @@ const Admin = () => {
           {/* SYNCS */}
           <TabsContent value="syncs" className="space-y-4 mt-4">
             <AdminBulkSync userId={user.id} />
+
+            <AdminPerformanceSync ano={ano} />
 
             <Card>
               <CardHeader className="pb-2">
