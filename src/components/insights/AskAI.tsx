@@ -228,7 +228,19 @@ export function AskAI({ context, userId, floating }: Props) {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Powered by Lovable AI · Faça perguntas sobre o Congresso</p>
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <p className="text-xs text-muted-foreground">Powered by Lovable AI</p>
+          <div className="flex items-center gap-2">
+            <Wrench size={12} className={advancedMode ? "text-primary" : "text-muted-foreground"} />
+            <Label htmlFor="adv-mode" className="text-[10px] cursor-pointer">Análise avançada</Label>
+            <Switch id="adv-mode" checked={advancedMode} onCheckedChange={setAdvancedMode} className="scale-75" />
+          </div>
+        </div>
+        {advancedMode && (
+          <p className="text-[10px] text-primary/80 mt-1">
+            🔧 Modo com web search + leitura segura do banco (sem streaming, mais lento)
+          </p>
+        )}
       </CardHeader>
       <CardContent className="flex-1 flex flex-col min-h-0 gap-3">
         {showHistory && userId ? (
