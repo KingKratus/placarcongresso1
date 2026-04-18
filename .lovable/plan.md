@@ -1,52 +1,15 @@
-The user wants a comprehensive parliamentary performance score system with 4 dimensions (Alignment, Presence, Impact, Engagement), customizable weights, and the ability to reset to defaults. Let me plan this concisely.
 
-Existing infrastructure: alignment (A) is already calculated via `analises_deputados.score`. Need to add P, I, E from new API endpoints.
+The user wants several things bundled. Let me analyze:
 
-## Plano: Score de Desempenho Parlamentar (P-Score)
+1. **Histograma de P-Scores em /desempenho** — `PerformanceHistogram.tsx` já existe, só precisa ser integrado em `Desempenho.tsx`
+2. **Teste end-to-end** — ação manual do usuário, vou listar como suggestion
+3. **Comparação lado a lado de até 4 deputados com radar chart** — novo componente `PerformanceCompare.tsx` (já iniciado pelo AI antes mas parece não ter sido finalizado)
+4. **Job para reprocessar fetch-proposicoes em massa** — `reprocess-proposicoes` já existe; falta botão no Admin para acioná-lo em batch
+5. **Teste end-to-end perfil** — ação manual
+6. **Estender cron + toggle para Senado** — `calculate-performance` já suporta `casa: "senado"` via parâmetro; falta (a) cron diário pro Senado, (b) toggle no `RankingTable` do Senado / `Senado.tsx`
+7. **Botão de sync no Admin para calcular Desempenho** — novo botão em `Admin.tsx` chamando `calculate-performance` para Câmara e Senado
+8. **IA com Web Search + leitura Supabase sem dados sensíveis** — nova edge function `ask-ai-tools` (ou estender `ask-ai`) com tool calling: `web_search` e `query_supabase` (whitelist de tabelas: analises_*, proposicoes_parlamentares, deputy_performance_scores, votacoes, votacao_temas — bloqueia profiles, api_keys, sync_*, user_roles, chat_conversations)
 
-### 1. Nova Tabela: `deputy_performance_scores`
+Vou checar arquivos relevantes rapidamente para confirmar estado atual.
 
-Armazena as 4 dimensões + score final por deputado/ano:
-
-- `deputado_id`, `ano`, `casa`
-- `score_alinhamento` (A) — vem de `analises_deputados.score`
-- `score_presenca` (P) — % presença em sessões
-- `score_impacto` (I) — peso(tipo) × status × abrangência das proposições
-- `score_engajamento` (E) — comissões + relatorias
-- `score_total` (P normalizado 0-100)
-- `dados_brutos` (jsonb — sessoes_total, sessoes_presente, relatorias, etc.)
-
-RLS: leitura pública, escrita só service role.
-
-### 2. Nova Edge Function: `calculate-performance`
-
-Batch para todos os 513 deputados (e senadores em fase 2):
-
-- Busca presença: `GET /deputados/{id}/eventos` + cruzar com `/eventos/{id}/votantes`
-- Busca proposições: já temos em `proposicoes_parlamentares` (adicionar campos `status_tramitacao` e `peso_tipo`)
-- Busca comissões: `GET /deputados/{id}/orgaos` + `/orgaos/{id}/eventos`
-- Aplica fórmulas com pesos padrão
-- Normaliza P_final (0-100) usando min-max do conjunto
-- Cron diário via pg_cron (1x/dia, 03:00 UTC)
-
-### 3. Atualizar `fetch-proposicoes` (enriquecer)
-
-Adicionar à tabela `proposicoes_parlamentares`:
-
-- `status_tramitacao` (Aprovada/Em tramitação/Arquivada)
-- `peso_tipo` calculado (PEC=1.0, PL=0.6, PDL=0.4, REQ=0.1)
-- Usar tema já classificado para `abrangencia_tema`
-
-### 4. UI: Nova Aba "Desempenho" no Perfil
-
-`DeputadoDetail.tsx` e `SenadorDetail.tsx` gan
-
-&nbsp;
-
-&nbsp;
-
-&nbsp;
-
-&nbsp;
-
-Scan bugs also
+Plan será conciso.
