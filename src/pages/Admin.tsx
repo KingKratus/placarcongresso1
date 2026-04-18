@@ -252,6 +252,8 @@ const Admin = () => {
           <TabsContent value="syncs" className="space-y-4 mt-4">
             <AdminBulkSync userId={user.id} />
 
+            <AdminPerformanceSync ano={ano} />
+
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-black uppercase tracking-widest">Histórico Completo (últimas 100)</CardTitle>
