@@ -105,11 +105,28 @@ export function AskAI({ context, userId, floating }: Props) {
     setMessages(updatedMessages);
     setInput("");
     setIsLoading(true);
+    setToolStatus(null);
 
-    let assistantSoFar = "";
     let currentConvId = activeConvId;
 
     try {
+      // Modo avançado: tool-calling não-streaming
+      if (advancedMode) {
+        setToolStatus("Pesquisando dados e web...");
+        const { data, error } = await supabase.functions.invoke("ask-ai-tools", {
+          body: { messages: updatedMessages },
+        });
+        if (error) throw error;
+        const finalContent = data?.content || "Sem resposta";
+        const finalMsgs: Msg[] = [...updatedMessages, { role: "assistant", content: finalContent }];
+        setMessages(finalMsgs);
+        currentConvId = await saveConversation(finalMsgs, currentConvId);
+        setIsLoading(false);
+        setToolStatus(null);
+        return;
+      }
+
+      // Modo padrão: streaming
       const customAiKey = localStorage.getItem("custom_ai_key") || "";
       const customAiProvider = localStorage.getItem("custom_ai_provider") || "openai";
 
@@ -135,6 +152,7 @@ export function AskAI({ context, userId, floating }: Props) {
         return;
       }
 
+      let assistantSoFar = "";
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
@@ -176,7 +194,6 @@ export function AskAI({ context, userId, floating }: Props) {
         }
       }
 
-      // Save after complete
       const finalMsgs = [...updatedMessages, { role: "assistant" as const, content: assistantSoFar }];
       currentConvId = await saveConversation(finalMsgs, currentConvId);
     } catch (e) {
@@ -184,6 +201,7 @@ export function AskAI({ context, userId, floating }: Props) {
       setMessages(prev => [...prev, { role: "assistant", content: "❌ Erro de conexão com o serviço de IA." }]);
     } finally {
       setIsLoading(false);
+      setToolStatus(null);
     }
   };
 
