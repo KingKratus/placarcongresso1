@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/table";
 import { useCustomWeights, applyWeights, type PerformanceScore } from "@/hooks/usePerformanceScore";
 import { PerformanceWeightsCustomizer } from "@/components/PerformanceWeightsCustomizer";
+import { PerformanceHistogram } from "@/components/PerformanceHistogram";
+import { PerformanceCompare } from "@/components/PerformanceCompare";
 
 const ANOS = [2023, 2024, 2025, 2026];
 
@@ -166,6 +168,10 @@ export default function Desempenho() {
         </Card>
 
         <PerformanceWeightsCustomizer onChange={update} />
+
+        <PerformanceHistogram data={filtered} highlightPartido={partido !== "all" ? partido : undefined} />
+
+        <PerformanceCompare data={filtered} />
 
         <Card>
           <CardHeader className="pb-3">
