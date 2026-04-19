@@ -125,6 +125,9 @@ serve(async (req) => {
     const ano = body.ano ?? new Date().getFullYear();
     const limit = body.limit ?? 50;
     const casa = body.casa ?? "camara";
+    const parlamentarIds: number[] | null = Array.isArray(body.parlamentar_ids) && body.parlamentar_ids.length > 0
+      ? body.parlamentar_ids.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
+      : null;
 
     const sb = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -139,8 +142,13 @@ serve(async (req) => {
     const ufCol = casa === "camara" ? "deputado_uf" : "senador_uf";
     const fotoCol = casa === "camara" ? "deputado_foto" : "senador_foto";
 
-    const { data: list } = await sb
-      .from(tableA).select("*").eq("ano", ano).order("score", { ascending: false }).limit(limit);
+    let listQuery = sb.from(tableA).select("*").eq("ano", ano);
+    if (parlamentarIds) {
+      listQuery = listQuery.in(idCol, parlamentarIds);
+    } else {
+      listQuery = listQuery.order("score", { ascending: false }).limit(limit);
+    }
+    const { data: list } = await listQuery;
     if (!list || list.length === 0) {
       return new Response(JSON.stringify({ ok: true, processed: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
