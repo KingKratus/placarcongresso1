@@ -29,7 +29,7 @@ export default function Desempenho() {
   const [uf, setUf] = useState("all");
   const { weights, update, reset, isDefault } = useCustomWeights();
 
-  useEffect(() => {
+  const reload = () => {
     setLoading(true);
     supabase
       .from("deputy_performance_scores")
@@ -42,6 +42,11 @@ export default function Desempenho() {
         setScores((data || []) as PerformanceScore[]);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ano, casa]);
 
   const partidos = useMemo(() => {
@@ -171,7 +176,7 @@ export default function Desempenho() {
 
         <PerformanceHistogram data={filtered} highlightPartido={partido !== "all" ? partido : undefined} />
 
-        <PerformanceCompare data={filtered} />
+        <PerformanceCompare data={filtered} casa={casa} ano={ano} onRefreshed={reload} />
 
         <Card>
           <CardHeader className="pb-3">

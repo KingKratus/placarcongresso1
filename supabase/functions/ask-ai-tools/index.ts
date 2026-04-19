@@ -30,7 +30,8 @@ interface SupabaseFilter {
 }
 
 async function querySupabase(
-  sb: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  sb: any,
   table: string,
   filters: SupabaseFilter[],
   select: string,
