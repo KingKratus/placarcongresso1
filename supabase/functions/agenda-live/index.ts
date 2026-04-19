@@ -121,7 +121,8 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
-    console.error("[agenda-live] Error:", error.message);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[agenda-live] Error:", msg);
     return jsonResponse({ error: "Erro ao buscar agenda." }, 500);
   }
 });

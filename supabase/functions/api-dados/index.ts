@@ -137,7 +137,8 @@ Deno.serve(async (req) => {
       },
     }, 400);
   } catch (error) {
-    console.error("[api-dados] Error:", error.message);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[api-dados] Error:", msg);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
 });

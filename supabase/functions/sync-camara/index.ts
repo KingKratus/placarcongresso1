@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
 
     if (!isServiceRole) {
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } },
+        global: { headers: { Authorization: authHeader || "" } },
       });
       const { data: userData, error: userError } = await authClient.auth.getUser();
       if (userError || !userData?.user) {
@@ -553,9 +553,11 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ ...summary, run_id: runId });
   } catch (error) {
-    console.error("[sync-camara] Fatal error:", error.message, error.stack);
-    await logEvent("error", `❌ Erro fatal: ${error.message}`);
-    await finishRun("error", null, error.message);
+    const msg = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error("[sync-camara] Fatal error:", msg, stack);
+    await logEvent("error", `❌ Erro fatal: ${msg}`);
+    await finishRun("error", null, msg);
     return jsonResponse({ error: "Erro interno do servidor.", run_id: runId }, 500);
   }
 });
