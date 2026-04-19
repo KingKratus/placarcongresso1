@@ -138,6 +138,15 @@ export function AdminPerformanceSync({ ano }: Props) {
             Reprocessar Proposições (status + peso)
           </Button>
         </div>
+        {progress && progress.total > 0 && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+              <span>Progresso</span>
+              <span>{progress.current}/{progress.total} ({Math.round((progress.current / progress.total) * 100)}%)</span>
+            </div>
+            <Progress value={(progress.current / progress.total) * 100} className="h-1.5" />
+          </div>
+        )}
         {logs.length > 0 && (
           <div className="mt-2 max-h-48 overflow-y-auto bg-muted/40 rounded p-2 text-[10px] font-mono space-y-0.5 border border-border">
             {logs.map((l, i) => (
@@ -146,6 +155,7 @@ export function AdminPerformanceSync({ ano }: Props) {
                 className={
                   l.includes("✗") ? "text-destructive"
                   : l.includes("✓") ? "text-emerald-600 dark:text-emerald-400"
+                  : l.includes("💾") ? "text-blue-600 dark:text-blue-400"
                   : l.includes("⚠") ? "text-amber-600 dark:text-amber-400"
                   : "text-muted-foreground"
                 }
