@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Users } from "lucide-react";
+import { X, Plus, Users, RefreshCcw, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Legend, Tooltip,
@@ -24,6 +26,9 @@ interface ScoreItem {
 
 interface Props {
   data: ScoreItem[];
+  casa?: "camara" | "senado";
+  ano?: number;
+  onRefreshed?: () => void;
 }
 
 const COLORS = [
@@ -33,10 +38,12 @@ const COLORS = [
   "hsl(var(--oposicao))",
 ];
 
-export function PerformanceCompare({ data }: Props) {
+export function PerformanceCompare({ data, casa = "camara", ano = new Date().getFullYear(), onRefreshed }: Props) {
   const [selected, setSelected] = useState<ScoreItem[]>([]);
   const [search, setSearch] = useState("");
   const [showPicker, setShowPicker] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
 
   const matches = search.trim().length >= 2
     ? data
