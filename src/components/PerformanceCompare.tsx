@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Users, RefreshCcw, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { streamPerformance } from "@/lib/streamPerformance";
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Legend, Tooltip,
@@ -66,16 +66,30 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
   const forceRefresh = async () => {
     if (selected.length === 0) return;
     setRefreshing(true);
-    setLogs([`▶ Iniciando recálculo de ${selected.length} parlamentares (${casa}/${ano})...`]);
+    setLogs([`▶ Stream de recálculo para ${selected.length} parlamentar(es) (${casa}/${ano})...`]);
     try {
       const ids = selected.map((s) => s.parlamentar_id);
-      setLogs((l) => [...l, `→ Chamando calculate-performance para IDs: ${ids.join(", ")}`]);
-      const { data: res, error } = await supabase.functions.invoke("calculate-performance", {
-        body: { casa, ano, parlamentar_ids: ids },
+      let processed = 0;
+      await streamPerformance({
+        casa,
+        ano,
+        parlamentar_ids: ids,
+        onEvent: (e) => {
+          if (e.type === "start") {
+            setLogs((l) => [...l, `→ ${e.total} na fila`]);
+          } else if (e.type === "progress") {
+            setLogs((l) => [...l, `  · ${e.current}/${e.total} ${e.nome ?? "?"} → ${e.score_total.toFixed(1)} (${e.elapsed_ms}ms)`]);
+          } else if (e.type === "flush") {
+            setLogs((l) => [...l, `  💾 lote gravado`]);
+          } else if (e.type === "done") {
+            processed = e.processed;
+          } else if (e.type === "error") {
+            throw new Error(e.message);
+          }
+        },
       });
-      if (error) throw error;
-      setLogs((l) => [...l, `✓ ${res?.processed ?? 0} parlamentares atualizados`]);
-      toast.success(`${res?.processed ?? 0} scores recalculados`);
+      setLogs((l) => [...l, `✓ ${processed} parlamentares atualizados`]);
+      toast.success(`${processed} scores recalculados`);
       onRefreshed?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro desconhecido";
