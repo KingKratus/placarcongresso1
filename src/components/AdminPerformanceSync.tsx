@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Loader2, Sparkles, RefreshCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { streamPerformance } from "@/lib/streamPerformance";
 
 interface Props {
   ano: number;
@@ -13,24 +15,47 @@ export function AdminPerformanceSync({ ano }: Props) {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
   const log = (line: string) =>
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString("pt-BR")}] ${line}`]);
 
-  const run = async (label: string, body: Record<string, unknown>) => {
+  const run = async (label: string, body: { casa: "camara" | "senado"; ano: number; limit: number }) => {
     setBusy(label);
     setLogs([]);
-    log(`▶ ${label}: iniciando recálculo de P-Score (ano=${ano})...`);
+    setProgress(null);
+    log(`▶ ${label}: abrindo stream de P-Score (ano=${ano}, limit=${body.limit})...`);
+    const t0 = Date.now();
     try {
-      const t0 = Date.now();
-      const { data, error } = await supabase.functions.invoke("calculate-performance", { body });
-      if (error) throw error;
+      let processed = 0;
+      await streamPerformance({
+        casa: body.casa,
+        ano: body.ano,
+        limit: body.limit,
+        onEvent: (e) => {
+          if (e.type === "start") {
+            log(`→ ${e.total} parlamentares na fila`);
+            setProgress({ current: 0, total: e.total });
+          } else if (e.type === "progress") {
+            setProgress({ current: e.current, total: e.total });
+            // Log every 10th to avoid flood
+            if (e.current % 10 === 0 || e.current === e.total) {
+              log(`  · ${e.current}/${e.total} — ${e.nome ?? "?"} (${e.partido}/${e.uf}) score=${e.score_total.toFixed(1)}`);
+            }
+          } else if (e.type === "flush") {
+            log(`  💾 lote gravado (${e.upserted} registros, total acumulado ${e.accumulated})`);
+          } else if (e.type === "done") {
+            processed = e.processed;
+          } else if (e.type === "error") {
+            throw new Error(e.message);
+          }
+        },
+      });
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-      const processed = data?.processed ?? 0;
       log(`✓ ${label}: ${processed} parlamentares processados em ${elapsed}s`);
       toast({
         title: "Desempenho recalculado",
-        description: `${label}: ${processed} parlamentares atualizados.`,
+        description: `${label}: ${processed} parlamentares atualizados em ${elapsed}s.`,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro desconhecido";
