@@ -28,7 +28,7 @@ function statusWeight(status: string | null): number {
   if (s.includes("promulgada") || s.includes("transformad")) return 1.0;
   if (s.includes("aprovad")) return 0.7;
   if (s.includes("arquivad") || s.includes("rejeit")) return 0.0;
-  return 0.3; // em tramitação
+  return 0.3;
 }
 
 async function calcImpact(sb: any, parlamentar_id: number, casa: string, ano: number) {
@@ -44,12 +44,11 @@ async function calcImpact(sb: any, parlamentar_id: number, casa: string, ano: nu
     const a = ABRANGENCIA_TEMA[p.tema || "Outros"] ?? 0.3;
     sum += w * Math.max(s, 0.2) * a;
   }
-  // normalize roughly: assume max 30 propositions weighted ~1 each
   const score = Math.min(1, sum / Math.max(10, data.length));
   return { score, count: data.length };
 }
 
-async function calcPresence(parlamentar_id: number, ano: number): Promise<{ score: number; raw: any }> {
+async function calcPresence(parlamentar_id: number, ano: number) {
   try {
     const url = `https://dadosabertos.camara.leg.br/api/v2/deputados/${parlamentar_id}/eventos?dataInicio=${ano}-01-01&dataFim=${ano}-12-31&itens=100`;
     const r = await fetch(url, { headers: { Accept: "application/json" } });
@@ -57,15 +56,13 @@ async function calcPresence(parlamentar_id: number, ano: number): Promise<{ scor
     const j = await r.json();
     const total = (j.dados || []).length;
     if (total === 0) return { score: 0.5, raw: { total: 0 } };
-    // Heuristic: presence proxy by number of events listed (cap 80 for ratio)
-    const score = Math.min(1, total / 80);
-    return { score, raw: { eventos: total } };
+    return { score: Math.min(1, total / 80), raw: { eventos: total } };
   } catch {
     return { score: 0.5, raw: {} };
   }
 }
 
-async function calcEngagement(parlamentar_id: number): Promise<{ score: number; raw: any }> {
+async function calcEngagement(parlamentar_id: number) {
   try {
     const url = `https://dadosabertos.camara.leg.br/api/v2/deputados/${parlamentar_id}/orgaos?itens=100`;
     const r = await fetch(url, { headers: { Accept: "application/json" } });
@@ -74,14 +71,13 @@ async function calcEngagement(parlamentar_id: number): Promise<{ score: number; 
     const orgaos = j.dados || [];
     const isRelator = orgaos.filter((o: any) => /relator|presid/i.test(o.titulo || "")).length;
     const total = orgaos.length;
-    const score = Math.min(1, total / 8 + isRelator * 0.15);
-    return { score, raw: { comissoes: total, relatorias: isRelator } };
+    return { score: Math.min(1, total / 8 + isRelator * 0.15), raw: { comissoes: total, relatorias: isRelator } };
   } catch {
     return { score: 0.3, raw: {} };
   }
 }
 
-async function calcSenadoEngagement(senador_id: number): Promise<{ score: number; raw: any }> {
+async function calcSenadoEngagement(senador_id: number) {
   try {
     const url = `https://legis.senado.leg.br/dadosabertos/senador/${senador_id}/comissoes?v=5`;
     const r = await fetch(url, { headers: { Accept: "application/json" } });
@@ -91,14 +87,13 @@ async function calcSenadoEngagement(senador_id: number): Promise<{ score: number
     const arr = Array.isArray(comissoes) ? comissoes : [comissoes];
     const total = arr.length;
     const isRelator = arr.filter((c: any) => /titular|presid|relator/i.test(c?.DescricaoParticipacao || "")).length;
-    const score = Math.min(1, total / 6 + isRelator * 0.1);
-    return { score, raw: { comissoes: total, titular_presid: isRelator } };
+    return { score: Math.min(1, total / 6 + isRelator * 0.1), raw: { comissoes: total, titular_presid: isRelator } };
   } catch {
     return { score: 0.3, raw: {} };
   }
 }
 
-async function calcSenadoPresence(senador_id: number, ano: number): Promise<{ score: number; raw: any }> {
+async function calcSenadoPresence(senador_id: number, ano: number) {
   try {
     const url = `https://legis.senado.leg.br/dadosabertos/senador/${senador_id}/votacoes?ano=${ano}&v=5`;
     const r = await fetch(url, { headers: { Accept: "application/json" } });
@@ -118,9 +113,33 @@ async function calcSenadoPresence(senador_id: number, ano: number): Promise<{ sc
   }
 }
 
+async function processOne(sb: any, a: any, casa: string, ano: number, idCol: string, nomeCol: string, partidoCol: string, ufCol: string, fotoCol: string) {
+  const pid = a[idCol];
+  const A = (a.score || 0) / 100;
+  const [presObj, engObj, impObj] = await Promise.all([
+    casa === "camara" ? calcPresence(pid, ano) : calcSenadoPresence(pid, ano),
+    casa === "camara" ? calcEngagement(pid) : calcSenadoEngagement(pid),
+    calcImpact(sb, pid, casa, ano),
+  ]);
+  const total = (A * 0.25 + presObj.score * 0.25 + impObj.score * 0.30 + engObj.score * 0.20) * 100;
+  return {
+    parlamentar_id: pid, casa, ano,
+    nome: a[nomeCol], partido: a[partidoCol], uf: a[ufCol], foto: a[fotoCol],
+    score_alinhamento: A,
+    score_presenca: presObj.score,
+    score_impacto: impObj.score,
+    score_engajamento: engObj.score,
+    score_total: Math.round(total * 10) / 10,
+    dados_brutos: { presenca: presObj.raw, engajamento: engObj.raw, impacto: { count: impObj.count } },
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
+    const url = new URL(req.url);
+    const wantStream = url.searchParams.get("stream") === "1" || req.headers.get("accept")?.includes("text/event-stream");
+
     const body = await req.json().catch(() => ({}));
     const ano = body.ano ?? new Date().getFullYear();
     const limit = body.limit ?? 50;
@@ -134,7 +153,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Source list from analises (already has alignment + denormalized fields)
     const tableA = casa === "camara" ? "analises_deputados" : "analises_senadores";
     const idCol = casa === "camara" ? "deputado_id" : "senador_id";
     const nomeCol = casa === "camara" ? "deputado_nome" : "senador_nome";
@@ -149,42 +167,94 @@ serve(async (req) => {
       listQuery = listQuery.order("score", { ascending: false }).limit(limit);
     }
     const { data: list } = await listQuery;
-    if (!list || list.length === 0) {
-      return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+    const total = list?.length ?? 0;
+
+    if (!wantStream) {
+      // Legacy JSON mode (single response at the end)
+      if (total === 0) {
+        return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const rows: any[] = [];
+      for (const a of list!) {
+        rows.push(await processOne(sb, a, casa, ano, idCol, nomeCol, partidoCol, ufCol, fotoCol));
+      }
+      for (let i = 0; i < rows.length; i += 50) {
+        await sb.from("deputy_performance_scores").upsert(rows.slice(i, i + 50), {
+          onConflict: "parlamentar_id,casa,ano",
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, processed: rows.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const rows: any[] = [];
-    for (const a of list) {
-      const pid = a[idCol];
-      const A = (a.score || 0) / 100;
-      const [presObj, engObj, impObj] = await Promise.all([
-        casa === "camara" ? calcPresence(pid, ano) : calcSenadoPresence(pid, ano),
-        casa === "camara" ? calcEngagement(pid) : calcSenadoEngagement(pid),
-        calcImpact(sb, pid, casa, ano),
-      ]);
-      const total = (A * 0.25 + presObj.score * 0.25 + impObj.score * 0.30 + engObj.score * 0.20) * 100;
-      rows.push({
-        parlamentar_id: pid, casa, ano,
-        nome: a[nomeCol], partido: a[partidoCol], uf: a[ufCol], foto: a[fotoCol],
-        score_alinhamento: A,
-        score_presenca: presObj.score,
-        score_impacto: impObj.score,
-        score_engajamento: engObj.score,
-        score_total: Math.round(total * 10) / 10,
-        dados_brutos: { presenca: presObj.raw, engajamento: engObj.raw, impacto: { count: impObj.count } },
-      });
-    }
+    // SSE streaming mode
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+        try {
+          send("start", { total, casa, ano });
+          if (total === 0) {
+            send("done", { processed: 0 });
+            controller.close();
+            return;
+          }
+          const rows: any[] = [];
+          let i = 0;
+          for (const a of list!) {
+            i++;
+            const t0 = Date.now();
+            const row = await processOne(sb, a, casa, ano, idCol, nomeCol, partidoCol, ufCol, fotoCol);
+            rows.push(row);
+            send("progress", {
+              current: i,
+              total,
+              parlamentar_id: row.parlamentar_id,
+              nome: row.nome,
+              partido: row.partido,
+              uf: row.uf,
+              score_total: row.score_total,
+              elapsed_ms: Date.now() - t0,
+            });
+            // Flush upsert in batches of 25 for resilience
+            if (rows.length % 25 === 0) {
+              const batch = rows.slice(-25);
+              await sb.from("deputy_performance_scores").upsert(batch, {
+                onConflict: "parlamentar_id,casa,ano",
+              });
+              send("flush", { upserted: batch.length, accumulated: rows.length });
+            }
+          }
+          // Final flush of remainder
+          const remainder = rows.length % 25;
+          if (remainder > 0) {
+            const batch = rows.slice(-remainder);
+            await sb.from("deputy_performance_scores").upsert(batch, {
+              onConflict: "parlamentar_id,casa,ano",
+            });
+            send("flush", { upserted: batch.length, accumulated: rows.length });
+          }
+          send("done", { processed: rows.length });
+        } catch (e) {
+          send("error", { message: e instanceof Error ? e.message : "Unknown" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-    for (let i = 0; i < rows.length; i += 50) {
-      await sb.from("deputy_performance_scores").upsert(rows.slice(i, i + 50), {
-        onConflict: "parlamentar_id,casa,ano",
-      });
-    }
-
-    return new Response(JSON.stringify({ ok: true, processed: rows.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
     });
   } catch (e) {
     console.error("calculate-performance error:", e);
