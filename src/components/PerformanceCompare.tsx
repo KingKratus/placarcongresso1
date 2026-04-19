@@ -63,6 +63,29 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
 
   const remove = (id: string) => setSelected(selected.filter((s) => s.id !== id));
 
+  const forceRefresh = async () => {
+    if (selected.length === 0) return;
+    setRefreshing(true);
+    setLogs([`▶ Iniciando recálculo de ${selected.length} parlamentares (${casa}/${ano})...`]);
+    try {
+      const ids = selected.map((s) => s.parlamentar_id);
+      setLogs((l) => [...l, `→ Chamando calculate-performance para IDs: ${ids.join(", ")}`]);
+      const { data: res, error } = await supabase.functions.invoke("calculate-performance", {
+        body: { casa, ano, parlamentar_ids: ids },
+      });
+      if (error) throw error;
+      setLogs((l) => [...l, `✓ ${res?.processed ?? 0} parlamentares atualizados`]);
+      toast.success(`${res?.processed ?? 0} scores recalculados`);
+      onRefreshed?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro desconhecido";
+      setLogs((l) => [...l, `✗ Erro: ${msg}`]);
+      toast.error("Erro ao recalcular: " + msg);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const radarData = [
     { dim: "Alinhamento", ...Object.fromEntries(selected.map((s, i) => [`p${i}`, Number(s.score_alinhamento) * 100])) },
     { dim: "Presença", ...Object.fromEntries(selected.map((s, i) => [`p${i}`, Number(s.score_presenca) * 100])) },
@@ -73,13 +96,36 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <Users size={14} className="text-primary" />
-          Comparar parlamentares (até 4)
-        </CardTitle>
-        <p className="text-[10px] text-muted-foreground">
-          Visualize lado a lado as 4 dimensões do P-Score
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Users size={14} className="text-primary" />
+              Comparar parlamentares (até 4)
+            </CardTitle>
+            <p className="text-[10px] text-muted-foreground">
+              Visualize lado a lado as 4 dimensões do P-Score
+            </p>
+          </div>
+          {selected.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] gap-1 shrink-0"
+              disabled={refreshing}
+              onClick={forceRefresh}
+            >
+              {refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
+              Forçar refresh
+            </Button>
+          )}
+        </div>
+        {logs.length > 0 && (
+          <div className="mt-2 max-h-24 overflow-y-auto bg-muted/40 rounded p-1.5 text-[10px] font-mono space-y-0.5">
+            {logs.map((l, i) => (
+              <div key={i} className={l.startsWith("✗") ? "text-destructive" : l.startsWith("✓") ? "text-emerald-600" : "text-muted-foreground"}>{l}</div>
+            ))}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap gap-2 items-center">
