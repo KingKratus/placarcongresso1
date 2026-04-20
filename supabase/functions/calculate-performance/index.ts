@@ -34,18 +34,22 @@ function statusWeight(status: string | null): number {
 async function calcImpact(sb: any, parlamentar_id: number, casa: string, ano: number) {
   const { data } = await sb
     .from("proposicoes_parlamentares")
-    .select("tipo,tema,peso_tipo,status_tramitacao,ano")
+    .select("tipo,tema,peso_tipo,status_tramitacao,ano,tipo_autoria")
     .eq("parlamentar_id", parlamentar_id).eq("casa", casa).eq("ano", ano);
-  if (!data || data.length === 0) return { score: 0, count: 0 };
+  if (!data || data.length === 0) return { score: 0, count: 0, autoria: 0, coautoria: 0 };
   let sum = 0;
+  let autoria = 0, coautoria = 0;
   for (const p of data) {
     const w = p.peso_tipo ?? PESO_TIPO[p.tipo] ?? 0.3;
     const s = statusWeight(p.status_tramitacao);
     const a = ABRANGENCIA_TEMA[p.tema || "Outros"] ?? 0.3;
-    sum += w * Math.max(s, 0.2) * a;
+    // Autor weighs full, co-autor weighs half
+    const authorMultiplier = p.tipo_autoria === "coautor" ? 0.5 : 1.0;
+    if (p.tipo_autoria === "coautor") coautoria++; else autoria++;
+    sum += w * Math.max(s, 0.2) * a * authorMultiplier;
   }
   const score = Math.min(1, sum / Math.max(10, data.length));
-  return { score, count: data.length };
+  return { score, count: data.length, autoria, coautoria };
 }
 
 async function calcPresence(parlamentar_id: number, ano: number) {
@@ -130,7 +134,11 @@ async function processOne(sb: any, a: any, casa: string, ano: number, idCol: str
     score_impacto: impObj.score,
     score_engajamento: engObj.score,
     score_total: Math.round(total * 10) / 10,
-    dados_brutos: { presenca: presObj.raw, engajamento: engObj.raw, impacto: { count: impObj.count } },
+    dados_brutos: {
+      presenca: presObj.raw,
+      engajamento: engObj.raw,
+      impacto: { count: impObj.count, autoria: impObj.autoria, coautoria: impObj.coautoria },
+    },
   };
 }
 
@@ -142,7 +150,8 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const ano = body.ano ?? new Date().getFullYear();
-    const limit = body.limit ?? 50;
+    // Default 1000 = "all" (covers Câmara 513 + Senado 81 with margin)
+    const limit = body.limit ?? 1000;
     const casa = body.casa ?? "camara";
     const parlamentarIds: number[] | null = Array.isArray(body.parlamentar_ids) && body.parlamentar_ids.length > 0
       ? body.parlamentar_ids.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
@@ -169,10 +178,29 @@ serve(async (req) => {
     const { data: list } = await listQuery;
     const total = list?.length ?? 0;
 
+    // Create sync_run for audit trail
+    let runId: string | null = null;
+    try {
+      const { data: run } = await sb
+        .from("sync_runs")
+        .insert({ casa: `pscore-${casa}`, ano, status: "running", summary: { total, parlamentarIds: parlamentarIds?.length ?? null } })
+        .select("id")
+        .single();
+      runId = run?.id ?? null;
+    } catch (_) { /* non-blocking */ }
+
+    const logEvent = async (step: string, message: string) => {
+      if (!runId) return;
+      try {
+        await sb.from("sync_run_events").insert({ run_id: runId, step, message });
+      } catch (_) { /* non-blocking */ }
+    };
+
     if (!wantStream) {
       // Legacy JSON mode (single response at the end)
       if (total === 0) {
-        return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+        if (runId) await sb.from("sync_runs").update({ status: "ok", finished_at: new Date().toISOString(), summary: { processed: 0 } }).eq("id", runId);
+        return new Response(JSON.stringify({ ok: true, processed: 0, run_id: runId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -185,7 +213,8 @@ serve(async (req) => {
           onConflict: "parlamentar_id,casa,ano",
         });
       }
-      return new Response(JSON.stringify({ ok: true, processed: rows.length }), {
+      if (runId) await sb.from("sync_runs").update({ status: "ok", finished_at: new Date().toISOString(), summary: { processed: rows.length } }).eq("id", runId);
+      return new Response(JSON.stringify({ ok: true, processed: rows.length, run_id: runId }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -198,9 +227,12 @@ serve(async (req) => {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         };
         try {
-          send("start", { total, casa, ano });
+          send("start", { total, casa, ano, run_id: runId });
+          await logEvent("start", `Iniciando: ${total} parlamentares (${casa}/${ano})`);
           if (total === 0) {
             send("done", { processed: 0 });
+            await logEvent("done", "Nenhum parlamentar para processar");
+            if (runId) await sb.from("sync_runs").update({ status: "ok", finished_at: new Date().toISOString() }).eq("id", runId);
             controller.close();
             return;
           }
@@ -211,6 +243,7 @@ serve(async (req) => {
             const t0 = Date.now();
             const row = await processOne(sb, a, casa, ano, idCol, nomeCol, partidoCol, ufCol, fotoCol);
             rows.push(row);
+            const elapsed = Date.now() - t0;
             send("progress", {
               current: i,
               total,
@@ -219,8 +252,16 @@ serve(async (req) => {
               partido: row.partido,
               uf: row.uf,
               score_total: row.score_total,
-              elapsed_ms: Date.now() - t0,
+              score_alinhamento: row.score_alinhamento,
+              score_presenca: row.score_presenca,
+              score_impacto: row.score_impacto,
+              score_engajamento: row.score_engajamento,
+              elapsed_ms: elapsed,
             });
+            // Log every 10th to keep DB lean
+            if (i % 10 === 0 || i === total) {
+              await logEvent("progress", `${i}/${total} ${row.nome} (${row.partido}/${row.uf}) score=${row.score_total} ${elapsed}ms`);
+            }
             // Flush upsert in batches of 25 for resilience
             if (rows.length % 25 === 0) {
               const batch = rows.slice(-25);
@@ -228,6 +269,7 @@ serve(async (req) => {
                 onConflict: "parlamentar_id,casa,ano",
               });
               send("flush", { upserted: batch.length, accumulated: rows.length });
+              await logEvent("flush", `Lote gravado: ${batch.length} (acumulado ${rows.length})`);
             }
           }
           // Final flush of remainder
@@ -238,10 +280,16 @@ serve(async (req) => {
               onConflict: "parlamentar_id,casa,ano",
             });
             send("flush", { upserted: batch.length, accumulated: rows.length });
+            await logEvent("flush", `Lote final: ${batch.length}`);
           }
           send("done", { processed: rows.length });
+          await logEvent("done", `Concluído: ${rows.length} processados`);
+          if (runId) await sb.from("sync_runs").update({ status: "ok", finished_at: new Date().toISOString(), summary: { processed: rows.length } }).eq("id", runId);
         } catch (e) {
-          send("error", { message: e instanceof Error ? e.message : "Unknown" });
+          const msg = e instanceof Error ? e.message : "Unknown";
+          send("error", { message: msg });
+          await logEvent("error", msg);
+          if (runId) await sb.from("sync_runs").update({ status: "error", error: msg, finished_at: new Date().toISOString() }).eq("id", runId);
         } finally {
           controller.close();
         }
