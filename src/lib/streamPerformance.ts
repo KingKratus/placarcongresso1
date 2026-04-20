@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type PerfStreamEvent =
-  | { type: "start"; total: number; casa: string; ano: number }
+  | { type: "start"; total: number; casa: string; ano: number; run_id?: string | null }
   | { type: "progress"; current: number; total: number; parlamentar_id: number; nome: string | null; partido: string | null; uf: string | null; score_total: number; elapsed_ms: number }
   | { type: "flush"; upserted: number; accumulated: number }
   | { type: "done"; processed: number }
