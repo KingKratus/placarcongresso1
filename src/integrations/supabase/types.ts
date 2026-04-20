@@ -236,6 +236,42 @@ export type Database = {
         }
         Relationships: []
       }
+      nolan_diagrams: {
+        Row: {
+          ano: number
+          casa: string
+          created_at: string
+          economic_axis: number
+          id: string
+          parlamentar_id: number
+          rationale: string | null
+          social_axis: number
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          created_at?: string
+          economic_axis?: number
+          id?: string
+          parlamentar_id: number
+          rationale?: string | null
+          social_axis?: number
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          created_at?: string
+          economic_axis?: number
+          id?: string
+          parlamentar_id?: number
+          rationale?: string | null
+          social_axis?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       orientacoes: {
         Row: {
           created_at: string
@@ -312,6 +348,7 @@ export type Database = {
           status_tramitacao: string | null
           tema: string | null
           tipo: string
+          tipo_autoria: string | null
           url: string | null
         }
         Insert: {
@@ -327,6 +364,7 @@ export type Database = {
           status_tramitacao?: string | null
           tema?: string | null
           tipo: string
+          tipo_autoria?: string | null
           url?: string | null
         }
         Update: {
@@ -342,6 +380,7 @@ export type Database = {
           status_tramitacao?: string | null
           tema?: string | null
           tipo?: string
+          tipo_autoria?: string | null
           url?: string | null
         }
         Relationships: []

@@ -60,6 +60,7 @@ interface Proposicao {
   tema: string | null;
   url: string | null;
   data_apresentacao: string | null;
+  tipo_autoria?: string | null;
 }
 
 export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {

@@ -44,6 +44,8 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
   const [showPicker, setShowPicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [points, setPoints] = useState<{ i: number; score: number; nome?: string | null }[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   const matches = search.trim().length >= 2
     ? data
@@ -63,10 +65,19 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
 
   const remove = (id: string) => setSelected(selected.filter((s) => s.id !== id));
 
+  const stop = () => {
+    abortRef.current?.abort();
+    setLogs((l) => [...l, "⏹ Cancelado"]);
+    setRefreshing(false);
+  };
+
   const forceRefresh = async () => {
     if (selected.length === 0) return;
     setRefreshing(true);
     setLogs([`▶ Stream de recálculo para ${selected.length} parlamentar(es) (${casa}/${ano})...`]);
+    setPoints([]);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       const ids = selected.map((s) => s.parlamentar_id);
       let processed = 0;
@@ -74,11 +85,13 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
         casa,
         ano,
         parlamentar_ids: ids,
+        signal: ctrl.signal,
         onEvent: (e) => {
           if (e.type === "start") {
             setLogs((l) => [...l, `→ ${e.total} na fila`]);
           } else if (e.type === "progress") {
             setLogs((l) => [...l, `  · ${e.current}/${e.total} ${e.nome ?? "?"} → ${e.score_total.toFixed(1)} (${e.elapsed_ms}ms)`]);
+            setPoints((p) => [...p, { i: e.current, score: e.score_total, nome: e.nome }]);
           } else if (e.type === "flush") {
             setLogs((l) => [...l, `  💾 lote gravado`]);
           } else if (e.type === "done") {
@@ -92,11 +105,16 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
       toast.success(`${processed} scores recalculados`);
       onRefreshed?.();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erro desconhecido";
-      setLogs((l) => [...l, `✗ Erro: ${msg}`]);
-      toast.error("Erro ao recalcular: " + msg);
+      if ((e as any)?.name === "AbortError") {
+        setLogs((l) => [...l, "⏹ Stream abortado"]);
+      } else {
+        const msg = e instanceof Error ? e.message : "Erro desconhecido";
+        setLogs((l) => [...l, `✗ Erro: ${msg}`]);
+        toast.error("Erro ao recalcular: " + msg);
+      }
     } finally {
       setRefreshing(false);
+      abortRef.current = null;
     }
   };
 
@@ -121,22 +139,32 @@ export function PerformanceCompare({ data, casa = "camara", ano = new Date().get
             </p>
           </div>
           {selected.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-[11px] gap-1 shrink-0"
-              disabled={refreshing}
-              onClick={forceRefresh}
-            >
-              {refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
-              Forçar refresh
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px] gap-1"
+                disabled={refreshing}
+                onClick={forceRefresh}
+              >
+                {refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
+                Forçar refresh
+              </Button>
+              {refreshing && (
+                <Button size="sm" variant="destructive" className="h-7 text-[11px] gap-1" onClick={stop}>
+                  <Square size={11} /> Parar
+                </Button>
+              )}
+            </div>
           )}
         </div>
+        {points.length > 0 && (
+          <div className="mt-2"><LiveScoreChart points={points} height={90} /></div>
+        )}
         {logs.length > 0 && (
           <div className="mt-2 max-h-24 overflow-y-auto bg-muted/40 rounded p-1.5 text-[10px] font-mono space-y-0.5">
             {logs.map((l, i) => (
-              <div key={i} className={l.startsWith("✗") ? "text-destructive" : l.startsWith("✓") ? "text-emerald-600" : "text-muted-foreground"}>{l}</div>
+              <div key={i} className={l.startsWith("✗") ? "text-destructive" : l.startsWith("✓") ? "text-emerald-600" : l.startsWith("⏹") ? "text-amber-600" : "text-muted-foreground"}>{l}</div>
             ))}
           </div>
         )}

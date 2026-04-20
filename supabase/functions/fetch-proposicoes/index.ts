@@ -33,11 +33,10 @@ function normalizeStatus(raw: string | null | undefined): string {
   return "Em tramitação";
 }
 
-async function fetchCamaraProposicoes(deputadoId: number): Promise<Proposicao[]> {
-  const all: Proposicao[] = [];
-  let page = 1;
+async function fetchCamaraProposicoes(deputadoId: number): Promise<(Proposicao & { tipo_autoria: string })[]> {
+  const all: (Proposicao & { tipo_autoria: string })[] = [];
   const tipos = ["PL", "PLP", "PEC", "PRC", "PDL", "MPV", "REQ"];
-  
+
   for (const tipo of tipos) {
     try {
       const url = `https://dadosabertos.camara.leg.br/api/v2/proposicoes?idDeputadoAutor=${deputadoId}&siglaTipo=${tipo}&ordem=DESC&ordenarPor=ano&itens=100`;
@@ -46,6 +45,22 @@ async function fetchCamaraProposicoes(deputadoId: number): Promise<Proposicao[]>
       const json = await resp.json();
       const dados = json.dados || [];
       for (const p of dados) {
+        // Fetch authors to detect autor vs coautor
+        let tipo_autoria = "autor";
+        try {
+          const aResp = await fetch(`https://dadosabertos.camara.leg.br/api/v2/proposicoes/${p.id}/autores`, { headers: { Accept: "application/json" } });
+          if (aResp.ok) {
+            const aJson = await aResp.json();
+            const autores = aJson.dados || [];
+            if (autores.length > 1) {
+              const me = autores.find((au: any) => String(au.uri || "").endsWith(`/${deputadoId}`));
+              if (me && me.proponente !== 1 && autores[0] && !String(autores[0].uri || "").endsWith(`/${deputadoId}`)) {
+                tipo_autoria = "coautor";
+              }
+            }
+          }
+        } catch (_) { /* keep default */ }
+
         all.push({
           tipo: p.siglaTipo || tipo,
           numero: String(p.numero || ""),
@@ -55,6 +70,7 @@ async function fetchCamaraProposicoes(deputadoId: number): Promise<Proposicao[]>
           data_apresentacao: p.dataApresentacao || null,
           proposicao_id: p.id,
           status_tramitacao: p.descricaoSituacao || null,
+          tipo_autoria,
         });
       }
     } catch (e) {
@@ -188,7 +204,7 @@ serve(async (req) => {
     const themes = await classifyThemes(proposicoes);
 
     // Save to cache
-    const rows = proposicoes.map(p => ({
+    const rows = proposicoes.map((p: any) => ({
       parlamentar_id,
       casa,
       tipo: p.tipo,
@@ -200,6 +216,7 @@ serve(async (req) => {
       data_apresentacao: p.data_apresentacao,
       status_tramitacao: normalizeStatus(p.status_tramitacao),
       peso_tipo: PESO_TIPO[p.tipo] ?? 0.3,
+      tipo_autoria: p.tipo_autoria || "autor",
     }));
 
     // Upsert in batches
