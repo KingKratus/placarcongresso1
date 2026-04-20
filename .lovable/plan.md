@@ -1,15 +1,16 @@
 
-The user wants several things bundled. Let me analyze:
+The user wants a large bundle. Let me break it down:
 
-1. **Histograma de P-Scores em /desempenho** — `PerformanceHistogram.tsx` já existe, só precisa ser integrado em `Desempenho.tsx`
-2. **Teste end-to-end** — ação manual do usuário, vou listar como suggestion
-3. **Comparação lado a lado de até 4 deputados com radar chart** — novo componente `PerformanceCompare.tsx` (já iniciado pelo AI antes mas parece não ter sido finalizado)
-4. **Job para reprocessar fetch-proposicoes em massa** — `reprocess-proposicoes` já existe; falta botão no Admin para acioná-lo em batch
-5. **Teste end-to-end perfil** — ação manual
-6. **Estender cron + toggle para Senado** — `calculate-performance` já suporta `casa: "senado"` via parâmetro; falta (a) cron diário pro Senado, (b) toggle no `RankingTable` do Senado / `Senado.tsx`
-7. **Botão de sync no Admin para calcular Desempenho** — novo botão em `Admin.tsx` chamando `calculate-performance` para Câmara e Senado
-8. **IA com Web Search + leitura Supabase sem dados sensíveis** — nova edge function `ask-ai-tools` (ou estender `ask-ai`) com tool calling: `web_search` e `query_supabase` (whitelist de tabelas: analises_*, proposicoes_parlamentares, deputy_performance_scores, votacoes, votacao_temas — bloqueia profiles, api_keys, sync_*, user_roles, chat_conversations)
+1. **Mini live chart (line)** showing score_total per parlamentar as SSE events arrive — add to AdminPerformanceSync, PerformanceCompare, and PerformanceTab
+2. **Persist progress events to sync_run_events** — modify calculate-performance to write events to DB (need a sync_runs entry too); already have these tables with proper RLS
+3. **Refactor Desempenho buttons** — both in profile (PerformanceTab) and Desempenho page must process 100% of Câmara (513) and Senado (81). Currently limit=200/100. Need to remove caps or add "process all" mode
+4. **Test E2E** — manual suggestion
+5. **Authorship tags in proposições tab** — add badge "Autor" / "Co-autor" in ProposicoesTab. Need to fetch authorship metadata
+6. **Optional additional weight: thematic focus per deputy** — slider weights for areas like Segurança, Tributário, etc. that boost matching proposições
+7. **Years 2023-2026 selector in PerformanceTab** — currently single year, add year tabs/select
+8. **Manual test admin** — suggestion
+9. **Manual test profile** — suggestion
+10. **AbortController + "Parar" button** — already have `signal` param in streamPerformance, need UI button
+11. **Nolan Diagram via AI** in parliamentary profiles — new component using Lovable AI to classify deputy on Economic (left/right) + Social (libertarian/authoritarian) axes based on their voting record + proposições, render as 2D scatter
 
-Vou checar arquivos relevantes rapidamente para confirmar estado atual.
-
-Plan será conciso.
+Lots of scope. Let me check a few files quickly.
