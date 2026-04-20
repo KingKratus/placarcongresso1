@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, TrendingUp, Zap } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Loader2, RefreshCw, TrendingUp, Zap, Square } from "lucide-react";
 import { applyWeights, useCustomWeights, usePerformanceScore, DEFAULT_WEIGHTS } from "@/hooks/usePerformanceScore";
 import { PerformanceWeightsCustomizer } from "./PerformanceWeightsCustomizer";
+import { LiveScoreChart } from "./LiveScoreChart";
 import { streamPerformance } from "@/lib/streamPerformance";
 import { toast } from "sonner";
 
@@ -16,6 +19,8 @@ interface Props {
   ano: number;
 }
 
+const ANOS = [2023, 2024, 2025, 2026];
+
 const DIM_LABELS: Record<string, { label: string; color: string }> = {
   A: { label: "Alinhamento", color: "bg-blue-500" },
   P: { label: "Presença", color: "bg-emerald-500" },
@@ -23,31 +28,45 @@ const DIM_LABELS: Record<string, { label: string; color: string }> = {
   E: { label: "Engajamento", color: "bg-purple-500" },
 };
 
-export function PerformanceTab({ parlamentar_id, casa, ano }: Props) {
+export function PerformanceTab({ parlamentar_id, casa, ano: anoInitial }: Props) {
+  const [ano, setAno] = useState<number>(anoInitial);
   const { data, loading } = usePerformanceScore(parlamentar_id, casa, ano);
   const { weights } = useCustomWeights();
   const [calculating, setCalculating] = useState(false);
   const [tick, setTick] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
+  const [points, setPoints] = useState<{ i: number; score: number; nome?: string | null }[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   const log = (line: string) =>
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString("pt-BR")}] ${line}`]);
 
+  const stop = () => {
+    abortRef.current?.abort();
+    log("⏹ Cancelado pelo usuário");
+    setCalculating(false);
+  };
+
   const handleCalculate = async (force = false) => {
     setCalculating(true);
     setLogs([]);
+    setPoints([]);
     log(`▶ ${force ? "Forçando recálculo" : "Iniciando cálculo"} (${casa}/${ano})...`);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       const t0 = Date.now();
       await streamPerformance({
         casa,
         ano,
         parlamentar_ids: [parlamentar_id],
+        signal: ctrl.signal,
         onEvent: (e) => {
           if (e.type === "start") {
             log(`→ Stream aberto · ${e.total} parlamentar(es) na fila`);
           } else if (e.type === "progress") {
             log(`  ✓ Score=${e.score_total.toFixed(1)} · ${e.elapsed_ms}ms`);
+            setPoints((p) => [...p, { i: e.current, score: e.score_total, nome: e.nome }]);
           } else if (e.type === "flush") {
             log(`  💾 ${e.upserted} registros gravados`);
           } else if (e.type === "done") {
@@ -62,13 +81,46 @@ export function PerformanceTab({ parlamentar_id, casa, ano }: Props) {
         },
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "desconhecido";
-      log(`✗ Erro: ${msg}`);
-      toast.error("Erro ao calcular: " + msg);
+      if ((e as any)?.name === "AbortError") {
+        log("⏹ Stream abortado");
+      } else {
+        const msg = e instanceof Error ? e.message : "desconhecido";
+        log(`✗ Erro: ${msg}`);
+        toast.error("Erro ao calcular: " + msg);
+      }
     } finally {
       setCalculating(false);
+      abortRef.current = null;
     }
   };
+
+  const yearSelector = (
+    <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+      <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {ANOS.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+
+  const logBlock = logs.length > 0 ? (
+    <div className="max-h-40 overflow-y-auto bg-muted/40 rounded p-2 text-[10px] font-mono space-y-0.5 border border-border">
+      {logs.map((l, i) => (
+        <div
+          key={i}
+          className={
+            l.includes("✗") ? "text-destructive"
+            : l.includes("✓") ? "text-emerald-600 dark:text-emerald-400"
+            : l.includes("💾") ? "text-blue-600 dark:text-blue-400"
+            : l.includes("⏹") ? "text-amber-600 dark:text-amber-400"
+            : "text-muted-foreground"
+          }
+        >
+          {l}
+        </div>
+      ))}
+    </div>
+  ) : null;
 
   if (loading) {
     return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
@@ -78,30 +130,26 @@ export function PerformanceTab({ parlamentar_id, casa, ano }: Props) {
     return (
       <Card>
         <CardContent className="p-6 text-center space-y-4">
+          <div className="flex items-center justify-end gap-2 text-xs">
+            <span className="text-muted-foreground">Ano</span>{yearSelector}
+          </div>
           <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             Score de Desempenho ainda não calculado para este parlamentar em {ano}.
           </p>
-          <Button onClick={() => handleCalculate(false)} disabled={calculating} key={tick}>
-            {calculating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            Calcular agora
-          </Button>
-          {logs.length > 0 && (
-            <div className="mt-2 max-h-40 overflow-y-auto bg-muted/40 rounded p-2 text-[10px] font-mono space-y-0.5 text-left border border-border">
-              {logs.map((l, i) => (
-                <div
-                  key={i}
-                  className={
-                    l.includes("✗") ? "text-destructive"
-                    : l.includes("✓") ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground"
-                  }
-                >
-                  {l}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => handleCalculate(false)} disabled={calculating} key={tick}>
+              {calculating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Calcular agora
+            </Button>
+            {calculating && (
+              <Button variant="outline" onClick={stop}>
+                <Square className="h-4 w-4 mr-2" /> Parar
+              </Button>
+            )}
+          </div>
+          {points.length > 0 && <LiveScoreChart points={points} />}
+          {logBlock}
         </CardContent>
       </Card>
     );
@@ -121,9 +169,12 @@ export function PerformanceTab({ parlamentar_id, casa, ano }: Props) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Card className="md:col-span-2">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Score de Desempenho — {ano}</CardTitle>
-            {isCustom && <Badge variant="secondary" className="text-xs">Pesos customizados</Badge>}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base">Score de Desempenho</CardTitle>
+            <div className="flex items-center gap-2">
+              {isCustom && <Badge variant="secondary" className="text-xs">Pesos customizados</Badge>}
+              {yearSelector}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -159,25 +210,15 @@ export function PerformanceTab({ parlamentar_id, casa, ano }: Props) {
               {calculating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
               Forçar refresh (stream)
             </Button>
+            {calculating && (
+              <Button variant="destructive" size="sm" onClick={stop} className="gap-1">
+                <Square className="h-4 w-4" /> Parar
+              </Button>
+            )}
           </div>
 
-          {logs.length > 0 && (
-            <div className="max-h-40 overflow-y-auto bg-muted/40 rounded p-2 text-[10px] font-mono space-y-0.5 border border-border">
-              {logs.map((l, i) => (
-                <div
-                  key={i}
-                  className={
-                    l.includes("✗") ? "text-destructive"
-                    : l.includes("✓") ? "text-emerald-600 dark:text-emerald-400"
-                    : l.includes("💾") ? "text-blue-600 dark:text-blue-400"
-                    : "text-muted-foreground"
-                  }
-                >
-                  {l}
-                </div>
-              ))}
-            </div>
-          )}
+          {points.length > 0 && <LiveScoreChart points={points} />}
+          {logBlock}
         </CardContent>
       </Card>
 
