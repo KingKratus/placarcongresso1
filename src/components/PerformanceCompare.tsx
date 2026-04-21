@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Users, RefreshCcw, Loader2 } from "lucide-react";
+import { X, Plus, Users, RefreshCcw, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
 import { streamPerformance } from "@/lib/streamPerformance";
+import { LiveScoreChart } from "./LiveScoreChart";
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Legend, Tooltip,
