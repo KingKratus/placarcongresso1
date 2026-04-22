@@ -10,6 +10,7 @@ const LABELS: Record<keyof typeof DEFAULT_WEIGHTS, string> = {
   P: "Presença",
   I: "Impacto Legislativo",
   E: "Engajamento em Comissões",
+  T: "Autoria (proposições) — opcional",
 };
 
 export function PerformanceWeightsCustomizer({ onChange }: { onChange?: (w: typeof DEFAULT_WEIGHTS) => void }) {
@@ -45,7 +46,7 @@ export function PerformanceWeightsCustomizer({ onChange }: { onChange?: (w: type
           </div>
         ))}
         <p className="text-xs text-muted-foreground">
-          Soma: {(sum * 100).toFixed(0)}% (valores são auto-normalizados no cálculo)
+          Soma: {((sum + (weights.T || 0)) * 100).toFixed(0)}% (valores são auto-normalizados no cálculo)
         </p>
       </CardContent>
     </Card>
