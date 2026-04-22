@@ -16,6 +16,7 @@ import { useCustomWeights, applyWeights, type PerformanceScore } from "@/hooks/u
 import { PerformanceWeightsCustomizer } from "@/components/PerformanceWeightsCustomizer";
 import { PerformanceHistogram } from "@/components/PerformanceHistogram";
 import { PerformanceCompare } from "@/components/PerformanceCompare";
+import { AdminPerformanceSync } from "@/components/AdminPerformanceSync";
 
 const ANOS = [2023, 2024, 2025, 2026];
 
@@ -173,6 +174,8 @@ export default function Desempenho() {
         </Card>
 
         <PerformanceWeightsCustomizer onChange={update} />
+
+        <AdminPerformanceSync ano={ano} />
 
         <PerformanceHistogram data={filtered} highlightPartido={partido !== "all" ? partido : undefined} />
 
