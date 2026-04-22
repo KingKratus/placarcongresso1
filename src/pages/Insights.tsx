@@ -10,6 +10,7 @@ import { BrazilMap } from "@/components/insights/BrazilMap";
 import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
 import { AskAI } from "@/components/insights/AskAI";
 import { ThemeDistribution } from "@/components/insights/ThemeDistribution";
+import { PartidosPorTema } from "@/components/insights/PartidosPorTema";
 import {
   EnhancedTooltip,
   topBottomTooltipRows,
@@ -433,6 +434,7 @@ export default function Insights() {
               <TabsTrigger value="divergencia" className="gap-2"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
               <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="temas" className="gap-2"><Tags size={14} /> Temas</TabsTrigger>
+              <TabsTrigger value="partidos-tema" className="gap-2"><Tags size={14} /> Partidos×Tema</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
               <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
               <TabsTrigger value="ask-ai" className="gap-2"><MessageSquare size={14} /> IA</TabsTrigger>
@@ -624,6 +626,11 @@ export default function Insights() {
             {/* Temas */}
             <TabsContent value="temas">
               <ThemeDistribution ano={ano} />
+            </TabsContent>
+
+            {/* Partidos × Tema */}
+            <TabsContent value="partidos-tema">
+              <PartidosPorTema ano={ano} />
             </TabsContent>
 
             {/* Projetos */}
