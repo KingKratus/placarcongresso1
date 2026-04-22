@@ -357,6 +357,14 @@ export default function SenadorDetail() {
           </Card>
         )}
 
+        {/* Score personalizado + Diagrama de Nolan */}
+        <ProfileScoreNolan
+          parlamentar_id={senId}
+          casa="senado"
+          ano={currentAnalise.ano}
+          nome={currentAnalise.senador_nome}
+        />
+
         {/* Filters */}
         <Card>
           <CardHeader className="pb-2">

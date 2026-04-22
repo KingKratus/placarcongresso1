@@ -390,6 +390,14 @@ export default function DeputadoDetail() {
           </Card>
         )}
 
+        {/* Score personalizado + Diagrama de Nolan */}
+        <ProfileScoreNolan
+          parlamentar_id={depId}
+          casa="camara"
+          ano={currentAnalise.ano}
+          nome={currentAnalise.deputado_nome}
+        />
+
         {/* Filters */}
         <Card>
           <CardHeader className="pb-2">
