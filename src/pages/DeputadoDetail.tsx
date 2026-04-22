@@ -39,6 +39,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProposicoesTab } from "@/components/ProposicoesTab";
 import { PerformanceTab } from "@/components/PerformanceTab";
+import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
@@ -388,6 +389,14 @@ export default function DeputadoDetail() {
             </CardContent>
           </Card>
         )}
+
+        {/* Score personalizado + Diagrama de Nolan */}
+        <ProfileScoreNolan
+          parlamentar_id={depId}
+          casa="camara"
+          ano={currentAnalise.ano}
+          nome={currentAnalise.deputado_nome}
+        />
 
         {/* Filters */}
         <Card>
