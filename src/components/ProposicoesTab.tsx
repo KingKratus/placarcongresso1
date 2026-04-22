@@ -507,6 +507,17 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
                       {p.ementa || "Sem ementa disponível"}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {p.tipo_autoria && (
+                        <Badge
+                          className={`text-[8px] px-1.5 py-0 border-0 font-black uppercase tracking-wider ${
+                            p.tipo_autoria === "coautor"
+                              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                              : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                          }`}
+                        >
+                          {p.tipo_autoria === "coautor" ? "Co-autor" : "Autor"}
+                        </Badge>
+                      )}
                       {p.tema && (
                         <Badge className={`text-[8px] px-1.5 py-0 border-0 ${THEME_COLORS[p.tema] || "bg-muted text-muted-foreground"}`}>
                           {p.tema}
