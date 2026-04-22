@@ -39,6 +39,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProposicoesTab } from "@/components/ProposicoesTab";
 import { PerformanceTab } from "@/components/PerformanceTab";
+import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
