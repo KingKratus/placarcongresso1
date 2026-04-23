@@ -427,18 +427,19 @@ export default function Insights() {
           </div>
         ) : (
           <Tabs defaultValue="visao-geral" className="space-y-4">
-            <TabsList className="flex-wrap">
-              <TabsTrigger value="visao-geral" className="gap-2"><TrendingUp size={14} /> Visão Geral</TabsTrigger>
-              <TabsTrigger value="partidos" className="gap-2"><BarChart2 size={14} /> Partidos</TabsTrigger>
-              <TabsTrigger value="estados" className="gap-2"><Map size={14} /> Estados</TabsTrigger>
-              <TabsTrigger value="divergencia" className="gap-2"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
-              <TabsTrigger value="volume" className="gap-2"><Activity size={14} /> Volume</TabsTrigger>
-              <TabsTrigger value="temas" className="gap-2"><Tags size={14} /> Temas</TabsTrigger>
-              <TabsTrigger value="partidos-tema" className="gap-2"><Tags size={14} /> Partidos×Tema</TabsTrigger>
-              <TabsTrigger value="simulacao" className="gap-2"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
-              <TabsTrigger value="projetos" className="gap-2"><FileText size={14} /> Projetos</TabsTrigger>
-              <TabsTrigger value="ask-ai" className="gap-2"><MessageSquare size={14} /> IA</TabsTrigger>
-              <TabsTrigger value="ao-vivo" className="gap-2"><Radio size={14} /> Ao Vivo</TabsTrigger>
+            {/* Mobile: horizontal scroll. Desktop (lg+): grid de 2 linhas para evitar sobreposição. */}
+            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
+              <TabsTrigger value="visao-geral" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><TrendingUp size={14} /> Visão Geral</TabsTrigger>
+              <TabsTrigger value="partidos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><BarChart2 size={14} /> Partidos</TabsTrigger>
+              <TabsTrigger value="estados" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Map size={14} /> Estados</TabsTrigger>
+              <TabsTrigger value="divergencia" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
+              <TabsTrigger value="volume" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Activity size={14} /> Volume</TabsTrigger>
+              <TabsTrigger value="temas" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Tags size={14} /> Temas</TabsTrigger>
+              <TabsTrigger value="partidos-tema" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Tags size={14} /> Partidos×Tema</TabsTrigger>
+              <TabsTrigger value="simulacao" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
+              <TabsTrigger value="projetos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><FileText size={14} /> Projetos</TabsTrigger>
+              <TabsTrigger value="ask-ai" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><MessageSquare size={14} /> IA</TabsTrigger>
+              <TabsTrigger value="ao-vivo" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Radio size={14} /> Ao Vivo</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
