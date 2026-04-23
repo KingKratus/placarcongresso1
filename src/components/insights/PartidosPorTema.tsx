@@ -47,6 +47,12 @@ export function PartidosPorTema({ ano }: Props) {
   const [search, setSearch] = useState("");
   const [topN, setTopN] = useState<string>("15");
 
+  // New UX state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"heatmap" | "ranking">("heatmap");
+
   // Fetch propositions + parlamentares metadata
   useEffect(() => {
     let cancelled = false;
