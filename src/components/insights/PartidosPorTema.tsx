@@ -149,7 +149,7 @@ export function PartidosPorTema({ ano }: Props) {
     return arr.slice(0, limit);
   }, [filtered, partyMap, search, topN]);
 
-  // Heatmap-style: top 6 parties × all themes
+  // Heatmap-style: ALL parties × all themes (sorted by total)
   const heatmap = useMemo(() => {
     const partyTotals: Record<string, number> = {};
     const partyTheme: Record<string, Record<string, number>> = {};
@@ -163,7 +163,6 @@ export function PartidosPorTema({ ano }: Props) {
     });
     const topParties = Object.entries(partyTotals)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 6)
       .map(([p]) => p);
     const allTemas = Array.from(new Set(filtered.map((r) => r.tema || "Outros"))).sort();
     return { topParties, allTemas, partyTheme };
@@ -210,65 +209,71 @@ export function PartidosPorTema({ ano }: Props) {
             </div>
           </div>
 
-          {/* Filter row */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Filter size={12} className="text-muted-foreground" />
-            <Select value={temaFilter} onValueChange={setTemaFilter}>
-              <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Tema" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os temas</SelectItem>
-                {temasDisponiveis.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={casaFilter} onValueChange={(v: any) => setCasaFilter(v)}>
-              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Ambas Casas</SelectItem>
-                <SelectItem value="camara">Câmara</SelectItem>
-                <SelectItem value="senado">Senado</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={tipoFilter} onValueChange={setTipoFilter}>
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Tipo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos tipos</SelectItem>
-                {tiposDisponiveis.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={autoriaFilter} onValueChange={(v: any) => setAutoriaFilter(v)}>
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Autor + Coautor</SelectItem>
-                <SelectItem value="autor">Só Autor</SelectItem>
-                <SelectItem value="coautor">Só Coautor</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={topN} onValueChange={setTopN}>
-              <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">Top 10</SelectItem>
-                <SelectItem value="15">Top 15</SelectItem>
-                <SelectItem value="25">Top 25</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="relative flex-1 min-w-[140px]">
-              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar partido..."
-                className="h-8 pl-7 text-xs"
-              />
+          {/* Filter row — responsive grid */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-muted-foreground uppercase">
+              <Filter size={12} /> Filtros
             </div>
-            {(temaFilter !== "all" || casaFilter !== "all" || tipoFilter !== "all" || autoriaFilter !== "all" || search) && (
-              <button
-                onClick={() => { setTemaFilter("all"); setCasaFilter("all"); setTipoFilter("all"); setAutoriaFilter("all"); setSearch(""); }}
-                className="text-[11px] text-muted-foreground hover:text-foreground underline"
-              >
-                Limpar
-              </button>
-            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <Select value={temaFilter} onValueChange={setTemaFilter}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Tema" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os temas</SelectItem>
+                  {temasDisponiveis.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={casaFilter} onValueChange={(v: any) => setCasaFilter(v)}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Ambas Casas</SelectItem>
+                  <SelectItem value="camara">Câmara</SelectItem>
+                  <SelectItem value="senado">Senado</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={tipoFilter} onValueChange={setTipoFilter}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos tipos</SelectItem>
+                  {tiposDisponiveis.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={autoriaFilter} onValueChange={(v: any) => setAutoriaFilter(v)}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Autor + Coautor</SelectItem>
+                  <SelectItem value="autor">Só Autor</SelectItem>
+                  <SelectItem value="coautor">Só Coautor</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={topN} onValueChange={setTopN}>
+                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">Top 10 ranking</SelectItem>
+                  <SelectItem value="15">Top 15 ranking</SelectItem>
+                  <SelectItem value="25">Top 25 ranking</SelectItem>
+                  <SelectItem value="all">Todos no ranking</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar partido..."
+                  className="h-9 pl-7 text-xs"
+                />
+              </div>
+              {(temaFilter !== "all" || casaFilter !== "all" || tipoFilter !== "all" || autoriaFilter !== "all" || search) && (
+                <button
+                  onClick={() => { setTemaFilter("all"); setCasaFilter("all"); setTipoFilter("all"); setAutoriaFilter("all"); setSearch(""); }}
+                  className="h-9 px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-muted/50 transition"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Active filter badges */}
@@ -332,14 +337,15 @@ export function PartidosPorTema({ ano }: Props) {
       {temaFilter === "all" && heatmap.topParties.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Mapa de Calor — Top 6 Partidos × Temas</CardTitle>
-            <p className="text-[11px] text-muted-foreground">Intensidade da cor indica volume de proposições por tema</p>
+            <CardTitle className="text-base">Mapa de Calor — Todos os Partidos × Temas ({heatmap.topParties.length})</CardTitle>
+            <p className="text-[11px] text-muted-foreground">Intensidade da cor indica volume de proposições por tema. Ordenado por total decrescente.</p>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="p-0">
+           <div className="overflow-auto max-h-[600px] relative">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr>
-                  <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card">Partido</th>
+                <tr className="sticky top-0 bg-card z-20 shadow-sm">
+                  <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card z-30">Partido</th>
                   {heatmap.allTemas.map((t) => (
                     <th key={t} className="p-1 font-bold text-[9px] text-muted-foreground" style={{ minWidth: 60 }}>
                       <div className="flex flex-col items-center gap-1">
@@ -351,7 +357,7 @@ export function PartidosPorTema({ ano }: Props) {
                       </div>
                     </th>
                   ))}
-                  <th className="p-2 font-bold text-muted-foreground">Total</th>
+                  <th className="p-2 font-bold text-muted-foreground bg-card">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -360,8 +366,8 @@ export function PartidosPorTema({ ano }: Props) {
                   const total = Object.values(themes).reduce((s, v) => s + v, 0);
                   const max = Math.max(...heatmap.allTemas.map((t) => themes[t] || 0), 1);
                   return (
-                    <tr key={partido} className="border-t border-border">
-                      <td className="p-2 font-bold sticky left-0 bg-card">{partido}</td>
+                    <tr key={partido} className="border-t border-border hover:bg-muted/30">
+                      <td className="p-2 font-bold sticky left-0 bg-card z-10">{partido}</td>
                       {heatmap.allTemas.map((t) => {
                         const v = themes[t] || 0;
                         const intensity = v / max;
@@ -385,6 +391,7 @@ export function PartidosPorTema({ ano }: Props) {
                 })}
               </tbody>
             </table>
+           </div>
           </CardContent>
         </Card>
       )}
