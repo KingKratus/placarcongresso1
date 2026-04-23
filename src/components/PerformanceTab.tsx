@@ -175,6 +175,23 @@ export function PerformanceTab({ parlamentar_id, casa, ano: anoInitial }: Props)
             <div className="flex items-center gap-2">
               {isCustom && <Badge variant="secondary" className="text-xs">Pesos customizados</Badge>}
               {yearSelector}
+              <InfograficoButton
+                size="sm"
+                label="Infográfico"
+                filename={`desempenho-${data.nome?.replace(/\s+/g, "-").toLowerCase() || parlamentar_id}-${ano}`}
+                data={{
+                  titulo: data.nome || `Parlamentar #${parlamentar_id}`,
+                  subtitulo: `${data.partido || ""} · ${data.uf || ""} · ${casa === "camara" ? "Câmara" : "Senado"} ${ano}`,
+                  metricas: [
+                    { label: "P-Score Total", valor: customScore.toFixed(1), hint: isCustom ? "pesos custom" : "padrão" },
+                    { label: "Alinhamento", valor: `${(Number(data.score_alinhamento) * 100).toFixed(0)}%` },
+                    { label: "Presença", valor: `${(Number(data.score_presenca) * 100).toFixed(0)}%` },
+                    { label: "Impacto", valor: `${(Number(data.score_impacto) * 100).toFixed(0)}%` },
+                    { label: "Engajamento", valor: `${(Number(data.score_engajamento) * 100).toFixed(0)}%` },
+                  ],
+                  rodape: `Monitor Legislativo · ${new Date().toLocaleDateString("pt-BR")}`,
+                }}
+              />
             </div>
           </div>
         </CardHeader>
