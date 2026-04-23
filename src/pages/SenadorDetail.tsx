@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProposicoesTab } from "@/components/ProposicoesTab";
 import { PerformanceTab } from "@/components/PerformanceTab";
 import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
+import { InfograficoButton } from "@/components/InfograficoButton";
 
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
@@ -256,9 +257,28 @@ export default function SenadorDetail() {
     <div className="min-h-screen bg-background text-foreground">
       <div className="bg-card border-b border-border px-4 py-4">
         <div className="max-w-5xl mx-auto">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/senado")} className="gap-2 mb-4">
-            <ArrowLeft size={16} /> Voltar ao painel
-          </Button>
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/senado")} className="gap-2">
+              <ArrowLeft size={16} /> Voltar ao painel
+            </Button>
+            <InfograficoButton
+              filename={`${currentAnalise.senador_nome.replace(/\s+/g, "-").toLowerCase()}-${currentAnalise.ano}`}
+              data={{
+                titulo: currentAnalise.senador_nome,
+                subtitulo: `${currentAnalise.senador_partido || ""} · ${currentAnalise.senador_uf || ""} · Senado ${currentAnalise.ano}`,
+                metricas: [
+                  { label: "Alinhamento Governista", valor: `${Number(currentAnalise.score).toFixed(1)}%` },
+                  { label: "Classificação", valor: currentAnalise.classificacao },
+                  { label: "Votos Alinhados", valor: currentAnalise.votos_alinhados },
+                  { label: "Total de Votos", valor: currentAnalise.total_votos },
+                ],
+                destaques: evolutionData.length > 1
+                  ? evolutionData.map((e) => `${e.ano}: ${Number(e.score).toFixed(1)}% (${e.classificacao})`)
+                  : [],
+                rodape: `Monitor Legislativo · placarcongresso1.lovable.app · ${new Date().toLocaleDateString("pt-BR")}`,
+              }}
+            />
+          </div>
 
           <div className="flex items-center gap-4">
             <img
