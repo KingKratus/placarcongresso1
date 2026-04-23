@@ -12,6 +12,7 @@ import { PerformanceWeightsCustomizer } from "./PerformanceWeightsCustomizer";
 import { LiveScoreChart } from "./LiveScoreChart";
 import { streamPerformance } from "@/lib/streamPerformance";
 import { toast } from "sonner";
+import { InfograficoButton } from "./InfograficoButton";
 
 interface Props {
   parlamentar_id: number;
