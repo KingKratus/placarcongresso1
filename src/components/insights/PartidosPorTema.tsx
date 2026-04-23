@@ -149,7 +149,7 @@ export function PartidosPorTema({ ano }: Props) {
     return arr.slice(0, limit);
   }, [filtered, partyMap, search, topN]);
 
-  // Heatmap-style: top 6 parties × all themes
+  // Heatmap-style: ALL parties × all themes (sorted by total)
   const heatmap = useMemo(() => {
     const partyTotals: Record<string, number> = {};
     const partyTheme: Record<string, Record<string, number>> = {};
@@ -163,7 +163,6 @@ export function PartidosPorTema({ ano }: Props) {
     });
     const topParties = Object.entries(partyTotals)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 6)
       .map(([p]) => p);
     const allTemas = Array.from(new Set(filtered.map((r) => r.tema || "Outros"))).sort();
     return { topParties, allTemas, partyTheme };
