@@ -128,9 +128,31 @@ export default function Desempenho() {
               </p>
             </div>
           </div>
-          <Button onClick={exportCsv} size="sm" variant="outline" className="gap-2 h-8 text-xs">
-            <Download size={14} /> Exportar CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <InfograficoButton
+              filename={`ranking-desempenho-${casa}-${ano}`}
+              label="Infográfico"
+              size="sm"
+              data={{
+                titulo: `Top ${casa === "camara" ? "Câmara" : "Senado"} ${ano}`,
+                subtitulo: "Ranking de Desempenho · P-Score",
+                metricas: filtered.slice(0, 10).map((s, i) => ({
+                  label: `${i + 1}. ${s.nome || ""} (${s.partido || "-"}/${s.uf || "-"})`,
+                  valor: s.score_custom.toFixed(1),
+                })),
+                destaques: [
+                  `Total avaliados: ${filtered.length}`,
+                  `Pesos: ${isDefault ? "Padrão" : "Customizados"}`,
+                  partido !== "all" ? `Filtro partido: ${partido}` : "",
+                  uf !== "all" ? `Filtro UF: ${uf}` : "",
+                ].filter(Boolean),
+                rodape: `Monitor Legislativo · placarcongresso1.lovable.app · ${new Date().toLocaleDateString("pt-BR")}`,
+              }}
+            />
+            <Button onClick={exportCsv} size="sm" variant="outline" className="gap-2 h-8 text-xs">
+              <Download size={14} /> Exportar CSV
+            </Button>
+          </div>
         </div>
 
         <Card>
