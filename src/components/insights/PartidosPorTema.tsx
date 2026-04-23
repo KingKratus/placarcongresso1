@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { Tags, Search, Filter, TrendingUp } from "lucide-react";
+import { Tags, Search, Filter, TrendingUp, Download, ChevronLeft, ChevronRight, BarChart3, Grid3x3 } from "lucide-react";
 import { TEMA_COLORS } from "./ThemeDistribution";
 
 interface Props {
@@ -44,6 +46,12 @@ export function PartidosPorTema({ ano }: Props) {
   const [autoriaFilter, setAutoriaFilter] = useState<"all" | "autor" | "coautor">("all");
   const [search, setSearch] = useState("");
   const [topN, setTopN] = useState<string>("15");
+
+  // New UX state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [selectedParty, setSelectedParty] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"heatmap" | "ranking">("heatmap");
 
   // Fetch propositions + parlamentares metadata
   useEffect(() => {
@@ -170,6 +178,66 @@ export function PartidosPorTema({ ano }: Props) {
 
   const totalProposicoes = filtered.length;
   const totalPartidos = new Set(filtered.map((r) => partyMap[`${r.casa}-${r.parlamentar_id}`]?.partido).filter(Boolean)).size;
+
+  // Reset pagination when filters change
+  useEffect(() => { setPage(0); }, [temaFilter, casaFilter, tipoFilter, autoriaFilter, search]);
+
+  // Heatmap pagination
+  const totalPages = Math.max(1, Math.ceil(heatmap.topParties.length / pageSize));
+  const pagedParties = useMemo(
+    () => heatmap.topParties.slice(page * pageSize, page * pageSize + pageSize),
+    [heatmap.topParties, page, pageSize]
+  );
+
+  // Global heatmap max for legend scale
+  const heatmapMaxValue = useMemo(() => {
+    let max = 0;
+    Object.values(heatmap.partyTheme).forEach((themes) => {
+      Object.values(themes).forEach((v) => { if (v > max) max = v; });
+    });
+    return max;
+  }, [heatmap.partyTheme]);
+
+  // Selected party detail (sorted themes)
+  const selectedPartyDetail = useMemo(() => {
+    if (!selectedParty) return null;
+    const themes = heatmap.partyTheme[selectedParty] || {};
+    const arr = Object.entries(themes)
+      .map(([tema, count]) => ({ tema, count }))
+      .sort((a, b) => b.count - a.count);
+    const total = arr.reduce((s, x) => s + x.count, 0);
+    return { partido: selectedParty, total, temas: arr };
+  }, [selectedParty, heatmap.partyTheme]);
+
+  // Ranking by selected theme (across all parties)
+  const themeRanking = useMemo(() => {
+    if (temaFilter === "all") return [];
+    const arr = heatmap.topParties.map((partido) => ({
+      partido,
+      total: heatmap.partyTheme[partido]?.[temaFilter] || 0,
+    })).filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
+    return arr;
+  }, [temaFilter, heatmap.topParties, heatmap.partyTheme]);
+
+  // CSV export of heatmap (all parties, all themes)
+  const exportHeatmapCsv = () => {
+    const header = ["Partido", ...heatmap.allTemas, "Total"];
+    const lines = [header.join(",")];
+    heatmap.topParties.forEach((p) => {
+      const themes = heatmap.partyTheme[p] || {};
+      const total = Object.values(themes).reduce((s, v) => s + v, 0);
+      const row = [p, ...heatmap.allTemas.map((t) => themes[t] || 0), total];
+      lines.push(row.join(","));
+    });
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `partidos-temas-${ano}${temaFilter !== "all" ? `-${temaFilter}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -333,68 +401,221 @@ export function PartidosPorTema({ ano }: Props) {
         </CardContent>
       </Card>
 
-      {/* Heatmap table: parties × themes */}
-      {temaFilter === "all" && heatmap.topParties.length > 0 && (
+      {/* Theme ranking view (when a theme is selected) */}
+      {temaFilter !== "all" && viewMode === "ranking" && themeRanking.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Mapa de Calor — Todos os Partidos × Temas ({heatmap.topParties.length})</CardTitle>
-            <p className="text-[11px] text-muted-foreground">Intensidade da cor indica volume de proposições por tema. Ordenado por total decrescente.</p>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 size={14} />
+              Ranking detalhado — {temaFilter} ({themeRanking.length} partidos)
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-           <div className="overflow-auto max-h-[600px] relative">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="sticky top-0 bg-card z-20 shadow-sm">
-                  <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card z-30">Partido</th>
-                  {heatmap.allTemas.map((t) => (
-                    <th key={t} className="p-1 font-bold text-[9px] text-muted-foreground" style={{ minWidth: 60 }}>
-                      <div className="flex flex-col items-center gap-1">
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: TEMA_COLORS[t] || "hsl(var(--muted))" }}
-                        />
-                        <span className="text-[8px] -rotate-45 origin-bottom-left whitespace-nowrap">{t}</span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="p-2 font-bold text-muted-foreground bg-card">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {heatmap.topParties.map((partido) => {
-                  const themes = heatmap.partyTheme[partido] || {};
-                  const total = Object.values(themes).reduce((s, v) => s + v, 0);
-                  const max = Math.max(...heatmap.allTemas.map((t) => themes[t] || 0), 1);
-                  return (
-                    <tr key={partido} className="border-t border-border hover:bg-muted/30">
-                      <td className="p-2 font-bold sticky left-0 bg-card z-10">{partido}</td>
-                      {heatmap.allTemas.map((t) => {
-                        const v = themes[t] || 0;
-                        const intensity = v / max;
-                        const color = TEMA_COLORS[t] || "hsl(var(--primary))";
-                        return (
-                          <td
-                            key={t}
-                            className="p-1 text-center font-semibold"
-                            style={{
-                              background: v > 0 ? `${color.replace("hsl(", "hsla(").replace(")", `, ${0.15 + intensity * 0.7})`)}` : "transparent",
-                              color: intensity > 0.5 ? "white" : "hsl(var(--foreground))",
-                            }}
-                          >
-                            {v > 0 ? v : "—"}
-                          </td>
-                        );
-                      })}
-                      <td className="p-2 font-black text-primary text-center">{total}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-           </div>
+          <CardContent className="space-y-1 max-h-[600px] overflow-auto">
+            {themeRanking.map((p, i) => {
+              const max = themeRanking[0].total;
+              const pct = (p.total / max) * 100;
+              return (
+                <button
+                  key={p.partido}
+                  onClick={() => setSelectedParty(p.partido)}
+                  className="w-full flex items-center gap-2 hover:bg-muted/40 rounded p-1.5 text-left"
+                >
+                  <span className="text-[10px] font-black text-muted-foreground w-6">#{i + 1}</span>
+                  <span className="text-xs font-bold w-20 truncate">{p.partido}</span>
+                  <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+                    <div
+                      className="h-full rounded transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: TEMA_COLORS[temaFilter] || "hsl(var(--primary))" }}
+                    />
+                  </div>
+                  <span className="text-xs font-black text-primary w-12 text-right">{p.total}</span>
+                </button>
+              );
+            })}
           </CardContent>
         </Card>
       )}
+
+      {/* Heatmap table: parties × themes */}
+      {heatmap.topParties.length > 0 && (viewMode === "heatmap" || temaFilter === "all") && (
+        <Card>
+          <CardHeader className="pb-2 space-y-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Grid3x3 size={14} />
+                  Mapa de Calor — {heatmap.topParties.length} partidos × {heatmap.allTemas.length} temas
+                </CardTitle>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Clique em um partido para ver detalhes. Ordenado por volume total.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {temaFilter !== "all" && (
+                  <div className="flex border border-border rounded-md overflow-hidden">
+                    <button
+                      onClick={() => setViewMode("heatmap")}
+                      className={`px-2 py-1 text-[10px] font-bold ${viewMode === "heatmap" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted/50"}`}
+                    >
+                      <Grid3x3 size={11} className="inline mr-1" />Heatmap
+                    </button>
+                    <button
+                      onClick={() => setViewMode("ranking")}
+                      className={`px-2 py-1 text-[10px] font-bold ${viewMode === "ranking" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted/50"}`}
+                    >
+                      <BarChart3 size={11} className="inline mr-1" />Ranking
+                    </button>
+                  </div>
+                )}
+                <Button onClick={exportHeatmapCsv} variant="outline" size="sm" className="h-7 text-[10px] gap-1">
+                  <Download size={11} /> CSV
+                </Button>
+              </div>
+            </div>
+
+            {/* Color intensity legend */}
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
+              <span className="text-[10px] font-bold uppercase text-muted-foreground">Intensidade:</span>
+              <div className="flex items-center gap-0">
+                {[0.15, 0.3, 0.45, 0.6, 0.75, 0.85].map((alpha, i) => (
+                  <div
+                    key={i}
+                    className="w-6 h-4 first:rounded-l last:rounded-r border-y border-border"
+                    style={{ background: `hsla(var(--primary), ${alpha})` }}
+                    title={`${Math.round((alpha / 0.85) * heatmapMaxValue)} proposições`}
+                  />
+                ))}
+              </div>
+              <span className="text-[10px] text-muted-foreground">0 → {heatmapMaxValue}+ proposições</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">— relativo ao máximo de cada linha</span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-auto max-h-[600px] relative">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="sticky top-0 bg-card z-20 shadow-sm">
+                    <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card z-30">Partido</th>
+                    {heatmap.allTemas.map((t) => (
+                      <th key={t} className="p-1 font-bold text-[9px] text-muted-foreground" style={{ minWidth: 60 }}>
+                        <div className="flex flex-col items-center gap-1">
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: TEMA_COLORS[t] || "hsl(var(--muted))" }}
+                          />
+                          <span className="text-[8px] -rotate-45 origin-bottom-left whitespace-nowrap">{t}</span>
+                        </div>
+                      </th>
+                    ))}
+                    <th className="p-2 font-bold text-muted-foreground bg-card">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedParties.map((partido) => {
+                    const themes = heatmap.partyTheme[partido] || {};
+                    const total = Object.values(themes).reduce((s, v) => s + v, 0);
+                    const max = Math.max(...heatmap.allTemas.map((t) => themes[t] || 0), 1);
+                    return (
+                      <tr
+                        key={partido}
+                        className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                        onClick={() => setSelectedParty(partido)}
+                      >
+                        <td className="p-2 font-bold sticky left-0 bg-card z-10 hover:text-primary transition">{partido}</td>
+                        {heatmap.allTemas.map((t) => {
+                          const v = themes[t] || 0;
+                          const intensity = v / max;
+                          const color = TEMA_COLORS[t] || "hsl(var(--primary))";
+                          return (
+                            <td
+                              key={t}
+                              className="p-1 text-center font-semibold"
+                              style={{
+                                background: v > 0 ? `${color.replace("hsl(", "hsla(").replace(")", `, ${0.15 + intensity * 0.7})`)}` : "transparent",
+                                color: intensity > 0.5 ? "white" : "hsl(var(--foreground))",
+                              }}
+                            >
+                              {v > 0 ? v : "—"}
+                            </td>
+                          );
+                        })}
+                        <td className="p-2 font-black text-primary text-center">{total}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination controls */}
+            {heatmap.topParties.length > pageSize && (
+              <div className="flex items-center justify-between gap-2 p-2 border-t border-border bg-card/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Linhas:</span>
+                  <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}>
+                    <SelectTrigger className="h-7 w-20 text-[10px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">
+                    {page * pageSize + 1}–{Math.min((page + 1) * pageSize, heatmap.topParties.length)} de {heatmap.topParties.length}
+                  </span>
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                    <ChevronLeft size={12} />
+                  </Button>
+                  <span className="text-[10px] font-bold">{page + 1} / {totalPages}</span>
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+                    <ChevronRight size={12} />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Party detail drill-down */}
+      <Sheet open={!!selectedParty} onOpenChange={(open) => !open && setSelectedParty(null)}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Tags size={16} className="text-primary" />
+              {selectedPartyDetail?.partido}
+            </SheetTitle>
+            <SheetDescription>
+              {selectedPartyDetail?.total} proposições · {selectedPartyDetail?.temas.length} temas — {ano}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-2">
+            {selectedPartyDetail?.temas.map((t, i) => {
+              const max = selectedPartyDetail.temas[0].count;
+              const pct = (t.count / max) * 100;
+              const color = TEMA_COLORS[t.tema] || "hsl(var(--primary))";
+              return (
+                <div key={t.tema} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-muted-foreground w-5">#{i + 1}</span>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="font-bold">{t.tema}</span>
+                    </div>
+                    <span className="font-black text-primary">{t.count}</span>
+                  </div>
+                  <div className="h-2 bg-muted/30 rounded overflow-hidden ml-9">
+                    <div className="h-full rounded" style={{ width: `${pct}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
