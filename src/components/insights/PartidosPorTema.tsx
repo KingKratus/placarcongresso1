@@ -179,6 +179,66 @@ export function PartidosPorTema({ ano }: Props) {
   const totalProposicoes = filtered.length;
   const totalPartidos = new Set(filtered.map((r) => partyMap[`${r.casa}-${r.parlamentar_id}`]?.partido).filter(Boolean)).size;
 
+  // Reset pagination when filters change
+  useEffect(() => { setPage(0); }, [temaFilter, casaFilter, tipoFilter, autoriaFilter, search]);
+
+  // Heatmap pagination
+  const totalPages = Math.max(1, Math.ceil(heatmap.topParties.length / pageSize));
+  const pagedParties = useMemo(
+    () => heatmap.topParties.slice(page * pageSize, page * pageSize + pageSize),
+    [heatmap.topParties, page, pageSize]
+  );
+
+  // Global heatmap max for legend scale
+  const heatmapMaxValue = useMemo(() => {
+    let max = 0;
+    Object.values(heatmap.partyTheme).forEach((themes) => {
+      Object.values(themes).forEach((v) => { if (v > max) max = v; });
+    });
+    return max;
+  }, [heatmap.partyTheme]);
+
+  // Selected party detail (sorted themes)
+  const selectedPartyDetail = useMemo(() => {
+    if (!selectedParty) return null;
+    const themes = heatmap.partyTheme[selectedParty] || {};
+    const arr = Object.entries(themes)
+      .map(([tema, count]) => ({ tema, count }))
+      .sort((a, b) => b.count - a.count);
+    const total = arr.reduce((s, x) => s + x.count, 0);
+    return { partido: selectedParty, total, temas: arr };
+  }, [selectedParty, heatmap.partyTheme]);
+
+  // Ranking by selected theme (across all parties)
+  const themeRanking = useMemo(() => {
+    if (temaFilter === "all") return [];
+    const arr = heatmap.topParties.map((partido) => ({
+      partido,
+      total: heatmap.partyTheme[partido]?.[temaFilter] || 0,
+    })).filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
+    return arr;
+  }, [temaFilter, heatmap.topParties, heatmap.partyTheme]);
+
+  // CSV export of heatmap (all parties, all themes)
+  const exportHeatmapCsv = () => {
+    const header = ["Partido", ...heatmap.allTemas, "Total"];
+    const lines = [header.join(",")];
+    heatmap.topParties.forEach((p) => {
+      const themes = heatmap.partyTheme[p] || {};
+      const total = Object.values(themes).reduce((s, v) => s + v, 0);
+      const row = [p, ...heatmap.allTemas.map((t) => themes[t] || 0), total];
+      lines.push(row.join(","));
+    });
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `partidos-temas-${ano}${temaFilter !== "all" ? `-${temaFilter}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
