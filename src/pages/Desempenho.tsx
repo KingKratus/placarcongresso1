@@ -17,6 +17,7 @@ import { PerformanceWeightsCustomizer } from "@/components/PerformanceWeightsCus
 import { PerformanceHistogram } from "@/components/PerformanceHistogram";
 import { PerformanceCompare } from "@/components/PerformanceCompare";
 import { AdminPerformanceSync } from "@/components/AdminPerformanceSync";
+import { InfograficoButton } from "@/components/InfograficoButton";
 
 const ANOS = [2023, 2024, 2025, 2026];
 
