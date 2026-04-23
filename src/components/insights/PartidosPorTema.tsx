@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { Tags, Search, Filter, TrendingUp } from "lucide-react";
+import { Tags, Search, Filter, TrendingUp, Download, ChevronLeft, ChevronRight, BarChart3, Grid3x3 } from "lucide-react";
 import { TEMA_COLORS } from "./ThemeDistribution";
 
 interface Props {
