@@ -337,14 +337,15 @@ export function PartidosPorTema({ ano }: Props) {
       {temaFilter === "all" && heatmap.topParties.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Mapa de Calor — Top 6 Partidos × Temas</CardTitle>
-            <p className="text-[11px] text-muted-foreground">Intensidade da cor indica volume de proposições por tema</p>
+            <CardTitle className="text-base">Mapa de Calor — Todos os Partidos × Temas ({heatmap.topParties.length})</CardTitle>
+            <p className="text-[11px] text-muted-foreground">Intensidade da cor indica volume de proposições por tema. Ordenado por total decrescente.</p>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="p-0">
+           <div className="overflow-auto max-h-[600px] relative">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr>
-                  <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card">Partido</th>
+                <tr className="sticky top-0 bg-card z-20 shadow-sm">
+                  <th className="text-left p-2 font-bold text-muted-foreground sticky left-0 bg-card z-30">Partido</th>
                   {heatmap.allTemas.map((t) => (
                     <th key={t} className="p-1 font-bold text-[9px] text-muted-foreground" style={{ minWidth: 60 }}>
                       <div className="flex flex-col items-center gap-1">
@@ -356,7 +357,7 @@ export function PartidosPorTema({ ano }: Props) {
                       </div>
                     </th>
                   ))}
-                  <th className="p-2 font-bold text-muted-foreground">Total</th>
+                  <th className="p-2 font-bold text-muted-foreground bg-card">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -365,8 +366,8 @@ export function PartidosPorTema({ ano }: Props) {
                   const total = Object.values(themes).reduce((s, v) => s + v, 0);
                   const max = Math.max(...heatmap.allTemas.map((t) => themes[t] || 0), 1);
                   return (
-                    <tr key={partido} className="border-t border-border">
-                      <td className="p-2 font-bold sticky left-0 bg-card">{partido}</td>
+                    <tr key={partido} className="border-t border-border hover:bg-muted/30">
+                      <td className="p-2 font-bold sticky left-0 bg-card z-10">{partido}</td>
                       {heatmap.allTemas.map((t) => {
                         const v = themes[t] || 0;
                         const intensity = v / max;
@@ -390,6 +391,7 @@ export function PartidosPorTema({ ano }: Props) {
                 })}
               </tbody>
             </table>
+           </div>
           </CardContent>
         </Card>
       )}
