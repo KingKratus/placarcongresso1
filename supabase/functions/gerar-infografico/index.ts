@@ -41,63 +41,41 @@ serve(async (req) => {
       .join("\n");
     const destaquesStr = (dados.destaques || []).map((d: string) => `• ${d}`).join("\n");
 
-    let prompt = "";
-    if (formato === "card") {
-      prompt = `Crie um infográfico vertical 1080x1350 (formato post Instagram) para uso em redes sociais sobre legislativo brasileiro.
+    // Imagen prompts must be in English; rendered text inside the image can be Portuguese.
+    const aspectRatio = formato === "card" ? "3:4" : "9:16";
+    const styleDirective = formato === "card"
+      ? "Vertical Instagram-style social infographic poster, modern editorial design (The Economist / Politico aesthetic). Bold sans-serif typography, huge numeric figures (80-120pt), clean white background, accent colors deep indigo blue, emerald green, crimson red. Minimal icons, generous whitespace, sharp visual hierarchy."
+      : "Executive analytical dashboard report (McKinsey / consulting style). Multiple sections with header, large KPI tiles, abstract chart elements (bars, donut, line), insight callouts. Sober palette: navy blue, graphite gray, accent emerald and red. Serif headings, sans-serif data. Minimalist icons.";
 
-TÍTULO PRINCIPAL: ${dados.titulo}
-${dados.subtitulo ? `SUBTÍTULO: ${dados.subtitulo}` : ""}
+    const textBlock = [
+      `TITLE (render exactly, in Portuguese, large bold): "${dados.titulo}"`,
+      dados.subtitulo ? `SUBTITLE (Portuguese): "${dados.subtitulo}"` : "",
+      `KEY METRICS (render each as a big number with its short label, in Portuguese, exactly as written):\n${metricasStr}`,
+      destaquesStr ? `HIGHLIGHTS (small bullets, Portuguese):\n${destaquesStr}` : "",
+      dados.rodape ? `FOOTER (small, Portuguese): "${dados.rodape}"` : "",
+    ].filter(Boolean).join("\n\n");
 
-MÉTRICAS PRINCIPAIS (use grandes, em destaque visual):
-${metricasStr}
+    const prompt = `${styleDirective}
 
-${destaquesStr ? `DESTAQUES:\n${destaquesStr}` : ""}
+The infographic is about Brazilian legislative data. Render ALL TEXT EXACTLY AS PROVIDED below, keeping Portuguese spelling and accents intact (ã, ç, é, í, ó, ú, â, ê, ô). No translation. No extra text.
 
-${dados.rodape ? `RODAPÉ: ${dados.rodape}` : ""}
+${textBlock}
 
-ESTILO VISUAL:
-- Design profissional, moderno, jornalístico (estilo The Economist / Politico)
-- Paleta: azul-índigo profundo (#4F46E5), verde-esmeralda (#10B981), vermelho (#E11D48), fundo branco/off-white
-- Tipografia bold e impactante para números, sans-serif limpa para textos
-- Use ícones simples e geometria moderna
-- Destaque os números em escala grande (60-120pt)
-- Hierarquia visual clara, espaçamento generoso
-- NÃO use textos longos. Apenas labels curtos e os valores numéricos.
-- TODOS os textos devem estar em PORTUGUÊS BRASILEIRO, com acentuação correta`;
-    } else {
-      prompt = `Crie um relatório analítico visual A4 (1240x1754) sobre legislativo brasileiro, denso de dados.
+No people, no photographs, no flags. Pure typographic editorial infographic. Crisp, print-ready, high resolution.`;
 
-TÍTULO: ${dados.titulo}
-${dados.subtitulo ? `SUBTÍTULO: ${dados.subtitulo}` : ""}
-
-MÉTRICAS:
-${metricasStr}
-
-${destaquesStr ? `OBSERVAÇÕES:\n${destaquesStr}` : ""}
-
-${dados.rodape ? `FONTE/RODAPÉ: ${dados.rodape}` : ""}
-
-ESTILO:
-- Layout estilo dashboard executivo / relatório McKinsey
-- Múltiplas seções: cabeçalho, KPIs grandes no topo, gráficos abstratos no meio (barras, donut, linha), insights na base
-- Paleta sóbria: azul marinho, cinza-grafite, verde, vermelho de destaque
-- Tipografia serifada para títulos, sans para dados
-- Use ícones e elementos visuais minimalistas
-- TODOS os textos em PORTUGUÊS BRASILEIRO`;
-    }
-
-    // Chamada DIRETA à API do Google AI Studio (não via Lovable)
-    const model = "gemini-2.5-flash-image-preview";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // DIRECT call to Google AI Studio (Imagen 4) — NOT through Lovable AI gateway.
+    const model = "imagen-4.0-generate-001";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`;
 
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["IMAGE"],
-          temperature: 0.8,
+        instances: [{ prompt }],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio,
+          personGeneration: "dont_allow",
         },
       }),
     });
@@ -117,20 +95,17 @@ ESTILO:
     }
 
     const json = await resp.json();
-    // Extrai a primeira parte com inlineData (imagem)
-    const parts = json?.candidates?.[0]?.content?.parts || [];
-    const imgPart = parts.find((p: any) => p.inlineData || p.inline_data);
-    const inline = imgPart?.inlineData || imgPart?.inline_data;
-
-    if (!inline?.data) {
+    // Imagen :predict returns { predictions: [{ bytesBase64Encoded, mimeType }] }
+    const pred = json?.predictions?.[0];
+    const b64 = pred?.bytesBase64Encoded || pred?.image?.imageBytes;
+    if (!b64) {
       console.error("No image returned", JSON.stringify(json).slice(0, 800));
       return new Response(JSON.stringify({ error: "Gemini não retornou imagem", raw: json }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const mime = inline.mimeType || inline.mime_type || "image/png";
-    const dataUrl = `data:${mime};base64,${inline.data}`;
+    const mime = pred?.mimeType || "image/png";
+    const dataUrl = `data:${mime};base64,${b64}`;
 
     return new Response(JSON.stringify({ image: dataUrl, model }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
