@@ -83,12 +83,14 @@ No people, no photographs, no flags. Pure typographic editorial infographic. Cri
     if (!resp.ok) {
       const errText = await resp.text();
       console.error("Gemini error", resp.status, errText);
-      const status = resp.status === 429 ? 429 : resp.status === 403 ? 402 : 500;
-      const msg = resp.status === 429
-        ? "Limite de requisições da API Gemini excedido. Tente novamente em alguns minutos."
-        : resp.status === 403
-        ? "Chave Gemini inválida ou sem permissão."
-        : `Erro Gemini: ${resp.status}`;
+      let msg = `Erro Gemini: ${resp.status}`;
+      let status = 500;
+      if (resp.status === 429) { msg = "Limite de requisições da API Gemini excedido. Tente novamente em alguns minutos."; status = 429; }
+      else if (resp.status === 403) { msg = "Chave Gemini inválida ou sem permissão."; status = 402; }
+      else if (errText.includes("only available on paid")) {
+        msg = "Imagen requer um plano pago do Google AI Studio. Ative o billing em https://ai.dev/projects e tente novamente.";
+        status = 402;
+      }
       return new Response(JSON.stringify({ error: msg, detail: errText.slice(0, 500) }), {
         status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
