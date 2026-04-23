@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProposicoesTab } from "@/components/ProposicoesTab";
 import { PerformanceTab } from "@/components/PerformanceTab";
 import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
+import { InfograficoButton } from "@/components/InfograficoButton";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
