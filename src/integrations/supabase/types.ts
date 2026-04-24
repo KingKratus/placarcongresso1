@@ -304,6 +304,54 @@ export type Database = {
           },
         ]
       }
+      prioridade_votos: {
+        Row: {
+          comentario: string | null
+          created_at: string
+          id: string
+          posicao: string
+          prioridade: number
+          proposicao_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          comentario?: string | null
+          created_at?: string
+          id?: string
+          posicao: string
+          prioridade: number
+          proposicao_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          comentario?: string | null
+          created_at?: string
+          id?: string
+          posicao?: string
+          prioridade?: number
+          proposicao_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prioridade_votos_proposicao_id_fkey"
+            columns: ["proposicao_id"]
+            isOneToOne: false
+            referencedRelation: "prioridade_agregada"
+            referencedColumns: ["proposicao_id"]
+          },
+          {
+            foreignKeyName: "prioridade_votos_proposicao_id_fkey"
+            columns: ["proposicao_id"]
+            isOneToOne: false
+            referencedRelation: "proposicoes_prioritarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -381,6 +429,57 @@ export type Database = {
           tema?: string | null
           tipo?: string
           tipo_autoria?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
+      proposicoes_prioritarias: {
+        Row: {
+          ano: number
+          ativa: boolean
+          casa: string
+          created_at: string
+          destaque: boolean
+          ementa: string | null
+          id: string
+          numero: string
+          ordem: number
+          tema: string
+          tipo: string
+          titulo: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          ano: number
+          ativa?: boolean
+          casa: string
+          created_at?: string
+          destaque?: boolean
+          ementa?: string | null
+          id?: string
+          numero: string
+          ordem?: number
+          tema: string
+          tipo: string
+          titulo: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          ano?: number
+          ativa?: boolean
+          casa?: string
+          created_at?: string
+          destaque?: boolean
+          ementa?: string | null
+          id?: string
+          numero?: string
+          ordem?: number
+          tema?: string
+          tipo?: string
+          titulo?: string
+          updated_at?: string
           url?: string | null
         }
         Relationships: []
@@ -474,6 +573,54 @@ export type Database = {
           status?: string
           summary?: Json | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      tramitacoes_cache: {
+        Row: {
+          ano: number
+          casa: string
+          created_at: string
+          ementa: string | null
+          eventos: Json
+          fetched_at: string
+          id: string
+          numero: string
+          proposicao_id_externo: string | null
+          tipo: string
+          ultima_atualizacao: string | null
+          ultima_situacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          created_at?: string
+          ementa?: string | null
+          eventos?: Json
+          fetched_at?: string
+          id?: string
+          numero: string
+          proposicao_id_externo?: string | null
+          tipo: string
+          ultima_atualizacao?: string | null
+          ultima_situacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          created_at?: string
+          ementa?: string | null
+          eventos?: Json
+          fetched_at?: string
+          id?: string
+          numero?: string
+          proposicao_id_externo?: string | null
+          tipo?: string
+          ultima_atualizacao?: string | null
+          ultima_situacao?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -665,7 +812,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      prioridade_agregada: {
+        Row: {
+          ano: number | null
+          casa: string | null
+          contra: number | null
+          favor: number | null
+          neutro: number | null
+          numero: string | null
+          prioridade_media: number | null
+          proposicao_id: string | null
+          tema: string | null
+          tipo: string | null
+          titulo: string | null
+          total_votos: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_monthly_alignment: {
