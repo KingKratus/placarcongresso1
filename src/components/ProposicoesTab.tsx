@@ -9,13 +9,15 @@ import {
 } from "@/components/ui/select";
 import {
   Search, FileText, Sparkles, Loader2, ExternalLink, ChevronLeft, ChevronRight, Filter,
-  BarChart3, TrendingUp,
+  BarChart3, TrendingUp, GitBranch,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
 } from "recharts";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { TramitacaoTimeline } from "@/components/TramitacaoTimeline";
 
 const THEME_COLORS: Record<string, string> = {
   "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -70,6 +72,8 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
   const [insights, setInsights] = useState<string | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [page, setPage] = useState(0);
+  const [tramitacaoOpen, setTramitacaoOpen] = useState(false);
+  const [tramitacaoTarget, setTramitacaoTarget] = useState<Proposicao | null>(null);
 
   // Filters
   const [searchText, setSearchText] = useState("");
@@ -533,6 +537,13 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
                           <ExternalLink size={9} /> Ver
                         </a>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => { setTramitacaoTarget(p); setTramitacaoOpen(true); }}
+                        className="text-[9px] font-bold text-primary hover:underline flex items-center gap-0.5"
+                      >
+                        <GitBranch size={9} /> Tramitação
+                      </button>
                     </div>
                   </div>
                   <Badge variant="outline" className="text-[9px] shrink-0">{p.tipo}</Badge>
@@ -545,6 +556,26 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Tramitação Sheet */}
+      <Sheet open={tramitacaoOpen} onOpenChange={setTramitacaoOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader className="pb-4">
+            <SheetTitle className="text-base flex items-center gap-2">
+              <GitBranch size={16} />
+              Tramitação Legislativa
+            </SheetTitle>
+          </SheetHeader>
+          {tramitacaoTarget && (
+            <TramitacaoTimeline
+              casa={casa}
+              tipo={tramitacaoTarget.tipo}
+              numero={tramitacaoTarget.numero}
+              ano={tramitacaoTarget.ano}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
