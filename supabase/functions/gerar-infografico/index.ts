@@ -63,53 +63,82 @@ ${textBlock}
 
 No people, no photographs, no flags. Pure typographic editorial infographic. Crisp, print-ready, high resolution.`;
 
-    // DIRECT call to Google AI Studio (Imagen 4) — NOT through Lovable AI gateway.
-    const model = "imagen-4.0-generate-001";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`;
+    // 1) Tenta Imagen 4 (predict)
+    const tryImagen = async (model: string) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { sampleCount: 1, aspectRatio, personGeneration: "dont_allow" },
+        }),
+      });
+      const txt = await r.text();
+      let json: any = null;
+      try { json = JSON.parse(txt); } catch { /* keep txt */ }
+      return { ok: r.ok, status: r.status, text: txt, json };
+    };
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio,
-          personGeneration: "dont_allow",
-        },
-      }),
-    });
+    // 2) Fallback gemini-2.5-flash-image-preview (generateContent multimodal)
+    const tryGeminiImage = async () => {
+      const model = "gemini-2.5-flash-image-preview";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ["IMAGE"] },
+        }),
+      });
+      const txt = await r.text();
+      let json: any = null;
+      try { json = JSON.parse(txt); } catch { /* keep txt */ }
+      const inline = json?.candidates?.[0]?.content?.parts?.find((p: any) => p?.inlineData)?.inlineData;
+      return { ok: r.ok && !!inline, status: r.status, text: txt, b64: inline?.data, mime: inline?.mimeType, model };
+    };
 
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error("Gemini error", resp.status, errText);
-      let msg = `Erro Gemini: ${resp.status}`;
+    let resp = await tryImagen("imagen-4.0-generate-001");
+    let dataUrl: string | null = null;
+    let usedModel = "imagen-4.0-generate-001";
+
+    if (resp.ok) {
+      const pred = resp.json?.predictions?.[0];
+      const b64 = pred?.bytesBase64Encoded || pred?.image?.imageBytes;
+      const mime = pred?.mimeType || "image/png";
+      if (b64) dataUrl = `data:${mime};base64,${b64}`;
+    } else {
+      console.warn("Imagen falhou, tentando fallback. status:", resp.status, "msg:", resp.text.slice(0, 300));
+      // Fallback se for billing/permissão
+      const isBilling = resp.status === 403 || resp.text.includes("only available on paid") || resp.text.includes("billing");
+      const isQuota = resp.status === 429;
+      if (isBilling || isQuota || resp.status === 400 || resp.status === 404) {
+        const fb = await tryGeminiImage();
+        if (fb.ok && fb.b64) {
+          dataUrl = `data:${fb.mime || "image/png"};base64,${fb.b64}`;
+          usedModel = fb.model;
+        } else {
+          console.error("Fallback também falhou:", fb.status, fb.text.slice(0, 300));
+        }
+      }
+    }
+
+    if (!dataUrl) {
+      let msg = "Não foi possível gerar a imagem com Gemini.";
       let status = 500;
       if (resp.status === 429) { msg = "Limite de requisições da API Gemini excedido. Tente novamente em alguns minutos."; status = 429; }
       else if (resp.status === 403) { msg = "Chave Gemini inválida ou sem permissão."; status = 402; }
-      else if (errText.includes("only available on paid")) {
-        msg = "Imagen requer um plano pago do Google AI Studio. Ative o billing em https://ai.dev/projects e tente novamente.";
+      else if (resp.text.includes("only available on paid")) {
+        msg = "Imagen requer plano pago do Google AI Studio. Ative billing em https://ai.dev/projects.";
         status = 402;
       }
-      return new Response(JSON.stringify({ error: msg, detail: errText.slice(0, 500) }), {
+      return new Response(JSON.stringify({ error: msg, detail: resp.text.slice(0, 500) }), {
         status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const json = await resp.json();
-    // Imagen :predict returns { predictions: [{ bytesBase64Encoded, mimeType }] }
-    const pred = json?.predictions?.[0];
-    const b64 = pred?.bytesBase64Encoded || pred?.image?.imageBytes;
-    if (!b64) {
-      console.error("No image returned", JSON.stringify(json).slice(0, 800));
-      return new Response(JSON.stringify({ error: "Gemini não retornou imagem", raw: json }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const mime = pred?.mimeType || "image/png";
-    const dataUrl = `data:${mime};base64,${b64}`;
-
-    return new Response(JSON.stringify({ image: dataUrl, model }), {
+    return new Response(JSON.stringify({ image: dataUrl, model: usedModel }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
