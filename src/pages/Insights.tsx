@@ -11,6 +11,7 @@ import { AgendaAoVivo } from "@/components/insights/AgendaAoVivo";
 import { AskAI } from "@/components/insights/AskAI";
 import { ThemeDistribution } from "@/components/insights/ThemeDistribution";
 import { PartidosPorTema } from "@/components/insights/PartidosPorTema";
+import { PrioridadesTab } from "@/components/insights/PrioridadesTab";
 import {
   EnhancedTooltip,
   topBottomTooltipRows,
@@ -28,7 +29,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
 const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
@@ -427,8 +428,8 @@ export default function Insights() {
           </div>
         ) : (
           <Tabs defaultValue="visao-geral" className="space-y-4">
-            {/* Mobile: horizontal scroll. Desktop (lg+): grid de 2 linhas para evitar sobreposição. */}
-            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
+            {/* Mobile: horizontal scroll. Desktop (lg+): grid auto-fit para evitar sobreposição. */}
+            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 xl:grid-cols-12 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
               <TabsTrigger value="visao-geral" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><TrendingUp size={14} /> Visão Geral</TabsTrigger>
               <TabsTrigger value="partidos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><BarChart2 size={14} /> Partidos</TabsTrigger>
               <TabsTrigger value="estados" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Map size={14} /> Estados</TabsTrigger>
@@ -438,6 +439,7 @@ export default function Insights() {
               <TabsTrigger value="partidos-tema" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Tags size={14} /> Partidos×Tema</TabsTrigger>
               <TabsTrigger value="simulacao" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><SlidersHorizontal size={14} /> Simulação</TabsTrigger>
               <TabsTrigger value="projetos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><FileText size={14} /> Projetos</TabsTrigger>
+              <TabsTrigger value="prioridades" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Vote size={14} /> Prioridades</TabsTrigger>
               <TabsTrigger value="ask-ai" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><MessageSquare size={14} /> IA</TabsTrigger>
               <TabsTrigger value="ao-vivo" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Radio size={14} /> Ao Vivo</TabsTrigger>
             </TabsList>
@@ -637,6 +639,11 @@ export default function Insights() {
             {/* Projetos */}
             <TabsContent value="projetos">
               <ProjetosTab votacoesCamara={votacoesCamara} votacoesSenado={votacoesSenado} ano={ano} />
+            </TabsContent>
+
+            {/* Prioridades Cidadãs */}
+            <TabsContent value="prioridades">
+              <PrioridadesTab />
             </TabsContent>
 
             {/* IA */}
