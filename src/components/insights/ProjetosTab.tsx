@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
@@ -369,6 +369,60 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     return { votados, aprovados, rejeitados, pautados, recentes, progresso };
   }, [allProjects]);
 
+  const plenaryReadiness = useMemo(() => {
+    const scoreProject = (p: UnifiedProject) => {
+      const text = `${p.tipo} ${p.numero} ${p.ementa} ${p.descricao} ${p.orgao} ${p.resultado}`.toLowerCase();
+      let score = 25;
+      if (/comiss|relator|parecer|ccj|cft|ce|cas|cae/.test(text)) score = 45;
+      if (/pronta|pronto|pauta|ordem do dia|delibera|plen/.test(text)) score = 72;
+      if (p.data || /vota|aprov|rejeit/.test(text)) score = 90;
+      if (/sanção|sancao|promulg|lei /.test(text)) score = 100;
+      return score;
+    };
+    const labelFor = (score: number) => {
+      if (score >= 100) return "Sanção/lei";
+      if (score >= 90) return "Já votada";
+      if (score >= 72) return "Pronta para plenário";
+      if (score >= 45) return "Em comissão";
+      return "Inicial";
+    };
+
+    const enriched = allProjects.map((p) => {
+      const score = scoreProject(p);
+      return { ...p, score, etapa: labelFor(score), tema: p.casa === "Câmara" ? camaraTemas.temaMap.get(p.idVotacao) : senadoTemas.temaMap.get(p.idVotacao) };
+    });
+
+    const advanced = enriched
+      .filter((p) => p.score >= 72)
+      .sort((a, b) => b.score - a.score || String(b.data || "").localeCompare(String(a.data || "")))
+      .slice(0, 8);
+
+    const voted = enriched
+      .filter((p) => p.score >= 90)
+      .sort((a, b) => String(b.data || "").localeCompare(String(a.data || "")))
+      .slice(0, 8);
+
+    const byStage = ["Inicial", "Em comissão", "Pronta para plenário", "Já votada", "Sanção/lei"].map((etapa) => ({
+      etapa,
+      quantidade: enriched.filter((p) => p.etapa === etapa).length,
+    }));
+
+    const byTheme: Record<string, { tema: string; prontas: number; votadas: number }> = {};
+    enriched.forEach((p) => {
+      const tema = p.tema || "Sem tema";
+      byTheme[tema] = byTheme[tema] || { tema, prontas: 0, votadas: 0 };
+      if (p.score >= 72 && p.score < 90) byTheme[tema].prontas += 1;
+      if (p.score >= 90) byTheme[tema].votadas += 1;
+    });
+
+    return {
+      advanced,
+      voted,
+      byStage,
+      byTheme: Object.values(byTheme).sort((a, b) => (b.prontas + b.votadas) - (a.prontas + a.votadas)).slice(0, 10),
+    };
+  }, [allProjects, camaraTemas.temaMap, senadoTemas.temaMap]);
+
   const projectStatus = (p: UnifiedProject) => {
     const text = `${p.resultado} ${p.descricao}`.toLowerCase();
     if (/aprov|sim|favor/.test(text)) return { label: "Aprovado", cls: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" };
@@ -427,6 +481,84 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2"><TrendingUp size={16} className="text-primary" /> Proposições mais avançadas para plenário</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {plenaryReadiness.advanced.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma proposição avançada encontrada no recorte atual.</p>
+            ) : plenaryReadiness.advanced.map((p, i) => (
+              <button key={`${p.idVotacao}-advanced-${i}`} onClick={() => openProjectDetail(p)} className="w-full text-left rounded-md border border-border bg-background p-3 hover:bg-accent/50 transition-colors">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">{p.casa}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{p.tipo} {p.numero}</Badge>
+                      <Badge className="text-[10px] border-0 bg-primary/15 text-primary">{p.etapa}</Badge>
+                    </div>
+                    <p className="text-sm font-bold line-clamp-2">{p.ementa !== "—" ? p.ementa : p.descricao}</p>
+                    <p className="text-[11px] text-muted-foreground">{p.dataFormatted} · {p.orgao}</p>
+                  </div>
+                  <div className="w-full sm:w-36 shrink-0 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground"><span>Progresso</span><span>{p.score}%</span></div>
+                    <Progress value={p.score} className="h-2" />
+                  </div>
+                </div>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Funil legislativo</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={plenaryReadiness.byStage} layout="vertical" margin={{ left: 70, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="etapa" width={86} tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Bar dataKey="quantidade" name="Proposições" fill={CAMARA_COLOR} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Já votadas — últimas deliberações</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {plenaryReadiness.voted.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma votação encontrada.</p> : plenaryReadiness.voted.map((p, i) => { const st = projectStatus(p); return (
+              <button key={`${p.idVotacao}-voted-${i}`} onClick={() => openProjectDetail(p)} className="w-full text-left rounded-md border border-border p-2 hover:bg-accent/50 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0"><p className="text-xs font-bold truncate">{p.tipo} {p.numero} · {p.casa}</p><p className="text-[10px] text-muted-foreground truncate">{p.ementa !== "—" ? p.ementa : p.descricao}</p></div>
+                  <Badge className={`text-[9px] border-0 shrink-0 ${st.cls}`}>{st.label}</Badge>
+                </div>
+              </button>
+            ); })}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Temas com proposições prontas/votadas</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={plenaryReadiness.byTheme} margin={{ left: 10, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="tema" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" height={80} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="prontas" name="Prontas p/ plenário" stackId="a" fill={ABSTENCAO_COLOR} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="votadas" name="Já votadas" stackId="a" fill={FAVOR_COLOR} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
