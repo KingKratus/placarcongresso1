@@ -17,6 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { ReportEmailButton } from "@/components/ReportEmailButton";
 import type { VotacaoCamara, VotacaoSenado } from "@/hooks/useInsightsData";
 import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
 import { TEMA_COLORS } from "@/components/insights/ThemeDistribution";
@@ -357,6 +359,24 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
   }, [votacoesCamara]);
 
+  const executive = useMemo(() => {
+    const votados = allProjects.filter((p) => p.data);
+    const aprovados = allProjects.filter((p) => /aprov|sim|favor/i.test(`${p.resultado} ${p.descricao}`));
+    const rejeitados = allProjects.filter((p) => /rejeit|não|nao|contr/i.test(`${p.resultado} ${p.descricao}`));
+    const pautados = allProjects.filter((p) => /pauta|ordem do dia|plen|sessão|sessao|delibera/i.test(`${p.descricao} ${p.orgao}`));
+    const recentes = [...votados].sort((a, b) => String(b.data || "").localeCompare(String(a.data || ""))).slice(0, 6);
+    const progresso = allProjects.length ? Math.round((votados.length / allProjects.length) * 100) : 0;
+    return { votados, aprovados, rejeitados, pautados, recentes, progresso };
+  }, [allProjects]);
+
+  const projectStatus = (p: UnifiedProject) => {
+    const text = `${p.resultado} ${p.descricao}`.toLowerCase();
+    if (/aprov|sim|favor/.test(text)) return { label: "Aprovado", cls: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" };
+    if (/rejeit|não|nao|contr/.test(text)) return { label: "Rejeitado", cls: "bg-rose-500/20 text-rose-700 dark:text-rose-300" };
+    if (p.data) return { label: "Votado", cls: "bg-blue-500/20 text-blue-700 dark:text-blue-300" };
+    return { label: "Sem resultado", cls: "bg-muted text-muted-foreground" };
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary cards */}
@@ -378,6 +398,35 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
           <p className="text-[10px] font-bold text-muted-foreground uppercase">Tipos Distintos</p>
         </CardContent></Card>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><TrendingUp size={16} className="text-primary" /> Leitura executiva da tramitação legislativa</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div><p className="text-2xl font-black text-primary">{executive.votados.length}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Projetos votados</p></div>
+            <div><p className="text-2xl font-black">{executive.pautados.length}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Pautados/plenário</p></div>
+            <div><p className="text-2xl font-black text-governo">{executive.aprovados.length}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Aprovados</p></div>
+            <div><p className="text-2xl font-black text-oposicao">{executive.rejeitados.length}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Rejeitados</p></div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs"><span className="font-bold text-muted-foreground uppercase">Proporção votada no universo carregado</span><span className="font-black">{executive.progresso}%</span></div>
+            <Progress value={executive.progresso} className="h-2" />
+          </div>
+          {executive.recentes.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {executive.recentes.map((p, i) => { const st = projectStatus(p); return (
+                <button key={`${p.idVotacao}-recent-${i}`} onClick={() => openProjectDetail(p)} className="text-left rounded-md border border-border bg-background/60 p-2 hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center gap-1 mb-1"><Badge variant="outline" className="text-[9px]">{p.casa}</Badge><Badge className={`text-[9px] border-0 ${st.cls}`}>{st.label}</Badge></div>
+                  <p className="text-xs font-bold truncate">{p.tipo} {p.numero}</p>
+                  <p className="text-[10px] text-muted-foreground line-clamp-2">{p.ementa !== "—" ? p.ementa : p.descricao}</p>
+                </button>
+              ); })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -541,7 +590,7 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">{p.dataFormatted}</TableCell>
-                    <TableCell className="text-xs">{p.resultado}</TableCell>
+                    <TableCell className="text-xs"><Badge className={`text-[9px] border-0 ${projectStatus(p).cls}`}>{projectStatus(p).label}</Badge></TableCell>
                     <TableCell><Eye size={14} className="text-muted-foreground" /></TableCell>
                   </TableRow>
                 ))}
@@ -593,6 +642,17 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                 {selectedProject.orgao !== "—" && (
                   <p className="text-xs text-muted-foreground">Órgão: {selectedProject.orgao}</p>
                 )}
+                <div className="pt-2">
+                  <ReportEmailButton report={{
+                    title: `${selectedProject.tipo} ${selectedProject.numero} — ${selectedProject.casa}`,
+                    summary: selectedProject.ementa !== "—" ? selectedProject.ementa : selectedProject.descricao,
+                    sections: [
+                      `Data: ${selectedProject.dataFormatted}.`,
+                      `Resultado/status: ${projectStatus(selectedProject).label}.`,
+                      `Órgão: ${selectedProject.orgao}.`,
+                    ],
+                  }} />
+                </div>
               </DialogHeader>
 
               {loadingVotes ? (

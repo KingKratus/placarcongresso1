@@ -304,6 +304,54 @@ export type Database = {
           },
         ]
       }
+      prioridade_agregada: {
+        Row: {
+          ano: number
+          casa: string
+          contra: number
+          favor: number
+          neutro: number
+          numero: string
+          prioridade_media: number
+          proposicao_id: string
+          tema: string
+          tipo: string
+          titulo: string
+          total_votos: number
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          contra?: number
+          favor?: number
+          neutro?: number
+          numero: string
+          prioridade_media?: number
+          proposicao_id: string
+          tema: string
+          tipo: string
+          titulo: string
+          total_votos?: number
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          contra?: number
+          favor?: number
+          neutro?: number
+          numero?: string
+          prioridade_media?: number
+          proposicao_id?: string
+          tema?: string
+          tipo?: string
+          titulo?: string
+          total_votos?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       prioridade_votos: {
         Row: {
           comentario: string | null
@@ -336,13 +384,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "prioridade_votos_proposicao_id_fkey"
-            columns: ["proposicao_id"]
-            isOneToOne: false
-            referencedRelation: "prioridade_agregada"
-            referencedColumns: ["proposicao_id"]
-          },
           {
             foreignKeyName: "prioridade_votos_proposicao_id_fkey"
             columns: ["proposicao_id"]
@@ -812,23 +853,7 @@ export type Database = {
       }
     }
     Views: {
-      prioridade_agregada: {
-        Row: {
-          ano: number | null
-          casa: string | null
-          contra: number | null
-          favor: number | null
-          neutro: number | null
-          numero: string | null
-          prioridade_media: number | null
-          proposicao_id: string | null
-          tema: string | null
-          tipo: string | null
-          titulo: string | null
-          total_votos: number | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       get_monthly_alignment: {
@@ -844,6 +869,10 @@ export type Database = {
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      refresh_prioridade_agregada: {
+        Args: { _proposicao_id?: string }
+        Returns: undefined
       }
     }
     Enums: {

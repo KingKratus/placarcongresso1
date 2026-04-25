@@ -44,6 +44,7 @@ const Documentacao = () => {
             <TabsTrigger value="projeto" className="gap-2"><BookOpen size={14} /> Projeto</TabsTrigger>
             <TabsTrigger value="metodologia" className="gap-2"><BarChart2 size={14} /> Metodologia</TabsTrigger>
             <TabsTrigger value="apis" className="gap-2"><Globe size={14} /> APIs</TabsTrigger>
+            <TabsTrigger value="agentes" className="gap-2"><Code2 size={14} /> Agentes IA</TabsTrigger>
             <TabsTrigger value="arquitetura" className="gap-2"><Server size={14} /> Arquitetura</TabsTrigger>
             <TabsTrigger value="banco" className="gap-2"><Database size={14} /> Banco de Dados</TabsTrigger>
           </TabsList>
@@ -342,6 +343,108 @@ const Documentacao = () => {
                     </ul>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+
+
+          <TabsContent value="agentes" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code2 size={20} className="text-primary" /> Tutorial: agente de IA com API pública
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 text-sm">
+                <p>
+                  Este roteiro cria um agente que consulta apenas dados públicos do Monitor Legislativo: rankings, votações e votos individuais por votação. Use uma chave gerada no Perfil e nunca coloque essa chave em sites de terceiros expostos ao público sem um backend intermediário.
+                </p>
+
+                <Accordion type="multiple" className="w-full">
+                  <AccordionItem value="passo-1">
+                    <AccordionTrigger className="text-sm font-bold">1. Gerar a chave e definir o escopo</AccordionTrigger>
+                    <AccordionContent className="space-y-3">
+                      <ol className="list-decimal pl-6 space-y-2">
+                        <li>Entre no Perfil.</li>
+                        <li>Crie uma API Key com um nome identificável, por exemplo “Agente ranking 2026”.</li>
+                        <li>Copie a chave uma vez e guarde em cofre seguro.</li>
+                        <li>Defina quais perguntas o agente pode responder: ranking, score, classificação, votações, voto por votação e filtros por partido/UF.</li>
+                      </ol>
+                      <div className="bg-muted p-3 rounded-lg text-xs">
+                        Regra de segurança: o agente nunca deve pedir nem tentar acessar perfis, conversas, logs, chaves, papéis de usuário ou tabelas administrativas.
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="passo-2">
+                    <AccordionTrigger className="text-sm font-bold">2. Autenticação e URL base</AccordionTrigger>
+                    <AccordionContent className="space-y-3">
+                      <p>Todos os requests usam header Bearer:</p>
+                      <div className="bg-muted p-3 rounded-lg font-mono text-xs overflow-x-auto whitespace-pre">{`Authorization: Bearer pk_sua_chave_aqui
+GET ${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados?casa=camara&ano=2026&tipo=analises&limit=50`}</div>
+                      <p className="text-muted-foreground">Parâmetros principais: <code>casa</code>, <code>ano</code>, <code>tipo</code>, <code>limit</code>, <code>offset</code>, <code>partido</code>, <code>uf</code>, <code>classificacao</code> e <code>votacao_id</code>.</p>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="passo-3">
+                    <AccordionTrigger className="text-sm font-bold">3. Endpoints que o agente pode chamar</AccordionTrigger>
+                    <AccordionContent className="space-y-3">
+                      <div className="space-y-2">
+                        <div className="bg-muted p-3 rounded-lg font-mono text-xs overflow-x-auto">GET /api-dados?tipo=analises&casa=camara&ano=2026&partido=PT&limit=20</div>
+                        <p className="text-muted-foreground">Retorna parlamentares ranqueados por score, com partido, UF, classificação, votos alinhados e total de votos.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="bg-muted p-3 rounded-lg font-mono text-xs overflow-x-auto">GET /api-dados?tipo=votacoes&casa=senado&ano=2026&limit=50&offset=0</div>
+                        <p className="text-muted-foreground">Retorna votações paginadas, descrição, data, matéria e resultado quando disponível.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="bg-muted p-3 rounded-lg font-mono text-xs overflow-x-auto">GET /api-dados?tipo=votos&casa=camara&ano=2026&votacao_id=ID_DA_VOTACAO&partido=PL</div>
+                        <p className="text-muted-foreground">Retorna votos individuais de uma votação específica. O campo <code>votacao_id</code> é obrigatório.</p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="passo-4">
+                    <AccordionTrigger className="text-sm font-bold">4. Ferramenta do agente em JavaScript</AccordionTrigger>
+                    <AccordionContent className="space-y-3">
+                      <div className="bg-muted p-3 rounded-lg font-mono text-xs overflow-x-auto whitespace-pre">{`async function consultarMonitor(params) {
+  const qs = new URLSearchParams(params);
+  const res = await fetch(
+    "${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-dados?" + qs,
+    { headers: { Authorization: "Bearer " + process.env.MONITOR_API_KEY } }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Exemplo: top 10 deputados do PT
+await consultarMonitor({ casa: "camara", ano: "2026", tipo: "analises", partido: "PT", limit: "10" });`}</div>
+                      <p className="text-muted-foreground">Use a chave em variável de ambiente do seu servidor/agente, não diretamente em uma página pública.</p>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="passo-5">
+                    <AccordionTrigger className="text-sm font-bold">5. Prompt de sistema recomendado</AccordionTrigger>
+                    <AccordionContent className="space-y-3">
+                      <div className="bg-muted p-3 rounded-lg text-xs whitespace-pre-wrap">{`Você é um agente de análise legislativa. Use apenas os endpoints públicos autorizados do Monitor Legislativo. Não invente dados: se a API não retornar informação suficiente, diga que não há dados. Sempre cite ano, Casa, filtros usados e paginação. Nunca solicite chaves, dados pessoais, logs, perfis, conversas, user_roles ou api_keys. Para votos individuais, peça ou descubra primeiro o votacao_id por meio de tipo=votacoes.`}</div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="passo-6">
+                    <AccordionTrigger className="text-sm font-bold">6. Boas práticas de produção</AccordionTrigger>
+                    <AccordionContent>
+                      <ul className="list-disc pl-6 space-y-2">
+                        <li>Use paginação: <code>limit</code> máximo 1000 e <code>offset</code> incremental.</li>
+                        <li>Faça cache curto para rankings e votações, especialmente em agentes com muitos usuários.</li>
+                        <li>Trate erros 401/403 como chave ausente, inválida ou inativa.</li>
+                        <li>Trate erros 400 como parâmetros inválidos e peça ao usuário para escolher Casa, ano ou tipo correto.</li>
+                        <li>Não permita que usuários finais alterem livremente nomes de tabelas ou criem queries.</li>
+                        <li>Se publicar uma API para terceiros, crie seu próprio backend intermediário para controlar rate limit e esconder a chave principal.</li>
+                      </ul>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </CardContent>
             </Card>
           </TabsContent>
