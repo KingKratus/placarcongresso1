@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
@@ -368,6 +368,60 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     const progresso = allProjects.length ? Math.round((votados.length / allProjects.length) * 100) : 0;
     return { votados, aprovados, rejeitados, pautados, recentes, progresso };
   }, [allProjects]);
+
+  const plenaryReadiness = useMemo(() => {
+    const scoreProject = (p: UnifiedProject) => {
+      const text = `${p.tipo} ${p.numero} ${p.ementa} ${p.descricao} ${p.orgao} ${p.resultado}`.toLowerCase();
+      let score = 25;
+      if (/comiss|relator|parecer|ccj|cft|ce|cas|cae/.test(text)) score = 45;
+      if (/pronta|pronto|pauta|ordem do dia|delibera|plen/.test(text)) score = 72;
+      if (p.data || /vota|aprov|rejeit/.test(text)) score = 90;
+      if (/sanção|sancao|promulg|lei /.test(text)) score = 100;
+      return score;
+    };
+    const labelFor = (score: number) => {
+      if (score >= 100) return "Sanção/lei";
+      if (score >= 90) return "Já votada";
+      if (score >= 72) return "Pronta para plenário";
+      if (score >= 45) return "Em comissão";
+      return "Inicial";
+    };
+
+    const enriched = allProjects.map((p) => {
+      const score = scoreProject(p);
+      return { ...p, score, etapa: labelFor(score), tema: p.casa === "Câmara" ? camaraTemas.temaMap.get(p.idVotacao) : senadoTemas.temaMap.get(p.idVotacao) };
+    });
+
+    const advanced = enriched
+      .filter((p) => p.score >= 72)
+      .sort((a, b) => b.score - a.score || String(b.data || "").localeCompare(String(a.data || "")))
+      .slice(0, 8);
+
+    const voted = enriched
+      .filter((p) => p.score >= 90)
+      .sort((a, b) => String(b.data || "").localeCompare(String(a.data || "")))
+      .slice(0, 8);
+
+    const byStage = ["Inicial", "Em comissão", "Pronta para plenário", "Já votada", "Sanção/lei"].map((etapa) => ({
+      etapa,
+      quantidade: enriched.filter((p) => p.etapa === etapa).length,
+    }));
+
+    const byTheme: Record<string, { tema: string; prontas: number; votadas: number }> = {};
+    enriched.forEach((p) => {
+      const tema = p.tema || "Sem tema";
+      byTheme[tema] = byTheme[tema] || { tema, prontas: 0, votadas: 0 };
+      if (p.score >= 72 && p.score < 90) byTheme[tema].prontas += 1;
+      if (p.score >= 90) byTheme[tema].votadas += 1;
+    });
+
+    return {
+      advanced,
+      voted,
+      byStage,
+      byTheme: Object.values(byTheme).sort((a, b) => (b.prontas + b.votadas) - (a.prontas + a.votadas)).slice(0, 10),
+    };
+  }, [allProjects, camaraTemas.temaMap, senadoTemas.temaMap]);
 
   const projectStatus = (p: UnifiedProject) => {
     const text = `${p.resultado} ${p.descricao}`.toLowerCase();
