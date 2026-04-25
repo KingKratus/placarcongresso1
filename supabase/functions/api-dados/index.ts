@@ -46,28 +46,57 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Invalid or inactive API key" }, 403);
     }
 
-    // Parse query params
-    const casa = url.searchParams.get("casa") || "camara";
+    const casa = (url.searchParams.get("casa") || "camara").toLowerCase();
+    const tipo = (url.searchParams.get("tipo") || "analises").toLowerCase();
     const ano = Number(url.searchParams.get("ano") || new Date().getFullYear());
-    const tipo = url.searchParams.get("tipo") || "analises";
-    const limit = Math.min(Number(url.searchParams.get("limit") || 500), 1000);
-    const offset = Number(url.searchParams.get("offset") || 0);
+    const limitRaw = Number(url.searchParams.get("limit") || 500);
+    const offsetRaw = Number(url.searchParams.get("offset") || 0);
+    const partido = url.searchParams.get("partido")?.toUpperCase().trim();
+    const uf = url.searchParams.get("uf")?.toUpperCase().trim();
+    const classificacao = url.searchParams.get("classificacao")?.trim();
+
+    if (!["camara", "senado"].includes(casa)) {
+      return jsonResponse({ error: "casa inválida. Use camara ou senado" }, 400);
+    }
+    if (!["analises", "votacoes", "votos"].includes(tipo)) {
+      return jsonResponse({ error: "tipo inválido. Use analises, votacoes ou votos" }, 400);
+    }
+    if (!Number.isInteger(ano) || ano < 2023 || ano > 2030) {
+      return jsonResponse({ error: "ano inválido. Use um ano entre 2023 e 2030" }, 400);
+    }
+    if (!Number.isFinite(limitRaw) || !Number.isFinite(offsetRaw) || limitRaw < 1 || offsetRaw < 0) {
+      return jsonResponse({ error: "limit/offset inválidos" }, 400);
+    }
+    if (partido && !/^[A-Z0-9]{1,12}$/.test(partido)) return jsonResponse({ error: "partido inválido" }, 400);
+    if (uf && !/^[A-Z]{2}$/.test(uf)) return jsonResponse({ error: "uf inválida" }, 400);
+    if (classificacao && !/^[\p{L}\s]{3,30}$/u.test(classificacao)) return jsonResponse({ error: "classificacao inválida" }, 400);
+
+    const limit = Math.min(Math.floor(limitRaw), 1000);
+    const offset = Math.floor(offsetRaw);
 
     if (tipo === "analises") {
       if (casa === "camara") {
-        const { data, error, count } = await supabase
+        let q = supabase
           .from("analises_deputados")
           .select("*", { count: "exact" })
-          .eq("ano", ano)
+          .eq("ano", ano);
+        if (partido) q = q.eq("deputado_partido", partido);
+        if (uf) q = q.eq("deputado_uf", uf);
+        if (classificacao) q = q.eq("classificacao", classificacao);
+        const { data, error, count } = await q
           .order("score", { ascending: false })
           .range(offset, offset + limit - 1);
         if (error) return jsonResponse({ error: error.message }, 500);
         return jsonResponse({ data, total: count, casa, ano, tipo });
       } else {
-        const { data, error, count } = await supabase
+        let q = supabase
           .from("analises_senadores")
           .select("*", { count: "exact" })
-          .eq("ano", ano)
+          .eq("ano", ano);
+        if (partido) q = q.eq("senador_partido", partido);
+        if (uf) q = q.eq("senador_uf", uf);
+        if (classificacao) q = q.eq("classificacao", classificacao);
+        const { data, error, count } = await q
           .order("score", { ascending: false })
           .range(offset, offset + limit - 1);
         if (error) return jsonResponse({ error: error.message }, 500);
@@ -99,23 +128,43 @@ Deno.serve(async (req) => {
 
     if (tipo === "votos") {
       const votacaoId = url.searchParams.get("votacao_id");
-      if (!votacaoId) {
-        return jsonResponse({ error: "votacao_id required for tipo=votos" }, 400);
+      if (!votacaoId || votacaoId.length > 120 || !/^[A-Za-z0-9_./:-]+$/.test(votacaoId)) {
+        return jsonResponse({ error: "votacao_id válido é obrigatório para tipo=votos" }, 400);
       }
       if (casa === "camara") {
-        const { data, error } = await supabase
+        let q = supabase
           .from("votos_deputados")
           .select("*")
-          .eq("id_votacao", votacaoId)
-          .limit(limit);
+          .eq("id_votacao", votacaoId);
+        if (partido || uf) {
+          const { data: analises } = await supabase
+            .from("analises_deputados")
+            .select("deputado_id")
+            .eq("ano", ano)
+            .match({ ...(partido ? { deputado_partido: partido } : {}), ...(uf ? { deputado_uf: uf } : {}) });
+          const ids = (analises || []).map((a) => a.deputado_id);
+          if (ids.length === 0) return jsonResponse({ data: [], casa, tipo, votacao_id: votacaoId });
+          q = q.in("deputado_id", ids.slice(0, 500));
+        }
+        const { data, error } = await q.limit(limit);
         if (error) return jsonResponse({ error: error.message }, 500);
         return jsonResponse({ data, casa, tipo, votacao_id: votacaoId });
       } else {
-        const { data, error } = await supabase
+        let q = supabase
           .from("votos_senadores")
           .select("*")
-          .eq("codigo_sessao_votacao", votacaoId)
-          .limit(limit);
+          .eq("codigo_sessao_votacao", votacaoId);
+        if (partido || uf) {
+          const { data: analises } = await supabase
+            .from("analises_senadores")
+            .select("senador_id")
+            .eq("ano", ano)
+            .match({ ...(partido ? { senador_partido: partido } : {}), ...(uf ? { senador_uf: uf } : {}) });
+          const ids = (analises || []).map((a) => a.senador_id);
+          if (ids.length === 0) return jsonResponse({ data: [], casa, tipo, votacao_id: votacaoId });
+          q = q.in("senador_id", ids.slice(0, 200));
+        }
+        const { data, error } = await q.limit(limit);
         if (error) return jsonResponse({ error: error.message }, 500);
         return jsonResponse({ data, casa, tipo, votacao_id: votacaoId });
       }
@@ -126,12 +175,14 @@ Deno.serve(async (req) => {
       usage: {
         base: "/api-dados",
         params: {
-          apikey: "required",
           casa: "camara | senado",
-          ano: "2023-2026",
+          ano: "2023-2030",
           tipo: "analises | votacoes | votos",
-          limit: "max 1000",
+          limit: "1-1000",
           offset: "pagination offset",
+          partido: "optional for analises and votos",
+          uf: "optional for analises and votos",
+          classificacao: "optional for analises",
           votacao_id: "required when tipo=votos",
         },
       },
