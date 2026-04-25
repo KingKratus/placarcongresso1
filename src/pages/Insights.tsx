@@ -430,7 +430,7 @@ export default function Insights() {
         ) : (
           <Tabs defaultValue="visao-geral" className="space-y-4">
             {/* Mobile: horizontal scroll. Desktop (lg+): grid auto-fit para evitar sobreposição. */}
-            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 xl:grid-cols-13 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
+            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 xl:grid-cols-[repeat(13,minmax(0,1fr))] gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
               <TabsTrigger value="visao-geral" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><TrendingUp size={14} /> Visão Geral</TabsTrigger>
               <TabsTrigger value="partidos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><BarChart2 size={14} /> Partidos</TabsTrigger>
               <TabsTrigger value="estados" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Map size={14} /> Estados</TabsTrigger>
