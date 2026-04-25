@@ -12,6 +12,7 @@ import { AskAI } from "@/components/insights/AskAI";
 import { ThemeDistribution } from "@/components/insights/ThemeDistribution";
 import { PartidosPorTema } from "@/components/insights/PartidosPorTema";
 import { PrioridadesTab } from "@/components/insights/PrioridadesTab";
+import { ComparacaoParlamentaresTab } from "@/components/insights/ComparacaoParlamentaresTab";
 import {
   EnhancedTooltip,
   topBottomTooltipRows,
@@ -29,7 +30,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
 const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
@@ -429,11 +430,12 @@ export default function Insights() {
         ) : (
           <Tabs defaultValue="visao-geral" className="space-y-4">
             {/* Mobile: horizontal scroll. Desktop (lg+): grid auto-fit para evitar sobreposição. */}
-            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 xl:grid-cols-12 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
+            <TabsList className="h-auto w-full flex lg:grid lg:grid-cols-6 xl:grid-cols-13 gap-1 p-1 overflow-x-auto lg:overflow-visible scrollbar-thin justify-start lg:justify-center">
               <TabsTrigger value="visao-geral" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><TrendingUp size={14} /> Visão Geral</TabsTrigger>
               <TabsTrigger value="partidos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><BarChart2 size={14} /> Partidos</TabsTrigger>
               <TabsTrigger value="estados" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Map size={14} /> Estados</TabsTrigger>
               <TabsTrigger value="divergencia" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><GitCompareArrows size={14} /> Divergência</TabsTrigger>
+              <TabsTrigger value="comparar" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Users size={14} /> Comparar</TabsTrigger>
               <TabsTrigger value="volume" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Activity size={14} /> Volume</TabsTrigger>
               <TabsTrigger value="temas" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Tags size={14} /> Temas</TabsTrigger>
               <TabsTrigger value="partidos-tema" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Tags size={14} /> Partidos×Tema</TabsTrigger>
@@ -572,6 +574,16 @@ export default function Insights() {
             {/* Estados - Brazil Map */}
             <TabsContent value="estados">
               <BrazilMap ufData={ufData} />
+            </TabsContent>
+
+            <TabsContent value="comparar">
+              <ComparacaoParlamentaresTab
+                deputados={rawDeputados as any}
+                senadores={rawSenadores as any}
+                allYearsDeputados={allYearsDeputados as any}
+                allYearsSenadores={allYearsSenadores as any}
+                ano={ano}
+              />
             </TabsContent>
 
             {/* Divergência */}
