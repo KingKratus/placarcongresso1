@@ -563,6 +563,8 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
                 </SelectContent>
               </Select>
             )}
+            <Button size="sm" variant="outline" className="h-9 text-xs gap-1" onClick={exportCsv} disabled={exportRows.length === 0}><Download size={12} />CSV</Button>
+            <Button size="sm" className="h-9 text-xs gap-1" onClick={exportPdf} disabled={filtered.length === 0}><FileDown size={12} />PDF</Button>
           </div>
         </CardContent>
       </Card>
