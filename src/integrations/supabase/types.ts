@@ -236,6 +236,96 @@ export type Database = {
         }
         Relationships: []
       }
+      emendas_parlamentares_cache: {
+        Row: {
+          ano: number
+          area_politica: string | null
+          casa: string
+          confianca: number
+          created_at: string
+          data_apresentacao: string | null
+          ementa: string | null
+          fetched_at: string
+          id: string
+          impacto_estimado: string
+          numero: string
+          parlamentar_id: number
+          parlamentar_nome: string | null
+          proposicao_ano: number | null
+          proposicao_numero: string | null
+          proposicao_tipo: string | null
+          publico_afetado: string | null
+          raw_data: Json
+          resumo_ia: string | null
+          situacao: string | null
+          source: string
+          tema: string
+          tipo: string
+          tipo_beneficio: string | null
+          updated_at: string
+          url: string | null
+          valor: number | null
+        }
+        Insert: {
+          ano: number
+          area_politica?: string | null
+          casa: string
+          confianca?: number
+          created_at?: string
+          data_apresentacao?: string | null
+          ementa?: string | null
+          fetched_at?: string
+          id?: string
+          impacto_estimado?: string
+          numero: string
+          parlamentar_id: number
+          parlamentar_nome?: string | null
+          proposicao_ano?: number | null
+          proposicao_numero?: string | null
+          proposicao_tipo?: string | null
+          publico_afetado?: string | null
+          raw_data?: Json
+          resumo_ia?: string | null
+          situacao?: string | null
+          source?: string
+          tema?: string
+          tipo?: string
+          tipo_beneficio?: string | null
+          updated_at?: string
+          url?: string | null
+          valor?: number | null
+        }
+        Update: {
+          ano?: number
+          area_politica?: string | null
+          casa?: string
+          confianca?: number
+          created_at?: string
+          data_apresentacao?: string | null
+          ementa?: string | null
+          fetched_at?: string
+          id?: string
+          impacto_estimado?: string
+          numero?: string
+          parlamentar_id?: number
+          parlamentar_nome?: string | null
+          proposicao_ano?: number | null
+          proposicao_numero?: string | null
+          proposicao_tipo?: string | null
+          publico_afetado?: string | null
+          raw_data?: Json
+          resumo_ia?: string | null
+          situacao?: string | null
+          source?: string
+          tema?: string
+          tipo?: string
+          tipo_beneficio?: string | null
+          updated_at?: string
+          url?: string | null
+          valor?: number | null
+        }
+        Relationships: []
+      }
       nolan_diagrams: {
         Row: {
           ano: number
