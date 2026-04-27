@@ -196,6 +196,9 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
       <div className="rounded-lg border border-border bg-card p-3 space-y-3">
         <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Progresso legislativo</p><p className="text-sm font-bold">{insights.etapa}</p></div><p className="text-2xl font-black text-primary">{insights.progress}%</p></div>
         <Progress value={insights.progress} className="h-2" />
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+          {insights.marcos.map((m) => <div key={m.label} className={`rounded-md border px-2 py-1 text-center text-[9px] font-bold ${m.done ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{m.label}</div>)}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Badge variant="outline" className="justify-center gap-1"><Building2 size={11} /> Comissão: {insights.hasComissao ? "sim" : "não"}</Badge>
           <Badge variant="outline" className="justify-center gap-1"><Gavel size={11} /> Pautado: {insights.hasPlenario ? "sim" : "não"}</Badge>
@@ -204,10 +207,23 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{eventos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Eventos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{insights.orgaos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Órgãos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black text-primary">{insights.decisivos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Decisivos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{insights.diasSemMovimento ?? "—"}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Dias sem mov.</p></div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="rounded-lg border border-border bg-card p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Eventos por tipo</p><ResponsiveContainer width="100%" height={190}><BarChart data={insights.eventCounts}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="tipo" tick={{ fontSize: 9 }} /><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="quantidade" fill="hsl(var(--primary))" radius={[4,4,0,0]}>{insights.eventCounts.map((_, i) => <Cell key={i} fill={["hsl(var(--primary))", "hsl(var(--centro))", "hsl(var(--governo))", "hsl(var(--muted-foreground))", "hsl(var(--oposicao))", "hsl(45 80% 55%)"][i % 6]}/>)}</Bar></BarChart></ResponsiveContainer></div>
+        {insights.timeline.length > 1 && <div className="rounded-lg border border-border bg-card p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Movimentações no tempo</p><ResponsiveContainer width="100%" height={190}><LineChart data={insights.timeline}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="mes" tick={{ fontSize: 9 }}/><YAxis allowDecimals={false}/><Tooltip/><Line dataKey="quantidade" name="Eventos" stroke="hsl(var(--primary))" strokeWidth={2}/></LineChart></ResponsiveContainer></div>}
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1"><Search className="absolute left-2.5 top-2.5 text-muted-foreground" size={14} /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filtrar texto da tramitação" className="pl-8 h-9 text-xs" /></div>
+        <Select value={scope} onValueChange={(v) => setScope(v as any)}><SelectTrigger className="h-9 text-xs sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos eventos</SelectItem><SelectItem value="decisivos">Decisivos</SelectItem><SelectItem value="recentes">Últimos 10</SelectItem></SelectContent></Select>
         <Select value={kind} onValueChange={(v) => setKind(v as EventKind)}><SelectTrigger className="h-9 text-xs sm:w-44"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(KIND_LABELS).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}</SelectContent></Select>
-        {(kind !== "todos" || search) && <Button variant="ghost" size="sm" onClick={() => { setKind("todos"); setSearch(""); }}>Limpar</Button>}
+        {(kind !== "todos" || search || scope !== "todos") && <Button variant="ghost" size="sm" onClick={() => { setKind("todos"); setSearch(""); setScope("todos"); }}>Limpar</Button>}
       </div>
 
       <div>
