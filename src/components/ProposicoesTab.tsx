@@ -14,7 +14,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, Legend,
+  LineChart, Line, Legend, PieChart, Pie,
 } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TramitacaoTimeline } from "@/components/TramitacaoTimeline";
@@ -63,6 +63,23 @@ interface Proposicao {
   url: string | null;
   data_apresentacao: string | null;
   tipo_autoria?: string | null;
+  status_tramitacao?: string | null;
+  peso_tipo?: number | null;
+}
+
+function normalizeStatus(status?: string | null) {
+  const s = (status || "Em tramitação").toLowerCase();
+  if (/aprov|sancion|promulg|transform/.test(s)) return "Aprovada";
+  if (/arquiv/.test(s)) return "Arquivada";
+  if (/rejeit/.test(s)) return "Rejeitada";
+  if (/retir/.test(s)) return "Retirada";
+  return "Em tramitação";
+}
+
+function statusClass(status: string) {
+  if (status === "Aprovada") return "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
+  if (["Arquivada", "Rejeitada", "Retirada"].includes(status)) return "bg-rose-500/20 text-rose-700 dark:text-rose-300";
+  return "bg-blue-500/20 text-blue-700 dark:text-blue-300";
 }
 
 export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
