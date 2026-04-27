@@ -240,6 +240,7 @@ export type Database = {
         Row: {
           ano: number
           area_politica: string | null
+          cache_key: string
           casa: string
           confianca: number
           created_at: string
@@ -269,6 +270,7 @@ export type Database = {
         Insert: {
           ano: number
           area_politica?: string | null
+          cache_key: string
           casa: string
           confianca?: number
           created_at?: string
@@ -298,6 +300,7 @@ export type Database = {
         Update: {
           ano?: number
           area_politica?: string | null
+          cache_key?: string
           casa?: string
           confianca?: number
           created_at?: string
