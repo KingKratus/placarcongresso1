@@ -15,10 +15,11 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp, Download, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
+import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
 import type { VotacaoCamara, VotacaoSenado } from "@/hooks/useInsightsData";
 import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
 import { TEMA_COLORS } from "@/components/insights/ThemeDistribution";
@@ -430,6 +431,25 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     if (p.data) return { label: "Votado", cls: "bg-blue-500/20 text-blue-700 dark:text-blue-300" };
     return { label: "Sem resultado", cls: "bg-muted text-muted-foreground" };
   };
+
+  const exportRows = useMemo(() => filteredProjects.map((p) => ({ Casa: p.casa, Tipo: p.tipo, Número: p.numero, Data: p.dataFormatted, Órgão: p.orgao, Resultado: projectStatus(p).label, Ementa: p.ementa !== "—" ? p.ementa : p.descricao, Votação: p.idVotacao })), [filteredProjects]);
+  const exportCsv = () => downloadCsv(`votacoes-proposicoes-${ano}.csv`, exportRows);
+  const exportPdf = () => downloadPdfReport({
+    title: `Resumo de proposições avançadas e votadas — ${ano}`,
+    subtitle: `${plenaryReadiness.advanced.length} proposições avançadas para plenário e ${plenaryReadiness.voted.length} já votadas no universo carregado.`,
+    insights: [
+      `${executive.votados.length} projetos já aparecem como votados, com ${executive.aprovados.length} aprovados e ${executive.rejeitados.length} rejeitados.`,
+      `${executive.pautados.length} registros têm sinais de pauta, plenário, sessão ou deliberação.`,
+      `O funil legislativo indica maior concentração em ${plenaryReadiness.byStage.sort((a, b) => b.quantidade - a.quantidade)[0]?.etapa || "sem etapa"}.`,
+      `Tema com mais proposições prontas/votadas: ${plenaryReadiness.byTheme[0]?.tema || "sem tema"}.`,
+    ],
+    charts: [
+      { title: "Funil legislativo", data: plenaryReadiness.byStage.map((d) => ({ label: d.etapa, value: d.quantidade })) },
+      { title: "Temas prontas/votadas", data: plenaryReadiness.byTheme.map((d) => ({ label: d.tema, value: d.prontas + d.votadas })) },
+    ],
+    rows: [...plenaryReadiness.advanced, ...plenaryReadiness.voted].slice(0, 28).map((p) => ({ Proposição: `${p.tipo} ${p.numero}`, Casa: p.casa, Etapa: p.etapa, Progresso: `${p.score}%`, Data: p.dataFormatted, Resumo: p.ementa !== "—" ? p.ementa : p.descricao })),
+    filename: `resumo-proposicoes-avancadas-votadas-${ano}.pdf`,
+  });
 
   return (
     <div className="space-y-6">
