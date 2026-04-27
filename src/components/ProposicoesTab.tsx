@@ -312,6 +312,29 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
         </Card>
       </div>
 
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Leitura executiva das proposições</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div><p className="text-2xl font-black text-primary">{advancedInsights.taxaAvanco}%</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Ativas/aprovadas</p></div>
+            <div><p className="text-2xl font-black text-governo">{advancedInsights.taxaAprovacao}%</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Taxa aprovada</p></div>
+            <div><p className="text-2xl font-black">{advancedInsights.statusData.find((d) => d.name === "Em tramitação")?.value || 0}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Em tramitação</p></div>
+            <div><p className="text-2xl font-black">{advancedInsights.ranking[0]?.tipo || "—"}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Tipo mais relevante</p></div>
+          </div>
+          <div className="space-y-1"><div className="flex items-center justify-between text-xs"><span className="font-bold text-muted-foreground uppercase">Progresso do portfólio legislativo</span><span className="font-black">{advancedInsights.taxaAvanco}%</span></div><div className="h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${advancedInsights.taxaAvanco}%` }} /></div></div>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-3 gap-3">
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Status das proposições</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={230}><BarChart data={advancedInsights.statusData}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="name" tick={{ fontSize: 10 }}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Qtd" fill="hsl(var(--primary))" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Autoria</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={advancedInsights.autoriaData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={82} label>{advancedInsights.autoriaData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Top relevância</CardTitle></CardHeader><CardContent><div className="space-y-2">{advancedInsights.ranking.slice(0, 5).map((p, i) => { const st = normalizeStatus(p.status_tramitacao); return <div key={`${p.tipo}-${p.numero}-${i}`} className="flex items-center justify-between gap-2 rounded-md border border-border p-2"><div className="min-w-0"><p className="text-xs font-bold truncate">{p.tipo} {p.numero}/{p.ano}</p><p className="text-[10px] text-muted-foreground truncate">{p.tema || "Outros"}</p></div><Badge className={`border-0 text-[9px] ${statusClass(st)}`}>{st}</Badge></div>; })}</div></CardContent></Card>
+      </div>
+
+      {advancedInsights.yearStatus.length > 1 && <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Evolução por status</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={220}><LineChart data={advancedInsights.yearStatus}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="ano"/><YAxis allowDecimals={false}/><Tooltip/><Legend/><Line dataKey="total" name="Total" stroke="hsl(var(--primary))" strokeWidth={2}/><Line dataKey="aprovadas" name="Aprovadas" stroke="hsl(var(--governo))" strokeWidth={2}/><Line dataKey="tramitação" name="Em tramitação" stroke="hsl(var(--centro))" strokeWidth={2}/></LineChart></ResponsiveContainer></CardContent></Card>}
+
+      {advancedInsights.temaStatus.length > 0 && <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Temas por status</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={260}><BarChart data={advancedInsights.temaStatus} margin={{ left: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="tema" angle={-35} textAnchor="end" height={70} tick={{ fontSize: 10 }}/><YAxis allowDecimals={false}/><Tooltip/><Legend/><Bar dataKey="aprovadas" stackId="a" name="Aprovadas" fill="hsl(var(--governo))"/><Bar dataKey="tramitação" stackId="a" name="Em tramitação" fill="hsl(var(--centro))"/><Bar dataKey="encerradas" stackId="a" name="Encerradas" fill="hsl(var(--oposicao))"/></BarChart></ResponsiveContainer></CardContent></Card>}
+
       {/* Evolution Charts */}
       {yearEvolutionData.length > 1 && (
         <div className="grid md:grid-cols-2 gap-3">
