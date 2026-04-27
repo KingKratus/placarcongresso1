@@ -921,6 +921,10 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                         <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                           <Users size={14} /> Votos Individuais ({voteBreakdown.individualVotes.length})
                         </h4>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => downloadCsv(`votos-${selectedProject.tipo}-${selectedProject.numero}-${ano}.csv`, voteBreakdown.individualVotes.map((v) => ({ Parlamentar: v.nome, Partido: v.partido, UF: v.uf, Voto: v.votoClass })))}><Download size={12} />CSV</Button>
+                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => downloadPdfReport({ title: `Votos — ${selectedProject.tipo} ${selectedProject.numero}`, subtitle: selectedProject.ementa !== "—" ? selectedProject.ementa : selectedProject.descricao, insights: [`Total de ${voteBreakdown.total} votos carregados.`, `Sim: ${voteBreakdown.sim}; Não: ${voteBreakdown.nao}; Abstenção: ${voteBreakdown.abstencao}; Outros: ${voteBreakdown.outros}.`, `Partido com maior volume: ${voteBreakdown.byParty[0]?.partido || "sem dados"}.`], charts: [{ title: "Distribuição dos votos", data: [{ label: "Sim", value: voteBreakdown.sim }, { label: "Não", value: voteBreakdown.nao }, { label: "Abstenção", value: voteBreakdown.abstencao }, { label: "Outros", value: voteBreakdown.outros }] }, { title: "Votos por partido", data: voteBreakdown.byParty.slice(0, 8).map((p) => ({ label: p.partido, value: p.total })) }], rows: voteBreakdown.individualVotes.slice(0, 40).map((v) => ({ Parlamentar: v.nome, Partido: v.partido, UF: v.uf, Voto: v.votoClass })), filename: `votos-${selectedProject.tipo}-${selectedProject.numero}-${ano}.pdf` })}><FileDown size={12} />PDF</Button>
+                        </div>
                       </div>
                       <div className="relative mb-2">
                         <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
