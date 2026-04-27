@@ -41,6 +41,8 @@ import { ProposicoesTab } from "@/components/ProposicoesTab";
 import { PerformanceTab } from "@/components/PerformanceTab";
 import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 import { InfograficoButton } from "@/components/InfograficoButton";
+import { EmendasTab } from "@/components/EmendasTab";
+import { ParlamentarContact } from "@/components/ParlamentarContact";
 
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
@@ -309,6 +311,9 @@ export default function SenadorDetail() {
                   {Number(currentAnalise.score).toFixed(1)}%
                 </span>
               </div>
+              <div className="mt-2">
+                <ParlamentarContact parlamentarId={senId} casa="senado" compact />
+              </div>
             </div>
           </div>
         </div>
@@ -450,6 +455,7 @@ export default function SenadorDetail() {
           <TabsList className="mb-4 flex-wrap h-auto">
             <TabsTrigger value="votacoes" className="text-xs">Votações ({filteredVotos.length})</TabsTrigger>
             <TabsTrigger value="proposicoes" className="text-xs">Proposições</TabsTrigger>
+            <TabsTrigger value="emendas" className="text-xs">Emendas</TabsTrigger>
             <TabsTrigger value="desempenho" className="text-xs">Desempenho</TabsTrigger>
           </TabsList>
           <TabsContent value="desempenho">
@@ -603,6 +609,9 @@ export default function SenadorDetail() {
 
           <TabsContent value="proposicoes">
             <ProposicoesTab parlamentarId={senId} casa="senado" nome={currentAnalise.senador_nome} />
+          </TabsContent>
+          <TabsContent value="emendas">
+            <EmendasTab parlamentarId={senId} casa="senado" nome={currentAnalise.senador_nome} />
           </TabsContent>
         </Tabs>
       </main>

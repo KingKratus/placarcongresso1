@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ParlamentarContact } from "@/components/ParlamentarContact";
 
 const STATE_TO_UF: Record<string, string> = {
   "Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
@@ -24,6 +27,8 @@ interface UfDataItem {
 
 interface Props {
   ufData: UfDataItem[];
+  deputados?: any[];
+  senadores?: any[];
 }
 
 function getColor(val: number | null, classificacao?: string): string {
@@ -81,7 +86,7 @@ interface GeoFeature {
   geometry: any;
 }
 
-export function BrazilMap({ ufData }: Props) {
+export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
   const [geojson, setGeojson] = useState<GeoFeature[] | null>(null);
   const [selectedUf, setSelectedUf] = useState<string | null>(null);
   const [hoveredUf, setHoveredUf] = useState<string | null>(null);
@@ -107,6 +112,30 @@ export function BrazilMap({ ufData }: Props) {
   }, []);
 
   const selectedData = selectedUf ? ufMap[selectedUf] : null;
+  const activeUf = selectedUf || hoveredUf;
+
+  const stateParlamentares = useMemo(() => {
+    if (!activeUf) return [];
+    const deps = deputados.filter((d) => d.deputado_uf === activeUf).map((d) => ({ id: d.deputado_id, nome: d.deputado_nome, partido: d.deputado_partido, uf: d.deputado_uf, foto: d.deputado_foto, score: Number(d.score), classificacao: d.classificacao, votos: d.total_votos, casa: "camara" as const, labelCasa: "Câmara" }));
+    const sens = senadores.filter((s) => s.senador_uf === activeUf).map((s) => ({ id: s.senador_id, nome: s.senador_nome, partido: s.senador_partido, uf: s.senador_uf, foto: s.senador_foto, score: Number(s.score), classificacao: s.classificacao, votos: s.total_votos, casa: "senado" as const, labelCasa: "Senado" }));
+    const all = casa === "camara" ? deps : casa === "senado" ? sens : [...deps, ...sens];
+    return all.sort((a, b) => b.score - a.score);
+  }, [activeUf, deputados, senadores, casa]);
+
+  const stateCharts = useMemo(() => {
+    const classMap: Record<string, number> = {};
+    const partyMap: Record<string, { sum: number; count: number }> = {};
+    stateParlamentares.forEach((p) => {
+      classMap[p.classificacao || "Sem Dados"] = (classMap[p.classificacao || "Sem Dados"] || 0) + 1;
+      const party = p.partido || "Sem partido";
+      partyMap[party] = partyMap[party] || { sum: 0, count: 0 };
+      partyMap[party].sum += p.score; partyMap[party].count += 1;
+    });
+    return {
+      classData: Object.entries(classMap).map(([name, value]) => ({ name, value })),
+      partyData: Object.entries(partyMap).map(([partido, v]) => ({ partido, score: Math.round(v.sum / v.count), count: v.count })).sort((a, b) => b.score - a.score).slice(0, 8),
+    };
+  }, [stateParlamentares]);
 
   // Count classifications
   const classCounts = useMemo(() => {
@@ -303,6 +332,41 @@ export function BrazilMap({ ufData }: Props) {
                   })}
               </div>
             </div>
+
+            {activeUf && stateParlamentares.length > 0 && (
+              <div className="border-t border-border pt-3 mt-3 space-y-3">
+                <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Parlamentares de {activeUf}</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md border border-border p-2 text-center"><p className="text-lg font-black">{stateParlamentares.length}</p><p className="text-[9px] text-muted-foreground font-bold uppercase">Parlamentares</p></div>
+                  <div className="rounded-md border border-border p-2 text-center"><p className="text-lg font-black">{Math.round(stateParlamentares.reduce((s, p) => s + p.score, 0) / stateParlamentares.length)}%</p><p className="text-[9px] text-muted-foreground font-bold uppercase">Score médio</p></div>
+                </div>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={stateCharts.classData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="value" name="Qtd" radius={[4, 4, 0, 0]}>{stateCharts.classData.map((d) => <Cell key={d.name} fill={getColor(null, d.name)} />)}</Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {stateCharts.partyData.length > 0 && <ResponsiveContainer width="100%" height={170}><BarChart data={stateCharts.partyData} layout="vertical" margin={{ left: 35 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis type="number" domain={[0, 100]} /><YAxis type="category" dataKey="partido" width={34} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="score" name="Score médio" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer>}
+                <div className="space-y-2 max-h-[460px] overflow-auto pr-1">
+                  {stateParlamentares.map((p) => (
+                    <div key={`${p.casa}-${p.id}`} className="rounded-md border border-border p-2 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        {p.foto && <img src={p.foto} alt={p.nome} className="h-9 w-9 rounded object-cover" />}
+                        <div className="min-w-0 flex-1">
+                          <Link to={`/${p.casa === "camara" ? "deputado" : "senador"}/${p.id}`} className="text-xs font-black hover:text-primary truncate block">{p.nome}</Link>
+                          <p className="text-[10px] text-muted-foreground">{p.partido || "—"} · {p.labelCasa} · {p.votos || 0} votos</p>
+                        </div>
+                        <Badge style={{ backgroundColor: getColor(p.score), color: "#fff", border: "none" }} className="text-[9px] shrink-0">{Math.round(p.score)}%</Badge>
+                      </div>
+                      <ParlamentarContact parlamentarId={p.id} casa={p.casa} compact />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

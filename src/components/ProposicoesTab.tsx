@@ -14,7 +14,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, Legend,
+  LineChart, Line, Legend, PieChart, Pie,
 } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TramitacaoTimeline } from "@/components/TramitacaoTimeline";
@@ -63,6 +63,23 @@ interface Proposicao {
   url: string | null;
   data_apresentacao: string | null;
   tipo_autoria?: string | null;
+  status_tramitacao?: string | null;
+  peso_tipo?: number | null;
+}
+
+function normalizeStatus(status?: string | null) {
+  const s = (status || "Em tramitação").toLowerCase();
+  if (/aprov|sancion|promulg|transform/.test(s)) return "Aprovada";
+  if (/arquiv/.test(s)) return "Arquivada";
+  if (/rejeit/.test(s)) return "Rejeitada";
+  if (/retir/.test(s)) return "Retirada";
+  return "Em tramitação";
+}
+
+function statusClass(status: string) {
+  if (status === "Aprovada") return "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
+  if (["Arquivada", "Rejeitada", "Retirada"].includes(status)) return "bg-rose-500/20 text-rose-700 dark:text-rose-300";
+  return "bg-blue-500/20 text-blue-700 dark:text-blue-300";
 }
 
 export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
@@ -206,6 +223,33 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
 
   const topTypeNames = useMemo(() => typeStats.slice(0, 6).map(([t]) => t), [typeStats]);
 
+  const advancedInsights = useMemo(() => {
+    const withStatus = proposicoes.map((p) => ({ ...p, normalizedStatus: normalizeStatus(p.status_tramitacao), peso: Number(p.peso_tipo || 0.3) }));
+    const statusData = ["Em tramitação", "Aprovada", "Arquivada", "Rejeitada", "Retirada"].map((name) => ({ name, value: withStatus.filter((p) => p.normalizedStatus === name).length })).filter((d) => d.value > 0);
+    const autoriaData = ["autor", "coautor"].map((name) => ({ name: name === "coautor" ? "Coautor" : "Autor", value: withStatus.filter((p) => (p.tipo_autoria || "autor") === name).length }));
+    const aprovadas = withStatus.filter((p) => p.normalizedStatus === "Aprovada").length;
+    const ativas = withStatus.filter((p) => p.normalizedStatus === "Em tramitação").length;
+    const taxaAprovacao = proposicoes.length ? Math.round((aprovadas / proposicoes.length) * 100) : 0;
+    const taxaAvanco = proposicoes.length ? Math.round(((aprovadas + ativas) / proposicoes.length) * 100) : 0;
+    const ranking = [...withStatus]
+      .map((p) => ({ ...p, relevancia: Math.round((p.peso * 70) + (p.normalizedStatus === "Aprovada" ? 30 : p.normalizedStatus === "Em tramitação" ? 18 : 4)) }))
+      .sort((a, b) => b.relevancia - a.relevancia || b.ano - a.ano)
+      .slice(0, 8);
+    const temaStatus = themeStats.slice(0, 8).map(([tema]) => ({
+      tema,
+      aprovadas: withStatus.filter((p) => (p.tema || "Outros") === tema && p.normalizedStatus === "Aprovada").length,
+      tramitação: withStatus.filter((p) => (p.tema || "Outros") === tema && p.normalizedStatus === "Em tramitação").length,
+      encerradas: withStatus.filter((p) => (p.tema || "Outros") === tema && !["Aprovada", "Em tramitação"].includes(p.normalizedStatus)).length,
+    }));
+    const yearStatus = availableAnos.slice().reverse().map((ano) => ({
+      ano,
+      total: withStatus.filter((p) => p.ano === ano).length,
+      aprovadas: withStatus.filter((p) => p.ano === ano && p.normalizedStatus === "Aprovada").length,
+      tramitação: withStatus.filter((p) => p.ano === ano && p.normalizedStatus === "Em tramitação").length,
+    }));
+    return { statusData, autoriaData, taxaAprovacao, taxaAvanco, ranking, temaStatus, yearStatus };
+  }, [proposicoes, themeStats, availableAnos]);
+
   if (loading) {
     return (
       <Card>
@@ -267,6 +311,29 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Leitura executiva das proposições</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div><p className="text-2xl font-black text-primary">{advancedInsights.taxaAvanco}%</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Ativas/aprovadas</p></div>
+            <div><p className="text-2xl font-black text-governo">{advancedInsights.taxaAprovacao}%</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Taxa aprovada</p></div>
+            <div><p className="text-2xl font-black">{advancedInsights.statusData.find((d) => d.name === "Em tramitação")?.value || 0}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Em tramitação</p></div>
+            <div><p className="text-2xl font-black">{advancedInsights.ranking[0]?.tipo || "—"}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Tipo mais relevante</p></div>
+          </div>
+          <div className="space-y-1"><div className="flex items-center justify-between text-xs"><span className="font-bold text-muted-foreground uppercase">Progresso do portfólio legislativo</span><span className="font-black">{advancedInsights.taxaAvanco}%</span></div><div className="h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${advancedInsights.taxaAvanco}%` }} /></div></div>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-3 gap-3">
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Status das proposições</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={230}><BarChart data={advancedInsights.statusData}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="name" tick={{ fontSize: 10 }}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" name="Qtd" fill="hsl(var(--primary))" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Autoria</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={advancedInsights.autoriaData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={82} label>{advancedInsights.autoriaData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Top relevância</CardTitle></CardHeader><CardContent><div className="space-y-2">{advancedInsights.ranking.slice(0, 5).map((p, i) => { const st = normalizeStatus(p.status_tramitacao); return <div key={`${p.tipo}-${p.numero}-${i}`} className="flex items-center justify-between gap-2 rounded-md border border-border p-2"><div className="min-w-0"><p className="text-xs font-bold truncate">{p.tipo} {p.numero}/{p.ano}</p><p className="text-[10px] text-muted-foreground truncate">{p.tema || "Outros"}</p></div><Badge className={`border-0 text-[9px] ${statusClass(st)}`}>{st}</Badge></div>; })}</div></CardContent></Card>
+      </div>
+
+      {advancedInsights.yearStatus.length > 1 && <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Evolução por status</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={220}><LineChart data={advancedInsights.yearStatus}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="ano"/><YAxis allowDecimals={false}/><Tooltip/><Legend/><Line dataKey="total" name="Total" stroke="hsl(var(--primary))" strokeWidth={2}/><Line dataKey="aprovadas" name="Aprovadas" stroke="hsl(var(--governo))" strokeWidth={2}/><Line dataKey="tramitação" name="Em tramitação" stroke="hsl(var(--centro))" strokeWidth={2}/></LineChart></ResponsiveContainer></CardContent></Card>}
+
+      {advancedInsights.temaStatus.length > 0 && <Card><CardHeader className="pb-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Temas por status</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={260}><BarChart data={advancedInsights.temaStatus} margin={{ left: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="tema" angle={-35} textAnchor="end" height={70} tick={{ fontSize: 10 }}/><YAxis allowDecimals={false}/><Tooltip/><Legend/><Bar dataKey="aprovadas" stackId="a" name="Aprovadas" fill="hsl(var(--governo))"/><Bar dataKey="tramitação" stackId="a" name="Em tramitação" fill="hsl(var(--centro))"/><Bar dataKey="encerradas" stackId="a" name="Encerradas" fill="hsl(var(--oposicao))"/></BarChart></ResponsiveContainer></CardContent></Card>}
 
       {/* Evolution Charts */}
       {yearEvolutionData.length > 1 && (

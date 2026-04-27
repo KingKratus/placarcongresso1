@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface Evento {
   data: string | null;
@@ -88,7 +89,23 @@ function buildInsights(eventos: Evento[], ultima: string | null) {
   if (aprovado) { progress = 82; etapa = "Aprovado / revisão"; }
   if (hasSancao) { progress = 100; etapa = "Sanção ou promulgação"; }
   if (encerrado && !hasSancao) { progress = Math.max(progress, 90); etapa = "Encerrado"; }
-  return { hasComissao, hasPlenario, hasSancao, encerrado, aprovado, votado, progress, etapa };
+  const eventCounts = Object.keys(KIND_LABELS).filter((k) => k !== "todos").map((k) => ({ tipo: KIND_LABELS[k as EventKind], quantidade: eventos.filter((e) => classifyEvent(e) === k).length }));
+  const monthMap: Record<string, number> = {};
+  eventos.forEach((e) => { if (!e.data) return; const m = e.data.slice(0, 7); monthMap[m] = (monthMap[m] || 0) + 1; });
+  const timeline = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([mes, quantidade]) => ({ mes, quantidade }));
+  const orgaos = [...new Set(eventos.map((e) => e.orgao).filter(Boolean))] as string[];
+  const decisivos = eventos.filter((e) => /aprov|rejeit|votaç|votad|pauta|ordem do dia|sanç|sancion|promulg|arquiv|parecer/i.test(eventText(e)));
+  const lastDate = eventos.map((e) => e.data).filter(Boolean).sort().at(-1);
+  const diasSemMovimento = lastDate ? Math.max(0, Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000)) : null;
+  const marcos = [
+    { label: "Apresentação", done: eventos.length > 0 },
+    { label: "Comissão", done: hasComissao },
+    { label: "Parecer", done: /parecer|relator/i.test(allText) },
+    { label: "Pauta/plenário", done: hasPlenario },
+    { label: "Votação", done: votado },
+    { label: "Sanção", done: hasSancao },
+  ];
+  return { hasComissao, hasPlenario, hasSancao, encerrado, aprovado, votado, progress, etapa, eventCounts, timeline, orgaos, decisivos, diasSemMovimento, marcos };
 }
 
 export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
@@ -98,6 +115,7 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [kind, setKind] = useState<EventKind>("todos");
   const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<"todos" | "decisivos" | "recentes">("todos");
 
   const load = async (force = false) => {
     if (force) setRefreshing(true); else setLoading(true);
@@ -123,12 +141,17 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
 
   const filteredEventos = useMemo(() => {
     const term = search.toLowerCase().trim();
+    const insights = buildInsights(data?.eventos || [], data?.ultima_situacao || null);
+    const recentSet = new Set((data?.eventos || []).slice(-10));
+    const decisiveSet = new Set(insights.decisivos);
     return (data?.eventos || []).filter((ev) => {
+      if (scope === "decisivos" && !decisiveSet.has(ev)) return false;
+      if (scope === "recentes" && !recentSet.has(ev)) return false;
       if (kind !== "todos" && classifyEvent(ev) !== kind) return false;
       if (term && !eventText(ev).includes(term)) return false;
       return true;
     });
-  }, [data?.eventos, kind, search]);
+  }, [data?.eventos, data?.ultima_situacao, kind, search, scope]);
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin mr-2" size={18} /><span className="text-sm text-muted-foreground">Carregando tramitação…</span></div>;
   if (error) return <div className="py-8 text-center space-y-3"><AlertCircle className="mx-auto text-destructive" size={28} /><p className="text-sm text-destructive">{error}</p><Button size="sm" variant="outline" onClick={() => load(true)}>Tentar novamente</Button></div>;
@@ -173,6 +196,9 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
       <div className="rounded-lg border border-border bg-card p-3 space-y-3">
         <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Progresso legislativo</p><p className="text-sm font-bold">{insights.etapa}</p></div><p className="text-2xl font-black text-primary">{insights.progress}%</p></div>
         <Progress value={insights.progress} className="h-2" />
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+          {insights.marcos.map((m) => <div key={m.label} className={`rounded-md border px-2 py-1 text-center text-[9px] font-bold ${m.done ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{m.label}</div>)}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Badge variant="outline" className="justify-center gap-1"><Building2 size={11} /> Comissão: {insights.hasComissao ? "sim" : "não"}</Badge>
           <Badge variant="outline" className="justify-center gap-1"><Gavel size={11} /> Pautado: {insights.hasPlenario ? "sim" : "não"}</Badge>
@@ -181,10 +207,23 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{eventos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Eventos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{insights.orgaos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Órgãos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black text-primary">{insights.decisivos.length}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Decisivos</p></div>
+        <div className="rounded-md border border-border bg-card p-2 text-center"><p className="text-xl font-black">{insights.diasSemMovimento ?? "—"}</p><p className="text-[9px] font-bold uppercase text-muted-foreground">Dias sem mov.</p></div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="rounded-lg border border-border bg-card p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Eventos por tipo</p><ResponsiveContainer width="100%" height={190}><BarChart data={insights.eventCounts}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="tipo" tick={{ fontSize: 9 }} /><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="quantidade" fill="hsl(var(--primary))" radius={[4,4,0,0]}>{insights.eventCounts.map((_, i) => <Cell key={i} fill={["hsl(var(--primary))", "hsl(var(--centro))", "hsl(var(--governo))", "hsl(var(--muted-foreground))", "hsl(var(--oposicao))", "hsl(45 80% 55%)"][i % 6]}/>)}</Bar></BarChart></ResponsiveContainer></div>
+        {insights.timeline.length > 1 && <div className="rounded-lg border border-border bg-card p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Movimentações no tempo</p><ResponsiveContainer width="100%" height={190}><LineChart data={insights.timeline}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="mes" tick={{ fontSize: 9 }}/><YAxis allowDecimals={false}/><Tooltip/><Line dataKey="quantidade" name="Eventos" stroke="hsl(var(--primary))" strokeWidth={2}/></LineChart></ResponsiveContainer></div>}
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1"><Search className="absolute left-2.5 top-2.5 text-muted-foreground" size={14} /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filtrar texto da tramitação" className="pl-8 h-9 text-xs" /></div>
+        <Select value={scope} onValueChange={(v) => setScope(v as any)}><SelectTrigger className="h-9 text-xs sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos eventos</SelectItem><SelectItem value="decisivos">Decisivos</SelectItem><SelectItem value="recentes">Últimos 10</SelectItem></SelectContent></Select>
         <Select value={kind} onValueChange={(v) => setKind(v as EventKind)}><SelectTrigger className="h-9 text-xs sm:w-44"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(KIND_LABELS).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}</SelectContent></Select>
-        {(kind !== "todos" || search) && <Button variant="ghost" size="sm" onClick={() => { setKind("todos"); setSearch(""); }}>Limpar</Button>}
+        {(kind !== "todos" || search || scope !== "todos") && <Button variant="ghost" size="sm" onClick={() => { setKind("todos"); setSearch(""); setScope("todos"); }}>Limpar</Button>}
       </div>
 
       <div>
