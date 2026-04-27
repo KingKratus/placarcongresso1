@@ -223,6 +223,33 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
 
   const topTypeNames = useMemo(() => typeStats.slice(0, 6).map(([t]) => t), [typeStats]);
 
+  const advancedInsights = useMemo(() => {
+    const withStatus = proposicoes.map((p) => ({ ...p, normalizedStatus: normalizeStatus(p.status_tramitacao), peso: Number(p.peso_tipo || 0.3) }));
+    const statusData = ["Em tramitação", "Aprovada", "Arquivada", "Rejeitada", "Retirada"].map((name) => ({ name, value: withStatus.filter((p) => p.normalizedStatus === name).length })).filter((d) => d.value > 0);
+    const autoriaData = ["autor", "coautor"].map((name) => ({ name: name === "coautor" ? "Coautor" : "Autor", value: withStatus.filter((p) => (p.tipo_autoria || "autor") === name).length }));
+    const aprovadas = withStatus.filter((p) => p.normalizedStatus === "Aprovada").length;
+    const ativas = withStatus.filter((p) => p.normalizedStatus === "Em tramitação").length;
+    const taxaAprovacao = proposicoes.length ? Math.round((aprovadas / proposicoes.length) * 100) : 0;
+    const taxaAvanco = proposicoes.length ? Math.round(((aprovadas + ativas) / proposicoes.length) * 100) : 0;
+    const ranking = [...withStatus]
+      .map((p) => ({ ...p, relevancia: Math.round((p.peso * 70) + (p.normalizedStatus === "Aprovada" ? 30 : p.normalizedStatus === "Em tramitação" ? 18 : 4)) }))
+      .sort((a, b) => b.relevancia - a.relevancia || b.ano - a.ano)
+      .slice(0, 8);
+    const temaStatus = themeStats.slice(0, 8).map(([tema]) => ({
+      tema,
+      aprovadas: withStatus.filter((p) => (p.tema || "Outros") === tema && p.normalizedStatus === "Aprovada").length,
+      tramitação: withStatus.filter((p) => (p.tema || "Outros") === tema && p.normalizedStatus === "Em tramitação").length,
+      encerradas: withStatus.filter((p) => (p.tema || "Outros") === tema && !["Aprovada", "Em tramitação"].includes(p.normalizedStatus)).length,
+    }));
+    const yearStatus = availableAnos.slice().reverse().map((ano) => ({
+      ano,
+      total: withStatus.filter((p) => p.ano === ano).length,
+      aprovadas: withStatus.filter((p) => p.ano === ano && p.normalizedStatus === "Aprovada").length,
+      tramitação: withStatus.filter((p) => p.ano === ano && p.normalizedStatus === "Em tramitação").length,
+    }));
+    return { statusData, autoriaData, taxaAprovacao, taxaAvanco, ranking, temaStatus, yearStatus };
+  }, [proposicoes, themeStats, availableAnos]);
+
   if (loading) {
     return (
       <Card>
