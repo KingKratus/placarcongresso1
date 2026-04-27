@@ -695,6 +695,8 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                 </SelectContent>
               </Select>
             )}
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} disabled={exportRows.length === 0}><Download size={12} />CSV</Button>
+            <Button size="sm" className="h-8 text-xs gap-1" onClick={exportPdf} disabled={filteredProjects.length === 0}><FileDown size={12} />PDF</Button>
           </div>
         </CardHeader>
         <CardContent>
