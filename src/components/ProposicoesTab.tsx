@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import {
   Search, FileText, Sparkles, Loader2, ExternalLink, ChevronLeft, ChevronRight, Filter,
-  BarChart3, TrendingUp, GitBranch,
+  BarChart3, TrendingUp, GitBranch, Download, FileDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TramitacaoTimeline } from "@/components/TramitacaoTimeline";
+import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
 
 const THEME_COLORS: Record<string, string> = {
   "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
