@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface Evento {
   data: string | null;
@@ -88,7 +89,23 @@ function buildInsights(eventos: Evento[], ultima: string | null) {
   if (aprovado) { progress = 82; etapa = "Aprovado / revisão"; }
   if (hasSancao) { progress = 100; etapa = "Sanção ou promulgação"; }
   if (encerrado && !hasSancao) { progress = Math.max(progress, 90); etapa = "Encerrado"; }
-  return { hasComissao, hasPlenario, hasSancao, encerrado, aprovado, votado, progress, etapa };
+  const eventCounts = Object.keys(KIND_LABELS).filter((k) => k !== "todos").map((k) => ({ tipo: KIND_LABELS[k as EventKind], quantidade: eventos.filter((e) => classifyEvent(e) === k).length }));
+  const monthMap: Record<string, number> = {};
+  eventos.forEach((e) => { if (!e.data) return; const m = e.data.slice(0, 7); monthMap[m] = (monthMap[m] || 0) + 1; });
+  const timeline = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([mes, quantidade]) => ({ mes, quantidade }));
+  const orgaos = [...new Set(eventos.map((e) => e.orgao).filter(Boolean))] as string[];
+  const decisivos = eventos.filter((e) => /aprov|rejeit|votaç|votad|pauta|ordem do dia|sanç|sancion|promulg|arquiv|parecer/i.test(eventText(e)));
+  const lastDate = eventos.map((e) => e.data).filter(Boolean).sort().at(-1);
+  const diasSemMovimento = lastDate ? Math.max(0, Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000)) : null;
+  const marcos = [
+    { label: "Apresentação", done: eventos.length > 0 },
+    { label: "Comissão", done: hasComissao },
+    { label: "Parecer", done: /parecer|relator/i.test(allText) },
+    { label: "Pauta/plenário", done: hasPlenario },
+    { label: "Votação", done: votado },
+    { label: "Sanção", done: hasSancao },
+  ];
+  return { hasComissao, hasPlenario, hasSancao, encerrado, aprovado, votado, progress, etapa, eventCounts, timeline, orgaos, decisivos, diasSemMovimento, marcos };
 }
 
 export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
