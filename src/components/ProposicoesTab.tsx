@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import {
   Search, FileText, Sparkles, Loader2, ExternalLink, ChevronLeft, ChevronRight, Filter,
-  BarChart3, TrendingUp, GitBranch,
+  BarChart3, TrendingUp, GitBranch, Download, FileDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TramitacaoTimeline } from "@/components/TramitacaoTimeline";
+import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
 
 const THEME_COLORS: Record<string, string> = {
   "Econômico": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -249,6 +250,25 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
     }));
     return { statusData, autoriaData, taxaAprovacao, taxaAvanco, ranking, temaStatus, yearStatus };
   }, [proposicoes, themeStats, availableAnos]);
+
+  const exportRows = useMemo(() => filtered.map((p) => ({ Tipo: p.tipo, Número: p.numero, Ano: p.ano, Tema: p.tema || "Outros", Autoria: p.tipo_autoria || "autor", Status: normalizeStatus(p.status_tramitacao), Peso: Number(p.peso_tipo || 0).toFixed(2), Ementa: p.ementa || "", URL: p.url || "" })), [filtered]);
+  const exportCsv = () => downloadCsv(`proposicoes-${nome}-${casa}.csv`, exportRows);
+  const exportPdf = () => downloadPdfReport({
+    title: `Resumo de proposições — ${nome}`,
+    subtitle: `${filtered.length} proposições no recorte atual. Inclui status, temas e ranking de relevância legislativa.`,
+    insights: [
+      `${advancedInsights.taxaAvanco}% do portfólio está ativo/aprovado e ${advancedInsights.taxaAprovacao}% consta como aprovado.`,
+      `Tema mais frequente: ${themeStats[0]?.[0] || "sem dados"} (${themeStats[0]?.[1] || 0} proposições).`,
+      `Tipo mais recorrente: ${typeStats[0]?.[0] || "sem dados"} (${typeStats[0]?.[1] || 0} registros).`,
+      insights ? insights.replace(/[#*_`>-]/g, "").slice(0, 320) : "Gere insights com IA na tela para enriquecer o PDF com análise textual.",
+    ],
+    charts: [
+      { title: "Status das proposições", data: advancedInsights.statusData.map((d) => ({ label: d.name, value: d.value })) },
+      { title: "Temas principais", data: themeStats.slice(0, 8).map(([label, value]) => ({ label, value })) },
+    ],
+    rows: advancedInsights.ranking.map((p) => ({ Proposição: `${p.tipo} ${p.numero}/${p.ano}`, Tema: p.tema || "Outros", Status: normalizeStatus(p.status_tramitacao), Ementa: p.ementa || "" })),
+    filename: `resumo-proposicoes-${nome}-${casa}.pdf`,
+  });
 
   if (loading) {
     return (
@@ -543,6 +563,8 @@ export function ProposicoesTab({ parlamentarId, casa, nome }: Props) {
                 </SelectContent>
               </Select>
             )}
+            <Button size="sm" variant="outline" className="h-9 text-xs gap-1" onClick={exportCsv} disabled={exportRows.length === 0}><Download size={12} />CSV</Button>
+            <Button size="sm" className="h-9 text-xs gap-1" onClick={exportPdf} disabled={filtered.length === 0}><FileDown size={12} />PDF</Button>
           </div>
         </CardContent>
       </Card>

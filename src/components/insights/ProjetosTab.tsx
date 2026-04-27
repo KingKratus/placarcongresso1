@@ -15,10 +15,11 @@ import {
 } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Minus, Eye, ChevronLeft, ChevronRight, Search, Users, TrendingUp, Download, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
+import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
 import type { VotacaoCamara, VotacaoSenado } from "@/hooks/useInsightsData";
 import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
 import { TEMA_COLORS } from "@/components/insights/ThemeDistribution";
@@ -431,6 +432,25 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     return { label: "Sem resultado", cls: "bg-muted text-muted-foreground" };
   };
 
+  const exportRows = useMemo(() => filteredProjects.map((p) => ({ Casa: p.casa, Tipo: p.tipo, Número: p.numero, Data: p.dataFormatted, Órgão: p.orgao, Resultado: projectStatus(p).label, Ementa: p.ementa !== "—" ? p.ementa : p.descricao, Votação: p.idVotacao })), [filteredProjects]);
+  const exportCsv = () => downloadCsv(`votacoes-proposicoes-${ano}.csv`, exportRows);
+  const exportPdf = () => downloadPdfReport({
+    title: `Resumo de proposições avançadas e votadas — ${ano}`,
+    subtitle: `${plenaryReadiness.advanced.length} proposições avançadas para plenário e ${plenaryReadiness.voted.length} já votadas no universo carregado.`,
+    insights: [
+      `${executive.votados.length} projetos já aparecem como votados, com ${executive.aprovados.length} aprovados e ${executive.rejeitados.length} rejeitados.`,
+      `${executive.pautados.length} registros têm sinais de pauta, plenário, sessão ou deliberação.`,
+      `O funil legislativo indica maior concentração em ${plenaryReadiness.byStage.sort((a, b) => b.quantidade - a.quantidade)[0]?.etapa || "sem etapa"}.`,
+      `Tema com mais proposições prontas/votadas: ${plenaryReadiness.byTheme[0]?.tema || "sem tema"}.`,
+    ],
+    charts: [
+      { title: "Funil legislativo", data: plenaryReadiness.byStage.map((d) => ({ label: d.etapa, value: d.quantidade })) },
+      { title: "Temas prontas/votadas", data: plenaryReadiness.byTheme.map((d) => ({ label: d.tema, value: d.prontas + d.votadas })) },
+    ],
+    rows: [...plenaryReadiness.advanced, ...plenaryReadiness.voted].slice(0, 28).map((p) => ({ Proposição: `${p.tipo} ${p.numero}`, Casa: p.casa, Etapa: p.etapa, Progresso: `${p.score}%`, Data: p.dataFormatted, Resumo: p.ementa !== "—" ? p.ementa : p.descricao })),
+    filename: `resumo-proposicoes-avancadas-votadas-${ano}.pdf`,
+  });
+
   return (
     <div className="space-y-6">
       {/* Summary cards */}
@@ -675,6 +695,8 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                 </SelectContent>
               </Select>
             )}
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={exportCsv} disabled={exportRows.length === 0}><Download size={12} />CSV</Button>
+            <Button size="sm" className="h-8 text-xs gap-1" onClick={exportPdf} disabled={filteredProjects.length === 0}><FileDown size={12} />PDF</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -899,6 +921,10 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
                         <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                           <Users size={14} /> Votos Individuais ({voteBreakdown.individualVotes.length})
                         </h4>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => downloadCsv(`votos-${selectedProject.tipo}-${selectedProject.numero}-${ano}.csv`, voteBreakdown.individualVotes.map((v) => ({ Parlamentar: v.nome, Partido: v.partido, UF: v.uf, Voto: v.votoClass })))}><Download size={12} />CSV</Button>
+                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => downloadPdfReport({ title: `Votos — ${selectedProject.tipo} ${selectedProject.numero}`, subtitle: selectedProject.ementa !== "—" ? selectedProject.ementa : selectedProject.descricao, insights: [`Total de ${voteBreakdown.total} votos carregados.`, `Sim: ${voteBreakdown.sim}; Não: ${voteBreakdown.nao}; Abstenção: ${voteBreakdown.abstencao}; Outros: ${voteBreakdown.outros}.`, `Partido com maior volume: ${voteBreakdown.byParty[0]?.partido || "sem dados"}.`], charts: [{ title: "Distribuição dos votos", data: [{ label: "Sim", value: voteBreakdown.sim }, { label: "Não", value: voteBreakdown.nao }, { label: "Abstenção", value: voteBreakdown.abstencao }, { label: "Outros", value: voteBreakdown.outros }] }, { title: "Votos por partido", data: voteBreakdown.byParty.slice(0, 8).map((p) => ({ label: p.partido, value: p.total })) }], rows: voteBreakdown.individualVotes.slice(0, 40).map((v) => ({ Parlamentar: v.nome, Partido: v.partido, UF: v.uf, Voto: v.votoClass })), filename: `votos-${selectedProject.tipo}-${selectedProject.numero}-${ano}.pdf` })}><FileDown size={12} />PDF</Button>
+                        </div>
                       </div>
                       <div className="relative mb-2">
                         <Search className="absolute left-2.5 top-2 text-muted-foreground" size={14} />
