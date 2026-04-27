@@ -115,6 +115,7 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [kind, setKind] = useState<EventKind>("todos");
   const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<"todos" | "decisivos" | "recentes">("todos");
 
   const load = async (force = false) => {
     if (force) setRefreshing(true); else setLoading(true);
@@ -140,12 +141,17 @@ export function TramitacaoTimeline({ casa, tipo, numero, ano }: Props) {
 
   const filteredEventos = useMemo(() => {
     const term = search.toLowerCase().trim();
+    const insights = buildInsights(data?.eventos || [], data?.ultima_situacao || null);
+    const recentSet = new Set((data?.eventos || []).slice(-10));
+    const decisiveSet = new Set(insights.decisivos);
     return (data?.eventos || []).filter((ev) => {
+      if (scope === "decisivos" && !decisiveSet.has(ev)) return false;
+      if (scope === "recentes" && !recentSet.has(ev)) return false;
       if (kind !== "todos" && classifyEvent(ev) !== kind) return false;
       if (term && !eventText(ev).includes(term)) return false;
       return true;
     });
-  }, [data?.eventos, kind, search]);
+  }, [data?.eventos, data?.ultima_situacao, kind, search, scope]);
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin mr-2" size={18} /><span className="text-sm text-muted-foreground">Carregando tramitação…</span></div>;
   if (error) return <div className="py-8 text-center space-y-3"><AlertCircle className="mx-auto text-destructive" size={28} /><p className="text-sm text-destructive">{error}</p><Button size="sm" variant="outline" onClick={() => load(true)}>Tentar novamente</Button></div>;
