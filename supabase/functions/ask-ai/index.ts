@@ -12,7 +12,7 @@ async function fetchDataContext(): Promise<string> {
   const key = Deno.env.get("SUPABASE_ANON_KEY")!;
   const sb = createClient(url, key);
 
-  const [camara, senado, temas, votacoesCamara, votacoesSenado] = await Promise.all([
+  const [camara, senado, temas, votacoesCamara, votacoesSenado, emendasOrc] = await Promise.all([
     sb.from("analises_deputados")
       .select("deputado_nome, deputado_partido, deputado_uf, classificacao, score, total_votos, votos_alinhados, ano")
       .order("score", { ascending: false }).limit(800),
@@ -26,11 +26,15 @@ async function fetchDataContext(): Promise<string> {
     sb.from("votacoes_senado")
       .select("codigo_sessao_votacao, descricao, sigla_materia, numero_materia, ementa, resultado, ano, data")
       .order("data", { ascending: false }).limit(200),
+    sb.from("emendas_orcamentarias_transparencia")
+      .select("ano,tipo_emenda,nome_autor,partido,uf,localidade_gasto,funcao,subfuncao,valor_empenhado,valor_pago,valor_resto_pago,tema_ia,subtema_ia,risco_execucao,estagio_execucao")
+      .order("valor_pago", { ascending: false }).limit(600),
   ]);
 
   const camaraData = camara.data || [];
   const senadoData = senado.data || [];
   const temasData = temas.data || [];
+  const emendasData = emendasOrc.data || [];
 
   // All years
   const allYears = [...new Set([
@@ -156,6 +160,26 @@ Temas das votações em ${year}: ${themeSummary || "Sem dados temáticos"}
     return `  ${p}: ${yearAvgs.join(" → ")}`;
   }).join("\n");
 
+  const emendasTema: Record<string, { pago: number; empenhado: number; count: number }> = {};
+  const emendasAutor: Record<string, { pago: number; empenhado: number; count: number }> = {};
+  const emendasPartido: Record<string, { pago: number; empenhado: number; count: number }> = {};
+  for (const e of emendasData) {
+    const pago = Number(e.valor_pago || 0) + Number(e.valor_resto_pago || 0);
+    const empenhado = Number(e.valor_empenhado || 0);
+    const add = (map: Record<string, { pago: number; empenhado: number; count: number }>, key: string) => {
+      map[key] = map[key] || { pago: 0, empenhado: 0, count: 0 };
+      map[key].pago += pago; map[key].empenhado += empenhado; map[key].count++;
+    };
+    add(emendasTema, e.tema_ia || e.funcao || "Outros");
+    add(emendasAutor, e.nome_autor || "Autor não informado");
+    add(emendasPartido, e.partido || "Partido não identificado");
+  }
+  const emendasSummary = (map: Record<string, { pago: number; empenhado: number; count: number }>) => Object.entries(map)
+    .sort((a, b) => b[1].pago - a[1].pago)
+    .slice(0, 8)
+    .map(([k, v]) => `${k}: R$ ${Math.round(v.pago).toLocaleString("pt-BR")} pagos / R$ ${Math.round(v.empenhado).toLocaleString("pt-BR")} empenhados (${v.count} emendas)`)
+    .join("\n");
+
   return `
 DADOS REAIS DO BANCO DE DADOS DO CONGRESSO NACIONAL BRASILEIRO
 (Use SEMPRE estes dados para embasar suas respostas)
@@ -168,6 +192,15 @@ ${yearPartyBlocks.join("\n")}
 
 ═══ EVOLUÇÃO DO GOVERNISMO POR PARTIDO (médias anuais) ═══
 ${evolutionLines}
+
+═══ EMENDAS ORÇAMENTÁRIAS DO PORTAL DA TRANSPARÊNCIA ═══
+Registros carregados no contexto: ${emendasData.length}
+Top temas por valor pago:
+${emendasSummary(emendasTema) || "Sem dados de emendas orçamentárias sincronizados"}
+Top autores por valor pago:
+${emendasSummary(emendasAutor) || "Sem dados"}
+Top partidos por valor pago:
+${emendasSummary(emendasPartido) || "Sem dados"}
 
 ═══ VOTAÇÕES RECENTES DA CÂMARA ═══
 ${recentVotCamara}
@@ -214,6 +247,7 @@ CAPACIDADES:
 - Analisar distribuição temática das votações
 - Detalhar votações específicas recentes
 - Comparar Câmara vs Senado
+- Analisar emendas parlamentares orçamentárias do Portal da Transparência por valor empenhado, liquidado, pago, autor, partido, UF, tema/subtema IA e risco de execução
 
 REGRAS OBRIGATÓRIAS:
 1. Responda SEMPRE em português brasileiro

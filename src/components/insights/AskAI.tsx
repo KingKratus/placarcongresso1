@@ -21,10 +21,12 @@ interface Conversation {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ask-ai`;
 
 const SUGGESTIONS = [
+  "Quais parlamentares têm mais emendas pagas para Saúde?",
+  "Compare execução de emendas entre PT e PL",
+  "Quais emendas têm alto empenho e baixo pagamento?",
   "Quais partidos mais mudaram de posição entre 2023 e 2025?",
-  "Analise o alinhamento do PL com o governo",
-  "Quais temas dominaram as votações este ano?",
-  "Compare Câmara e Senado em termos de governismo",
+  "Quais temas dominaram as votações e as emendas este ano?",
+  "Compare Câmara e Senado em governismo e projetos votados",
 ];
 
 interface Props {
@@ -153,11 +155,12 @@ export function AskAI({ context, userId, floating }: Props) {
       }
 
       let assistantSoFar = "";
+      let streamDone = false;
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
         textBuffer += decoder.decode(value, { stream: true });
@@ -172,7 +175,7 @@ export function AskAI({ context, userId, floating }: Props) {
           if (!line.startsWith("data: ")) continue;
 
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
+          if (jsonStr === "[DONE]") { streamDone = true; break; }
 
           try {
             const parsed = JSON.parse(jsonStr);
@@ -194,7 +197,23 @@ export function AskAI({ context, userId, floating }: Props) {
         }
       }
 
-      const finalMsgs = [...updatedMessages, { role: "assistant" as const, content: assistantSoFar }];
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split("\n")) {
+          if (!raw) continue;
+          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+          if (raw.startsWith(":") || raw.trim() === "") continue;
+          if (!raw.startsWith("data: ")) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) assistantSoFar += content;
+          } catch { /* ignore partial final buffer */ }
+        }
+      }
+
+      const finalMsgs = [...updatedMessages, { role: "assistant" as const, content: assistantSoFar || "Não recebi conteúdo da IA. Tente novamente." }];
       currentConvId = await saveConversation(finalMsgs, currentConvId);
     } catch (e) {
       console.error("AI stream error:", e);

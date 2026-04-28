@@ -236,6 +236,114 @@ export type Database = {
         }
         Relationships: []
       }
+      emendas_orcamentarias_transparencia: {
+        Row: {
+          ano: number
+          area_publica: string | null
+          autor: string | null
+          casa: string | null
+          codigo_emenda: string
+          confianca_ia: number
+          created_at: string
+          documentos: Json
+          estagio_execucao: string
+          fetched_at: string
+          funcao: string | null
+          id: string
+          localidade_gasto: string | null
+          nome_autor: string | null
+          numero_emenda: string | null
+          parlamentar_id: number | null
+          partido: string | null
+          publico_beneficiado: string | null
+          raw_data: Json
+          resumo_ia: string | null
+          risco_execucao: string
+          subfuncao: string | null
+          subtema_ia: string | null
+          tema_ia: string
+          tipo_emenda: string
+          uf: string | null
+          updated_at: string
+          valor_empenhado: number
+          valor_liquidado: number
+          valor_pago: number
+          valor_resto_cancelado: number
+          valor_resto_inscrito: number
+          valor_resto_pago: number
+        }
+        Insert: {
+          ano: number
+          area_publica?: string | null
+          autor?: string | null
+          casa?: string | null
+          codigo_emenda: string
+          confianca_ia?: number
+          created_at?: string
+          documentos?: Json
+          estagio_execucao?: string
+          fetched_at?: string
+          funcao?: string | null
+          id?: string
+          localidade_gasto?: string | null
+          nome_autor?: string | null
+          numero_emenda?: string | null
+          parlamentar_id?: number | null
+          partido?: string | null
+          publico_beneficiado?: string | null
+          raw_data?: Json
+          resumo_ia?: string | null
+          risco_execucao?: string
+          subfuncao?: string | null
+          subtema_ia?: string | null
+          tema_ia?: string
+          tipo_emenda: string
+          uf?: string | null
+          updated_at?: string
+          valor_empenhado?: number
+          valor_liquidado?: number
+          valor_pago?: number
+          valor_resto_cancelado?: number
+          valor_resto_inscrito?: number
+          valor_resto_pago?: number
+        }
+        Update: {
+          ano?: number
+          area_publica?: string | null
+          autor?: string | null
+          casa?: string | null
+          codigo_emenda?: string
+          confianca_ia?: number
+          created_at?: string
+          documentos?: Json
+          estagio_execucao?: string
+          fetched_at?: string
+          funcao?: string | null
+          id?: string
+          localidade_gasto?: string | null
+          nome_autor?: string | null
+          numero_emenda?: string | null
+          parlamentar_id?: number | null
+          partido?: string | null
+          publico_beneficiado?: string | null
+          raw_data?: Json
+          resumo_ia?: string | null
+          risco_execucao?: string
+          subfuncao?: string | null
+          subtema_ia?: string | null
+          tema_ia?: string
+          tipo_emenda?: string
+          uf?: string | null
+          updated_at?: string
+          valor_empenhado?: number
+          valor_liquidado?: number
+          valor_pago?: number
+          valor_resto_cancelado?: number
+          valor_resto_inscrito?: number
+          valor_resto_pago?: number
+        }
+        Relationships: []
+      }
       emendas_parlamentares_cache: {
         Row: {
           ano: number

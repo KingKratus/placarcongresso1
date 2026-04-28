@@ -19,6 +19,7 @@ const SAFE_TABLES = new Set([
   "orientacoes",
   "votos_deputados",
   "votos_senadores",
+  "emendas_orcamentarias_transparencia",
 ]);
 
 const SAFE_OPS = new Set(["eq", "gte", "lte", "ilike", "in"]);
@@ -103,7 +104,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "query_supabase",
-      description: "Consulta segura ao banco do Placar do Congresso. Tabelas permitidas: analises_deputados, analises_senadores, proposicoes_parlamentares, deputy_performance_scores, votacoes, votacoes_senado, votacao_temas, orientacoes, votos_deputados, votos_senadores. Operadores: eq, gte, lte, ilike, in.",
+      description: "Consulta segura ao banco do Placar do Congresso. Tabelas permitidas: analises_deputados, analises_senadores, proposicoes_parlamentares, deputy_performance_scores, votacoes, votacoes_senado, votacao_temas, orientacoes, votos_deputados, votos_senadores, emendas_orcamentarias_transparencia. Operadores: eq, gte, lte, ilike, in.",
       parameters: {
         type: "object",
         properties: {
@@ -157,6 +158,7 @@ serve(async (req) => {
 Você tem 2 ferramentas:
 1. **query_supabase** — consulta dados reais do banco (votações, parlamentares, proposições, scores de desempenho). Use para responder perguntas factuais.
 2. **web_search** — busca na web por notícias e contexto externo. Use para informações recentes ou validação cruzada.
+Também há dados de emendas parlamentares orçamentárias do Portal da Transparência, com valores empenhados, liquidados, pagos, tema/subtema por IA, execução, risco, autor, partido, UF e localidade.
 
 REGRAS:
 - Sempre responda em português brasileiro.
