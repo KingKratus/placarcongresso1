@@ -86,6 +86,9 @@ export function EmendasOrcamentariasTab() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [syncEvents, setSyncEvents] = useState<{ id: string; step: string; message: string; created_at: string }[]>([]);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "running" | "completed" | "error">("idle");
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [ano, setAno] = useState(String(currentYear));
   const [tipo, setTipo] = useState("all");
   const [tema, setTema] = useState("all");
@@ -113,10 +116,16 @@ export function EmendasOrcamentariasTab() {
 
   const sync = async () => {
     if (!user) { await signInWithGoogle(); return; }
-    setSyncing(true); setNotice(null);
+    setSyncing(true); setNotice(null); setSyncError(null); setSyncStatus("running");
+    setSyncEvents([{ id: "start", step: "inicio", message: `Iniciando busca de emendas orçamentárias de ${ano} no Portal da Transparência...`, created_at: new Date().toISOString() }]);
     const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", { body: { ano: Number(ano), paginas: 5, incluirDocumentos: false } });
-    if (error) setNotice(error.message);
-    else setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas orçamentárias atualizadas para ${ano}.`);
+    if (error) {
+      setNotice(error.message); setSyncError(error.message); setSyncStatus("error");
+      setSyncEvents((prev) => [...prev, { id: "error", step: "error", message: `Falha no sync: ${error.message}`, created_at: new Date().toISOString() }]);
+    } else {
+      setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas orçamentárias atualizadas para ${ano}.`); setSyncStatus("completed");
+      setSyncEvents((prev) => [...prev, { id: "done", step: "concluido", message: `Portal retornou ${data?.fetched || 0} registros; ${data?.upserted || 0} emendas foram gravadas/atualizadas e classificadas por IA.`, created_at: new Date().toISOString() }]);
+    }
     await load();
     setSyncing(false);
   };
@@ -153,6 +162,8 @@ export function EmendasOrcamentariasTab() {
   const byPartido = useMemo(() => groupSum(filtered, "partido"), [filtered]);
   const byUf = useMemo(() => groupSum(filtered, "uf"), [filtered]);
   const byTipo = useMemo(() => groupSum(filtered, "tipo_emenda"), [filtered]);
+  const riskByTema = useMemo(() => groupRisk(filtered, "tema_ia"), [filtered]);
+  const riskByAutor = useMemo(() => groupRisk(filtered, "nome_autor"), [filtered]);
   const trend = useMemo(() => {
     const map: Record<number, { ano: number; empenhado: number; liquidado: number; pago: number }> = {};
     rows.forEach((r) => { map[r.ano] = map[r.ano] || { ano: r.ano, empenhado: 0, liquidado: 0, pago: 0 }; map[r.ano].empenhado += Number(r.valor_empenhado || 0); map[r.ano].liquidado += Number(r.valor_liquidado || 0); map[r.ano].pago += Number(r.valor_pago || 0) + Number(r.valor_resto_pago || 0); });
