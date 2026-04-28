@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, Download, FileDown, Loader2, RefreshCcw, Search, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
+import { SyncLogViewer } from "@/components/SyncLogViewer";
 
 interface EmendaOrcamentaria {
   id: string;
@@ -47,6 +48,7 @@ const years = Array.from({ length: currentYear - 2021 }, (_, i) => currentYear -
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(Number(n || 0));
 const pct = (pago: number, empenhado: number) => (empenhado > 0 ? Math.min(100, Math.round((pago / empenhado) * 100)) : 0);
 const compact = (n: number) => new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n || 0));
+const riskWeight = { Alto: 3, Médio: 2, Baixo: 1 } as const;
 
 function groupSum(rows: EmendaOrcamentaria[], key: keyof EmendaOrcamentaria, valueKey: keyof EmendaOrcamentaria = "valor_pago", limit = 10) {
   const map: Record<string, { total: number; empenhado: number; count: number }> = {};
@@ -60,12 +62,33 @@ function groupSum(rows: EmendaOrcamentaria[], key: keyof EmendaOrcamentaria, val
   return Object.entries(map).map(([name, v]) => ({ name, valor: Math.round(v.total), empenhado: Math.round(v.empenhado), count: v.count, execucao: pct(v.total, v.empenhado) })).sort((a, b) => b.valor - a.valor).slice(0, limit);
 }
 
+function groupRisk(rows: EmendaOrcamentaria[], key: "tema_ia" | "nome_autor", limit = 12) {
+  const map: Record<string, { name: string; empenhado: number; liquidado: number; pago: number; count: number; risco: "Baixo" | "Médio" | "Alto" }> = {};
+  rows.forEach((r) => {
+    const name = String(r[key] || r.autor || "Não informado");
+    const paid = Number(r.valor_pago || 0) + Number(r.valor_resto_pago || 0);
+    map[name] = map[name] || { name, empenhado: 0, liquidado: 0, pago: 0, count: 0, risco: "Baixo" };
+    map[name].empenhado += Number(r.valor_empenhado || 0);
+    map[name].liquidado += Number(r.valor_liquidado || 0);
+    map[name].pago += paid;
+    map[name].count += 1;
+    if (riskWeight[r.risco_execucao] > riskWeight[map[name].risco]) map[name].risco = r.risco_execucao;
+  });
+  return Object.values(map)
+    .map((v) => ({ ...v, taxaPagamento: pct(v.pago, v.liquidado), taxaExecucao: pct(v.pago, v.empenhado) }))
+    .sort((a, b) => riskWeight[b.risco] - riskWeight[a.risco] || a.taxaExecucao - b.taxaExecucao || b.empenhado - a.empenhado)
+    .slice(0, limit);
+}
+
 export function EmendasOrcamentariasTab() {
   const { user, signInWithGoogle } = useAuth();
   const [rows, setRows] = useState<EmendaOrcamentaria[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [syncEvents, setSyncEvents] = useState<{ id: string; step: string; message: string; created_at: string }[]>([]);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "running" | "completed" | "error">("idle");
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [ano, setAno] = useState(String(currentYear));
   const [tipo, setTipo] = useState("all");
   const [tema, setTema] = useState("all");
@@ -93,10 +116,16 @@ export function EmendasOrcamentariasTab() {
 
   const sync = async () => {
     if (!user) { await signInWithGoogle(); return; }
-    setSyncing(true); setNotice(null);
+    setSyncing(true); setNotice(null); setSyncError(null); setSyncStatus("running");
+    setSyncEvents([{ id: "start", step: "inicio", message: `Iniciando busca de emendas orçamentárias de ${ano} no Portal da Transparência...`, created_at: new Date().toISOString() }]);
     const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", { body: { ano: Number(ano), paginas: 5, incluirDocumentos: false } });
-    if (error) setNotice(error.message);
-    else setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas orçamentárias atualizadas para ${ano}.`);
+    if (error) {
+      setNotice(error.message); setSyncError(error.message); setSyncStatus("error");
+      setSyncEvents((prev) => [...prev, { id: "error", step: "error", message: `Falha no sync: ${error.message}`, created_at: new Date().toISOString() }]);
+    } else {
+      setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas orçamentárias atualizadas para ${ano}.`); setSyncStatus("completed");
+      setSyncEvents((prev) => [...prev, { id: "done", step: "concluido", message: `Portal retornou ${data?.fetched || 0} registros; ${data?.upserted || 0} emendas foram gravadas/atualizadas e classificadas por IA.`, created_at: new Date().toISOString() }]);
+    }
     await load();
     setSyncing(false);
   };
@@ -133,6 +162,8 @@ export function EmendasOrcamentariasTab() {
   const byPartido = useMemo(() => groupSum(filtered, "partido"), [filtered]);
   const byUf = useMemo(() => groupSum(filtered, "uf"), [filtered]);
   const byTipo = useMemo(() => groupSum(filtered, "tipo_emenda"), [filtered]);
+  const riskByTema = useMemo(() => groupRisk(filtered, "tema_ia"), [filtered]);
+  const riskByAutor = useMemo(() => groupRisk(filtered, "nome_autor"), [filtered]);
   const trend = useMemo(() => {
     const map: Record<number, { ano: number; empenhado: number; liquidado: number; pago: number }> = {};
     rows.forEach((r) => { map[r.ano] = map[r.ano] || { ano: r.ano, empenhado: 0, liquidado: 0, pago: 0 }; map[r.ano].empenhado += Number(r.valor_empenhado || 0); map[r.ano].liquidado += Number(r.valor_liquidado || 0); map[r.ano].pago += Number(r.valor_pago || 0) + Number(r.valor_resto_pago || 0); });
@@ -173,6 +204,7 @@ export function EmendasOrcamentariasTab() {
       <Button variant="outline" onClick={exportCsv} disabled={!filtered.length} size="sm" className="h-9 gap-1 text-xs"><Download size={13}/>CSV</Button>
       <Button onClick={exportPdf} disabled={!filtered.length} size="sm" className="h-9 gap-1 text-xs"><FileDown size={13}/>PDF executivo</Button>
     </div>
+    <SyncLogViewer events={syncEvents} status={syncStatus} error={syncError} />
 
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
       <Card><CardContent className="p-3"><p className="text-[10px] font-bold uppercase text-muted-foreground">Emendas</p><p className="text-2xl font-black">{filtered.length}</p></CardContent></Card>
@@ -195,6 +227,8 @@ export function EmendasOrcamentariasTab() {
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">UF do gasto/autor</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={330}><BarChart data={byUf}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="name"/><YAxis tickFormatter={compact}/><Tooltip formatter={(v: any) => brl(Number(v))}/><Bar dataKey="valor" fill="hsl(var(--centro))" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></CardContent></Card>
       {trend.length > 1 && <Card className="lg:col-span-3"><CardHeader className="pb-2"><CardTitle className="text-sm">Tendência anual de execução</CardTitle></CardHeader><CardContent><ResponsiveContainer width="100%" height={260}><LineChart data={trend}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))"/><XAxis dataKey="ano"/><YAxis tickFormatter={compact}/><Tooltip formatter={(v: any) => brl(Number(v))}/><Legend/><Line dataKey="empenhado" name="Empenhado" stroke="hsl(var(--primary))" strokeWidth={2}/><Line dataKey="liquidado" name="Liquidado" stroke="hsl(var(--centro))" strokeWidth={2}/><Line dataKey="pago" name="Pago" stroke="hsl(var(--governo))" strokeWidth={2}/></LineChart></ResponsiveContainer></CardContent></Card>}
     </div>}
+
+    {!!filtered.length && <Card><CardHeader className="pb-2"><CardTitle className="text-sm flex gap-2"><AlertTriangle size={16}/>Ranking de execução por risco</CardTitle></CardHeader><CardContent className="grid lg:grid-cols-2 gap-4"><div className="overflow-x-auto"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Por tema</p><Table><TableHeader><TableRow><TableHead>Tema</TableHead><TableHead>Risco</TableHead><TableHead>Pago/Liquidado</TableHead><TableHead>Pago/Empenhado</TableHead><TableHead>Pago</TableHead></TableRow></TableHeader><TableBody>{riskByTema.map((r) => <TableRow key={r.name}><TableCell className="font-bold text-xs min-w-[130px]">{r.name}<p className="text-[10px] font-normal text-muted-foreground">{r.count} emendas</p></TableCell><TableCell><Badge variant={r.risco === "Alto" ? "destructive" : "outline"} className="text-[10px]">{r.risco}</Badge></TableCell><TableCell className="min-w-[120px]"><div className="flex items-center gap-2"><Progress value={r.taxaPagamento} className="h-1.5"/><span className="text-xs font-bold">{r.taxaPagamento}%</span></div></TableCell><TableCell className="min-w-[120px]"><div className="flex items-center gap-2"><Progress value={r.taxaExecucao} className="h-1.5"/><span className="text-xs font-bold">{r.taxaExecucao}%</span></div></TableCell><TableCell className="text-xs font-bold">{brl(r.pago)}</TableCell></TableRow>)}</TableBody></Table></div><div className="overflow-x-auto"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Por autor</p><Table><TableHeader><TableRow><TableHead>Autor</TableHead><TableHead>Risco</TableHead><TableHead>Pago/Liquidado</TableHead><TableHead>Pago/Empenhado</TableHead><TableHead>Pago</TableHead></TableRow></TableHeader><TableBody>{riskByAutor.map((r) => <TableRow key={r.name}><TableCell className="font-bold text-xs min-w-[150px]">{r.name}<p className="text-[10px] font-normal text-muted-foreground">{r.count} emendas</p></TableCell><TableCell><Badge variant={r.risco === "Alto" ? "destructive" : "outline"} className="text-[10px]">{r.risco}</Badge></TableCell><TableCell className="min-w-[120px]"><div className="flex items-center gap-2"><Progress value={r.taxaPagamento} className="h-1.5"/><span className="text-xs font-bold">{r.taxaPagamento}%</span></div></TableCell><TableCell className="min-w-[120px]"><div className="flex items-center gap-2"><Progress value={r.taxaExecucao} className="h-1.5"/><span className="text-xs font-bold">{r.taxaExecucao}%</span></div></TableCell><TableCell className="text-xs font-bold">{brl(r.pago)}</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>}
 
     {!!alerts.length && <Card className="border-oposicao/30"><CardHeader className="pb-2"><CardTitle className="text-sm flex gap-2"><AlertTriangle size={16} className="text-oposicao"/>Emendas com alto empenho e baixa execução</CardTitle></CardHeader><CardContent><div className="grid md:grid-cols-2 gap-2">{alerts.map((r) => <div key={r.id} className="rounded-md border p-3"><div className="flex justify-between gap-2"><p className="font-bold text-xs">{r.codigo_emenda} · {r.nome_autor || "Autor não informado"}</p><Badge variant="outline" className="text-oposicao border-oposicao/30">{pct(r.valor_pago + r.valor_resto_pago, r.valor_empenhado)}%</Badge></div><p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.tema_ia} · {r.subtema_ia || r.funcao || "Sem subtema"}</p><p className="text-xs mt-2">Empenhado: <b>{brl(r.valor_empenhado)}</b> · Pago: <b>{brl(r.valor_pago + r.valor_resto_pago)}</b></p></div>)}</div></CardContent></Card>}
 
