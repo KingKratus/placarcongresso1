@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, Download, FileDown, Loader2, RefreshCcw, Search, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
+import { SyncLogViewer } from "@/components/SyncLogViewer";
 
 interface EmendaOrcamentaria {
   id: string;
@@ -47,6 +48,7 @@ const years = Array.from({ length: currentYear - 2021 }, (_, i) => currentYear -
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(Number(n || 0));
 const pct = (pago: number, empenhado: number) => (empenhado > 0 ? Math.min(100, Math.round((pago / empenhado) * 100)) : 0);
 const compact = (n: number) => new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n || 0));
+const riskWeight = { Alto: 3, Médio: 2, Baixo: 1 } as const;
 
 function groupSum(rows: EmendaOrcamentaria[], key: keyof EmendaOrcamentaria, valueKey: keyof EmendaOrcamentaria = "valor_pago", limit = 10) {
   const map: Record<string, { total: number; empenhado: number; count: number }> = {};
@@ -58,6 +60,24 @@ function groupSum(rows: EmendaOrcamentaria[], key: keyof EmendaOrcamentaria, val
     map[k].count += 1;
   });
   return Object.entries(map).map(([name, v]) => ({ name, valor: Math.round(v.total), empenhado: Math.round(v.empenhado), count: v.count, execucao: pct(v.total, v.empenhado) })).sort((a, b) => b.valor - a.valor).slice(0, limit);
+}
+
+function groupRisk(rows: EmendaOrcamentaria[], key: "tema_ia" | "nome_autor", limit = 12) {
+  const map: Record<string, { name: string; empenhado: number; liquidado: number; pago: number; count: number; risco: "Baixo" | "Médio" | "Alto" }> = {};
+  rows.forEach((r) => {
+    const name = String(r[key] || r.autor || "Não informado");
+    const paid = Number(r.valor_pago || 0) + Number(r.valor_resto_pago || 0);
+    map[name] = map[name] || { name, empenhado: 0, liquidado: 0, pago: 0, count: 0, risco: "Baixo" };
+    map[name].empenhado += Number(r.valor_empenhado || 0);
+    map[name].liquidado += Number(r.valor_liquidado || 0);
+    map[name].pago += paid;
+    map[name].count += 1;
+    if (riskWeight[r.risco_execucao] > riskWeight[map[name].risco]) map[name].risco = r.risco_execucao;
+  });
+  return Object.values(map)
+    .map((v) => ({ ...v, taxaPagamento: pct(v.pago, v.liquidado), taxaExecucao: pct(v.pago, v.empenhado) }))
+    .sort((a, b) => riskWeight[b.risco] - riskWeight[a.risco] || a.taxaExecucao - b.taxaExecucao || b.empenhado - a.empenhado)
+    .slice(0, limit);
 }
 
 export function EmendasOrcamentariasTab() {
