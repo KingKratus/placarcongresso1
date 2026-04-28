@@ -1,80 +1,99 @@
-## Plano de implementação
+Plano de implementação
 
-### 1. Mais insights e gráficos na aba de Proposições
-- Expandir `ProposicoesTab` com uma seção de leitura executiva mais rica:
-  - proposições por status de tramitação: em tramitação, aprovada, arquivada, rejeitada, retirada;
-  - taxa de avanço e taxa de aprovação estimada;
-  - top temas, top tipos, anos mais produtivos e proporção autor/coautor;
-  - ranking das proposições mais relevantes por peso legislativo, status e tema.
-- Adicionar novos gráficos:
-  - funil/status das proposições;
-  - distribuição autor vs coautor;
-  - temas por status;
-  - matriz tipo x tema;
-  - evolução temporal com comparação entre total, aprovadas e em tramitação.
-- Melhorar a lista para exibir status, peso/impacto, autoria, tema e botão de tramitação de forma mais clara.
+1. Solicitar e armazenar a chave da API do Portal da Transparência
+- Vou pedir sua chave como segredo seguro do projeto antes de implementar a chamada real.
+- A chave não ficará no frontend nem no código público; será usada somente em funções backend.
+- A integração usará o header oficial `chave-api-dados` contra `https://api.portaldatransparencia.gov.br/api-de-dados/emendas`.
 
-### 2. Insights com gráficos na tramitação
-- Expandir `TramitacaoTimeline` para mostrar além da timeline:
-  - cards de resumo: total de eventos, comissões percorridas, eventos de plenário, eventos decisivos, dias desde última movimentação;
-  - gráfico de barras por tipo de evento: comissão, plenário, sanção, mesa, encerramento, outros;
-  - gráfico temporal por ano/mês com volume de movimentações;
-  - lista de marcos importantes detectados automaticamente: apresentação, despacho para comissão, parecer, pauta/plenário, votação, sanção/promulgação, arquivamento/rejeição.
-- Refinar a barra de progresso para usar os marcos detectados e mostrar uma trilha visual das etapas.
-- Manter filtros existentes por tipo e busca textual, mas adicionar filtros de “somente eventos decisivos” e “últimos eventos”.
+2. Criar base própria para emendas parlamentares orçamentárias
+- Criar uma nova tabela separada da atual `emendas_parlamentares_cache`, para não confundir com emendas/proposições legislativas.
+- Campos principais:
+  - código da emenda, ano, número, tipo de emenda, autor/nome do autor
+  - localidade do gasto, função, subfunção
+  - valores: empenhado, liquidado, pago, restos inscritos/cancelados/pagos
+  - classificação IA: tema, subtema, área pública, público beneficiado, risco, qualidade de execução, resumo analítico, confiança
+  - metadados brutos e data de sincronização
+- RLS: leitura pública para dashboards; escrita bloqueada para usuários e feita apenas pelo backend.
+- Índices para ano, autor, partido inferido, UF/localidade, tema, tipo e valores.
 
-### 3. Suporte a emendas parlamentares com IA, insights e filtros
-- Criar uma nova tabela no backend para cache de emendas parlamentares por parlamentar, com campos como:
-  - parlamentar, casa, número/ano/tipo da emenda, proposição vinculada, ementa/texto, situação, valor quando disponível, data, URL oficial;
-  - classificação por IA: tema, impacto estimado, área de política pública, público afetado, tipo de benefício, resumo analítico e confiança.
-- Criar uma backend function `fetch-emendas` para buscar emendas oficiais, classificar em lote com Lovable AI e salvar em cache.
-  - Para Câmara, priorizar endpoints públicos de proposições/emendas quando disponíveis por proposição/autoria.
-  - Para Senado, usar os dados oficiais disponíveis e tratar ausência de campos de forma segura.
-- Criar uma backend function `insights-emendas` para gerar análise executiva das emendas do parlamentar.
-- Criar componente `EmendasTab` e adicionar como nova aba nos detalhes de Deputado e Senador:
-  - filtros por ano, tema, proposição vinculada, situação, impacto, busca textual;
-  - gráficos por tema, ano, situação, tipo de impacto e valores quando houver;
-  - lista detalhada com classificação de IA e links oficiais.
-- Observação: onde a API oficial não expuser emendas diretamente por parlamentar, a função retornará um aviso claro e usará o melhor dado disponível em cache/relacionamento de proposições.
+3. Backend de sincronização com Portal da Transparência
+- Criar função `sync-emendas-transparencia` para buscar páginas da API com filtros por ano, tipo, autor, função e subfunção.
+- Suportar os três tipos de emendas orçamentárias exibidos pelo Portal, mantendo o texto oficial do tipo retornado pela API.
+- Normalizar valores monetários que vêm como texto para números confiáveis.
+- Fazer paginação, deduplicação por `codigoEmenda` e cache incremental.
+- Buscar opcionalmente documentos relacionados em `/emendas/documentos/{codigo}` para enriquecer fase/execução quando necessário.
+- Usar IA no backend para tematizar em lotes: Saúde, Segurança, Educação, Infraestrutura, Assistência, Agro, Meio Ambiente, Economia, etc., além de subtemas mais específicos.
 
-### 4. Insights Estados com mais informações, gráficos e lista de parlamentares ao clicar no mapa
-- Atualizar `BrazilMap` para receber também os dados de deputados e senadores do ano selecionado.
-- Ao clicar em um estado, mostrar:
-  - lista de deputados e senadores daquele estado;
-  - nome, partido, score, classificação, votos úteis, foto e link para o perfil;
-  - contato quando disponível;
-  - ranking interno do estado.
-- Adicionar gráficos do estado selecionado:
-  - distribuição Governo/Centro/Oposição;
-  - score médio por partido no estado;
-  - comparação Câmara x Senado;
-  - top parlamentares e parlamentares mais distantes do governo.
-- Manter a experiência responsiva para celular, já que o preview atual está em largura pequena.
+4. Nova aba em Insights: “Emendas Orçamentárias”
+- Adicionar uma aba específica dentro de Insights, deixando claro que são emendas de execução orçamentária do Portal da Transparência.
+- Painel com filtros detalhados:
+  - ano, tipo de emenda, tema IA, subtema IA, função/subfunção, autor, partido/UF quando disponível, localidade do gasto, faixa de valor, status de execução.
+- Cards executivos:
+  - total empenhado, liquidado, pago
+  - taxa de execução: pago / empenhado
+  - emendas com maior valor pago
+  - emendas paradas ou com baixa execução
+  - concentração por saúde, segurança, educação etc.
+- Tabela completa com exportação CSV/PDF.
 
-### 5. Contato de cada parlamentar
-- Criar utilitários/componentes de contato parlamentar para padronizar exibição em cards, mapa e detalhes.
-- Deputados:
-  - usar o email disponível na API da Câmara quando acessível;
-  - quando o email não estiver no banco, buscar sob demanda no endpoint oficial de deputado e mostrar fallback “contato oficial indisponível”.
-- Senadores:
-  - enriquecer a busca na API do Senado para tentar capturar email, página oficial e/ou telefones de gabinete quando disponíveis;
-  - mostrar fallback seguro quando o dado oficial não vier.
-- Exibir contatos em:
-  - lista de parlamentares no mapa de Estados;
-  - páginas `DeputadoDetail` e `SenadorDetail`;
-  - cards onde couber sem poluir a interface.
-- Não armazenar contato sensível privado; apenas dados públicos oficiais.
+5. Gráficos e rankings de emendas orçamentárias
+- Gráficos planejados:
+  - barras por tema/subtema e por função/subfunção
+  - evolução anual de empenhado/liquidado/pago
+  - funil financeiro: empenhado -> liquidado -> pago
+  - ranking de autores por valor empenhado/pago e taxa de execução
+  - ranking por partidos e UFs, quando conseguirmos associar autor aos parlamentares já existentes no app
+  - mapa por localidade/UF do gasto
+  - matriz tema × tipo de emenda
+  - alertas: alto empenho com baixo pagamento, alta concentração por parlamentar/partido/localidade
+- Comparação lado a lado: dois parlamentares/partidos/UFs por volume, execução e temas.
 
-### 6. Ajustes de segurança, robustez e bugs
-- Validar entradas das novas backend functions com limites e regex para evitar chamadas abusivas.
-- Usar cache e paginação para evitar excesso de chamadas às APIs oficiais e à IA.
-- Tratar erros de IA: limite de uso, créditos, JSON inválido, timeout e classificação parcial.
-- Evitar chamadas de IA no cliente; toda classificação fica no backend.
-- Não alterar arquivos autogerados do backend (`client.ts` e `types.ts`) manualmente.
+6. Relatórios e exportação
+- Reaproveitar a estrutura atual de PDF/CSV e adicionar:
+  - PDF executivo de emendas orçamentárias com gráficos e insights IA
+  - CSV completo do recorte filtrado
+  - PDF/CSV nos rankings de parlamentares, partidos, UFs, proposições e projetos
+- Incluir insights no PDF: principais áreas financiadas, execução, gargalos e destaques.
 
-## Detalhes técnicos
-- Backend: novas migrações para `emendas_parlamentares_cache` e índices por `parlamentar_id`, `casa`, `ano`, `tema`, `situacao`.
-- RLS: leitura pública para dados agregados/oficiais; escrita bloqueada ao público, feita apenas pelas backend functions.
-- IA: usar Lovable AI para classificação estruturada das emendas em lotes pequenos, com cache para não reclassificar sem necessidade.
-- Frontend: novos componentes reutilizáveis para `EmendasTab`, `ParlamentarContact`, gráficos de tramitação e painel detalhado de UF.
-- Testes: rodar typecheck/build e corrigir problemas de import, tipos, renderização responsiva e erros de runtime.
+7. Melhorias na aba Proposições
+- Adicionar subtemas por IA além do tema geral.
+- Mostrar funil legislativo por parlamentar: apresentadas, em tramitação, avançadas, aprovadas/transformadas, arquivadas/rejeitadas.
+- Mais rankings: tipos de proposição mais usados, temas com maior avanço, proposições mais relevantes por peso/status.
+- Exportações por CSV/PDF incluindo subtemas e status.
+
+8. Melhorias na aba Projetos
+- Adicionar mais métricas nos projetos votados:
+  - placar agregado por Casa, tema e órgão
+  - polarização por partido
+  - projetos com maior divergência entre partidos
+  - temas mais votados no ano
+  - resultado e situação quando disponível
+- Reforçar a leitura de “projetos já votados” e “mais avançados para plenário” com gráficos e filtros.
+
+9. Melhorias no chatbot de IA
+- Expandir o contexto do chatbot para incluir:
+  - emendas orçamentárias do Portal da Transparência
+  - proposições com subtemas
+  - rankings e dados de execução financeira
+- No modo avançado, liberar consultas seguras à nova tabela de emendas orçamentárias.
+- Melhorar as sugestões rápidas do chat com perguntas como:
+  - “Quais parlamentares mais destinaram recursos para saúde?”
+  - “Compare execução de emendas entre dois partidos”
+  - “Quais emendas têm alto empenho e baixo pagamento?”
+- Corrigir o streaming para tratar fim de resposta e erros 402/429 de forma mais clara.
+- Testar o chat em modo normal e avançado após a implementação.
+
+10. Segurança, validação e testes
+- Validar entradas no backend: ano, página, autor, tipo, função/subfunção e limites de paginação.
+- Nunca expor a chave do Portal da Transparência no navegador.
+- Garantir RLS e escrita bloqueada por usuários comuns.
+- Testar:
+  - chamada real à API após a chave ser configurada
+  - sincronização de ao menos um ano/tipo
+  - classificação IA em lote
+  - renderização mobile da nova aba
+  - exportação CSV/PDF
+  - chatbot normal e avançado
+
+Observação importante
+- Após sua aprovação, o primeiro passo será solicitar sua chave da API do Portal da Transparência via segredo seguro. Só depois consigo implementar e testar a integração real com a API.
