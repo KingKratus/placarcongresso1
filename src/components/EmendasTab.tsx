@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, ChevronLeft, ChevronRight, Download, ExternalLink, FileDown, FilePlus2, Filter, Loader2, Search, Sparkles } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Download, ExternalLink, FileDown, FilePlus2, Filter, Loader2, RefreshCcw, Search, Sparkles } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import ReactMarkdown from "react-markdown";
 import { downloadCsv, downloadPdfReport } from "@/lib/exportData";
@@ -17,10 +17,48 @@ interface Emenda {
   ementa?: string | null; situacao?: string | null; valor?: number | null; data_apresentacao?: string | null; url?: string | null;
   tema?: string | null; impacto_estimado?: string | null; area_politica?: string | null; publico_afetado?: string | null; tipo_beneficio?: string | null; resumo_ia?: string | null; confianca?: number | null;
 }
+interface EmendaFinanceira { id: string; codigo_emenda: string; ano: number; tipo_emenda: string; nome_autor: string | null; partido: string | null; uf: string | null; tema_ia: string; localidade_gasto: string | null; valor_empenhado: number; valor_liquidado: number; valor_pago: number; valor_resto_pago: number; risco_execucao: "Baixo" | "Médio" | "Alto"; resumo_ia: string | null; raw_data?: Record<string, unknown>; }
 
 const PAGE_SIZE = 12;
 const COLORS = ["hsl(var(--primary))", "hsl(var(--governo))", "hsl(var(--oposicao))", "hsl(var(--centro))", "hsl(var(--muted-foreground))", "hsl(45 80% 55%)"];
 const impactoScore: Record<string, number> = { Baixo: 35, Médio: 65, Alto: 90 };
+const currentYear = new Date().getFullYear();
+const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(Number(n || 0));
+const pct = (pago: number, base: number) => base > 0 ? Math.min(100, Math.round((pago / base) * 100)) : 0;
+const paid = (e: EmendaFinanceira) => Number(e.valor_pago || 0) + Number(e.valor_resto_pago || 0);
+function portalUrl(e: EmendaFinanceira) {
+  const vals = [e.raw_data?.link, e.raw_data?.url, e.raw_data?.uri, e.raw_data?.urlDocumento].map((v) => String(v || "")).filter(Boolean);
+  return vals.find((u) => /^https?:\/\//i.test(u)) || `https://portaldatransparencia.gov.br/busca?termo=${encodeURIComponent(e.codigo_emenda)}`;
+}
+
+function EmendasFinanceirasParlamentar({ nome }: { nome: string }) {
+  const [ano, setAno] = useState(String(currentYear));
+  const [rows, setRows] = useState<EmendaFinanceira[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const loadFinanceiras = async () => {
+    const { data } = await (supabase as any).from("emendas_orcamentarias_transparencia").select("*").eq("ano", Number(ano)).ilike("nome_autor", `%${nome}%`).order("valor_pago", { ascending: false }).limit(200);
+    setRows(data || []);
+  };
+  useEffect(() => { loadFinanceiras(); }, [nome, ano]);
+
+  const syncFinanceiras = async () => {
+    setSyncing(true); setProgress(15); setNotice("Buscando no Portal da Transparência...");
+    const timer = setInterval(() => setProgress((p) => Math.min(88, p + 12)), 1200);
+    const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", { body: { ano: Number(ano), nomeAutor: nome, paginas: 3, incluirDocumentos: true } });
+    clearInterval(timer);
+    if (error) { setNotice(error.message); setProgress(100); }
+    else { setNotice(`${data?.upserted || 0} emendas $ atualizadas para ${nome}.`); setProgress(100); await loadFinanceiras(); }
+    setSyncing(false);
+  };
+
+  const stats = rows.reduce((a, e) => ({ empenhado: a.empenhado + Number(e.valor_empenhado || 0), liquidado: a.liquidado + Number(e.valor_liquidado || 0), pago: a.pago + paid(e), alto: a.alto + (e.risco_execucao === "Alto" ? 1 : 0) }), { empenhado: 0, liquidado: 0, pago: 0, alto: 0 });
+
+  return <Card className="border-primary/20"><CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Emendas $ do Portal da Transparência</CardTitle><div className="flex gap-2"><Select value={ano} onValueChange={setAno}><SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger><SelectContent>{[currentYear, currentYear - 1, currentYear - 2, currentYear - 3].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button size="sm" className="h-8 text-xs gap-1" onClick={syncFinanceiras} disabled={syncing}>{syncing ? <Loader2 size={12} className="animate-spin"/> : <RefreshCcw size={12}/>}Sync emendas $</Button></div></div></CardHeader><CardContent className="space-y-3">{notice && <p className="text-xs text-muted-foreground">{notice}</p>}{(syncing || progress > 0) && <Progress value={progress} className="h-2"/>}<div className="grid grid-cols-2 md:grid-cols-5 gap-2"><div><p className="text-xl font-black">{rows.length}</p><p className="text-[10px] uppercase font-bold text-muted-foreground">Emendas</p></div><div><p className="text-lg font-black">{brl(stats.empenhado)}</p><p className="text-[10px] uppercase font-bold text-muted-foreground">Empenhado</p></div><div><p className="text-lg font-black">{brl(stats.liquidado)}</p><p className="text-[10px] uppercase font-bold text-muted-foreground">Liquidado</p></div><div><p className="text-lg font-black text-governo">{brl(stats.pago)}</p><p className="text-[10px] uppercase font-bold text-muted-foreground">Pago</p></div><div><p className="text-xl font-black text-primary">{pct(stats.pago, stats.empenhado)}%</p><p className="text-[10px] uppercase font-bold text-muted-foreground">Execução</p></div></div><div className="space-y-2 max-h-80 overflow-y-auto">{rows.slice(0, 20).map((e) => <div key={e.id} className="rounded-md border p-2"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-primary">{e.codigo_emenda} · {e.tipo_emenda}</p><p className="text-[10px] text-muted-foreground">{e.tema_ia} · {e.localidade_gasto || e.uf || "local não informado"}</p></div><Badge variant={e.risco_execucao === "Alto" ? "destructive" : "outline"} className="text-[10px]">{e.risco_execucao}</Badge></div><div className="flex items-center gap-2 mt-2"><Progress value={pct(paid(e), e.valor_empenhado)} className="h-1.5 flex-1"/><span className="text-[10px] font-bold">{pct(paid(e), e.valor_empenhado)}%</span><a href={portalUrl(e)} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"><ExternalLink size={10}/>Ver</a></div></div>)}{rows.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhuma emenda $ encontrada para este parlamentar/ano. Use o sync para buscar pelo nome.</p>}</div></CardContent></Card>;
+}
+
 
 export function EmendasTab({ parlamentarId, casa, nome }: Props) {
   const [emendas, setEmendas] = useState<Emenda[]>([]);
@@ -114,6 +152,7 @@ export function EmendasTab({ parlamentarId, casa, nome }: Props) {
   return (
     <div className="space-y-4">
       {notice && <Card className="border-primary/20 bg-primary/5"><CardContent className="p-3 text-xs text-muted-foreground">{notice}</CardContent></Card>}
+      <EmendasFinanceirasParlamentar nome={nome} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card><CardContent className="p-3 text-center"><p className="text-2xl font-black">{emendas.length}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Emendas</p></CardContent></Card>
         <Card><CardContent className="p-3 text-center"><p className="text-2xl font-black text-governo">{stats.aprovadas}</p><p className="text-[10px] font-bold uppercase text-muted-foreground">Acatadas/aprovadas</p></CardContent></Card>
