@@ -56,10 +56,14 @@ function normalizeName(s: string) {
 async function fetchPortal(path: string, apiKey: string, params: Record<string, string | number | undefined>) {
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && String(v).trim()) url.searchParams.set(k, String(v));
-  const r = await fetch(url, { headers: { Accept: "application/json", "chave-api-dados": apiKey } });
+  const r = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "Monitor-Legislativo/1.0", "chave-api-dados": apiKey } });
   const body = await r.text();
   if (!r.ok) throw new Error(`Portal da Transparência HTTP ${r.status}: ${body.slice(0, 300)}`);
-  return body ? JSON.parse(body) : [];
+  if (!body.trim()) return [];
+  if (!body.trim().startsWith("[") && !body.trim().startsWith("{")) {
+    throw new Error(`Portal da Transparência retornou uma resposta não JSON para ${url.pathname}. Confira a chave/API ou tente novamente. Trecho: ${body.slice(0, 160)}`);
+  }
+  return JSON.parse(body);
 }
 
 async function classify(rows: RawEmenda[]) {
