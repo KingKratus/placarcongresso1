@@ -1,99 +1,97 @@
 Plano de implementação
 
-1. Solicitar e armazenar a chave da API do Portal da Transparência
-- Vou pedir sua chave como segredo seguro do projeto antes de implementar a chamada real.
-- A chave não ficará no frontend nem no código público; será usada somente em funções backend.
-- A integração usará o header oficial `chave-api-dados` contra `https://api.portaldatransparencia.gov.br/api-de-dados/emendas`.
+1. Melhorar a aba Emendas $ em Insights
+- Manter o filtro de ano no topo e destacar que ele controla a consulta antes do recálculo dos rankings.
+- Adicionar um filtro de tema específico ao bloco principal de controles, junto do ano, para o ranking de risco ser recalculado imediatamente no recorte selecionado.
+- Ajustar o ranking por tema e por autor para respeitar explicitamente os filtros de ano, tema, tipo, UF, subtema, risco e busca.
+- Incluir botões separados de exportação do ranking de risco:
+  - CSV por tema
+  - CSV por autor
+  - PDF por tema
+  - PDF por autor
+- Os arquivos terão: nome do tema/autor, risco, total de emendas, empenhado, liquidado, pago, taxa de pagamento (pago/liquidado) e taxa de execução (pago/empenhado).
 
-2. Criar base própria para emendas parlamentares orçamentárias
-- Criar uma nova tabela separada da atual `emendas_parlamentares_cache`, para não confundir com emendas/proposições legislativas.
-- Campos principais:
-  - código da emenda, ano, número, tipo de emenda, autor/nome do autor
-  - localidade do gasto, função, subfunção
-  - valores: empenhado, liquidado, pago, restos inscritos/cancelados/pagos
-  - classificação IA: tema, subtema, área pública, público beneficiado, risco, qualidade de execução, resumo analítico, confiança
-  - metadados brutos e data de sincronização
-- RLS: leitura pública para dashboards; escrita bloqueada para usuários e feita apenas pelo backend.
-- Índices para ano, autor, partido inferido, UF/localidade, tema, tipo e valores.
+2. Modal ao clicar nas linhas do ranking
+- Tornar as linhas dos rankings clicáveis.
+- Ao clicar em um tema ou autor, abrir um modal com:
+  - resumo do grupo selecionado;
+  - totais de empenhado, liquidado e pago;
+  - taxa de pagamento e taxa de execução;
+  - contagem por risco;
+  - lista das emendas que justificam o ranking.
+- Em cada emenda do modal, mostrar:
+  - código, tipo, ano, autor, partido/UF;
+  - tema/subtema, função/subfunção;
+  - valores empenhado/liquidado/pago;
+  - taxas de pagamento e execução;
+  - risco e estágio;
+  - resumo IA;
+  - botão de link quando houver URL oficial ou quando for possível montar uma busca oficial pelo código.
 
-3. Backend de sincronização com Portal da Transparência
-- Criar função `sync-emendas-transparencia` para buscar páginas da API com filtros por ano, tipo, autor, função e subfunção.
-- Suportar os três tipos de emendas orçamentárias exibidos pelo Portal, mantendo o texto oficial do tipo retornado pela API.
-- Normalizar valores monetários que vêm como texto para números confiáveis.
-- Fazer paginação, deduplicação por `codigoEmenda` e cache incremental.
-- Buscar opcionalmente documentos relacionados em `/emendas/documentos/{codigo}` para enriquecer fase/execução quando necessário.
-- Usar IA no backend para tematizar em lotes: Saúde, Segurança, Educação, Infraestrutura, Assistência, Agro, Meio Ambiente, Economia, etc., além de subtemas mais específicos.
+3. Links de emendas PIX, individuais e bancada
+- Ampliar o tipo local `EmendaOrcamentaria` para ler `raw_data` e possíveis campos de link/documentos vindos do Portal.
+- Criar uma função segura no front para extrair link oficial de:
+  - `raw_data.link`, `raw_data.url`, `raw_data.uri`, `raw_data.urlDocumento`, documentos etc., quando existirem;
+  - fallback para busca no Portal da Transparência com o código/número da emenda.
+- Mostrar botão “Ver emenda” nas linhas de dados completos e no modal de validação.
+- Evidenciar tipo de emenda no card/tabela: PIX/transferência especial quando o texto indicar, individual, bancada, relator ou comissão.
 
-4. Nova aba em Insights: “Emendas Orçamentárias”
-- Adicionar uma aba específica dentro de Insights, deixando claro que são emendas de execução orçamentária do Portal da Transparência.
-- Painel com filtros detalhados:
-  - ano, tipo de emenda, tema IA, subtema IA, função/subfunção, autor, partido/UF quando disponível, localidade do gasto, faixa de valor, status de execução.
-- Cards executivos:
-  - total empenhado, liquidado, pago
-  - taxa de execução: pago / empenhado
-  - emendas com maior valor pago
-  - emendas paradas ou com baixa execução
-  - concentração por saúde, segurança, educação etc.
-- Tabela completa com exportação CSV/PDF.
+4. Insights adicionais de impacto público
+- Adicionar cards de insights automáticos na aba Emendas $:
+  - municípios/localidades atendidos no recorte;
+  - parlamentares com municípios atendidos;
+  - temas com maior cobertura territorial;
+  - quantidade estimada de escolas/educação, saúde e segurança atendidas com base em tema, subtema, função, subfunção e resumo IA;
+  - maiores gargalos: alto empenho com baixa execução;
+  - concentração por autor/partido/UF.
+- Para “quais escolas foram ajudadas”, usar apenas o que estiver disponível nos dados (`localidade_gasto`, `publico_beneficiado`, `resumo_ia`, `raw_data`/documentos). Se o Portal não fornecer o nome da escola, a interface mostrará como “entidade não identificada no retorno oficial”, evitando inventar dados.
 
-5. Gráficos e rankings de emendas orçamentárias
-- Gráficos planejados:
-  - barras por tema/subtema e por função/subfunção
-  - evolução anual de empenhado/liquidado/pago
-  - funil financeiro: empenhado -> liquidado -> pago
-  - ranking de autores por valor empenhado/pago e taxa de execução
-  - ranking por partidos e UFs, quando conseguirmos associar autor aos parlamentares já existentes no app
-  - mapa por localidade/UF do gasto
-  - matriz tema × tipo de emenda
-  - alertas: alto empenho com baixo pagamento, alta concentração por parlamentar/partido/localidade
-- Comparação lado a lado: dois parlamentares/partidos/UFs por volume, execução e temas.
+5. Sync manual de Emendas $ no painel Admin
+- Criar um componente de sync administrativo para Emendas $, ou inserir um card na aba “Syncs”.
+- Controles previstos:
+  - ano;
+  - tipo de emenda: todos, individual, bancada, comissão, relator, PIX/transferência especial quando aplicável;
+  - número de páginas;
+  - incluir documentos.
+- Ao executar, chamar `sync-emendas-transparencia` com os parâmetros escolhidos.
+- Exibir barra de progresso estimada e log visual com etapas: início, buscando Portal, classificação IA, gravação e conclusão/erro.
+- Atualizar contadores e histórico após o sync.
 
-6. Relatórios e exportação
-- Reaproveitar a estrutura atual de PDF/CSV e adicionar:
-  - PDF executivo de emendas orçamentárias com gráficos e insights IA
-  - CSV completo do recorte filtrado
-  - PDF/CSV nos rankings de parlamentares, partidos, UFs, proposições e projetos
-- Incluir insights no PDF: principais áreas financiadas, execução, gargalos e destaques.
+6. Sync manual no perfil do parlamentar
+- Na aba de emendas do perfil parlamentar, adicionar uma seção “Emendas $ do Portal da Transparência”.
+- Botão para sincronizar emendas orçamentárias daquele parlamentar/ano usando `nomeAutor` e ano.
+- Mostrar barra de progresso/log durante a chamada.
+- Depois do sync, carregar e exibir resumo financeiro do parlamentar:
+  - total de emendas $ encontradas;
+  - empenhado, liquidado, pago;
+  - taxa de execução;
+  - riscos por emenda;
+  - links oficiais.
+- Isso será integrado tanto em `DeputadoDetail` quanto em `SenadorDetail`, reutilizando um componente único para evitar duplicação.
 
-7. Melhorias na aba Proposições
-- Adicionar subtemas por IA além do tema geral.
-- Mostrar funil legislativo por parlamentar: apresentadas, em tramitação, avançadas, aprovadas/transformadas, arquivadas/rejeitadas.
-- Mais rankings: tipos de proposição mais usados, temas com maior avanço, proposições mais relevantes por peso/status.
-- Exportações por CSV/PDF incluindo subtemas e status.
+7. Backend/logs do sync
+- Ajustar a função `sync-emendas-transparencia` para também registrar `sync_runs` e `sync_run_events` com `casa = 'emendas_orcamentarias'`.
+- Registrar eventos reais durante execução: validação, páginas buscadas, registros únicos, classificação IA, gravação, conclusão ou erro.
+- Retornar `runId`, `fetched`, `upserted`, `ano` e resumo para o front.
+- Manter a exigência de login para sync e continuar usando a chave do Portal já configurada.
+- Não abrir escrita pública na tabela de emendas; a gravação continuará restrita à função com credenciais de backend.
 
-8. Melhorias na aba Projetos
-- Adicionar mais métricas nos projetos votados:
-  - placar agregado por Casa, tema e órgão
-  - polarização por partido
-  - projetos com maior divergência entre partidos
-  - temas mais votados no ano
-  - resultado e situação quando disponível
-- Reforçar a leitura de “projetos já votados” e “mais avançados para plenário” com gráficos e filtros.
+8. Teste do sync
+- Após a aprovação, implementar e testar a chamada da função com um recorte pequeno, por exemplo ano atual e 1 página.
+- Validar se os logs aparecem no painel e se os dados recalculam o ranking.
+- Verificar o comportamento de erro quando o Portal retorna falha ou sem dados.
 
-9. Melhorias no chatbot de IA
-- Expandir o contexto do chatbot para incluir:
-  - emendas orçamentárias do Portal da Transparência
-  - proposições com subtemas
-  - rankings e dados de execução financeira
-- No modo avançado, liberar consultas seguras à nova tabela de emendas orçamentárias.
-- Melhorar as sugestões rápidas do chat com perguntas como:
-  - “Quais parlamentares mais destinaram recursos para saúde?”
-  - “Compare execução de emendas entre dois partidos”
-  - “Quais emendas têm alto empenho e baixo pagamento?”
-- Corrigir o streaming para tratar fim de resposta e erros 402/429 de forma mais clara.
-- Testar o chat em modo normal e avançado após a implementação.
+Arquivos principais a alterar
+- `src/components/insights/EmendasOrcamentariasTab.tsx`
+- `src/components/EmendasTab.tsx`
+- `src/pages/Admin.tsx`
+- `src/pages/DeputadoDetail.tsx`
+- `src/pages/SenadorDetail.tsx`
+- possível novo componente reutilizável para sync/financeiro de emendas por parlamentar
+- `supabase/functions/sync-emendas-transparencia/index.ts`
 
-10. Segurança, validação e testes
-- Validar entradas no backend: ano, página, autor, tipo, função/subfunção e limites de paginação.
-- Nunca expor a chave do Portal da Transparência no navegador.
-- Garantir RLS e escrita bloqueada por usuários comuns.
-- Testar:
-  - chamada real à API após a chave ser configurada
-  - sincronização de ao menos um ano/tipo
-  - classificação IA em lote
-  - renderização mobile da nova aba
-  - exportação CSV/PDF
-  - chatbot normal e avançado
-
-Observação importante
-- Após sua aprovação, o primeiro passo será solicitar sua chave da API do Portal da Transparência via segredo seguro. Só depois consigo implementar e testar a integração real com a API.
+Observações técnicas
+- Não vou alterar os arquivos autogerados do backend (`src/integrations/supabase/client.ts` ou `types.ts`).
+- A exportação PDF continuará usando o utilitário existente `downloadPdfReport`.
+- Onde o dado oficial não trouxer entidade beneficiada específica, a interface vai indicar ausência do dado em vez de gerar inferências falsas.
+- Se o Portal não fornecer link direto em algum item, o botão usará um fallback de busca oficial pelo código/número da emenda.
