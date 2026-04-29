@@ -95,6 +95,12 @@ async function classify(rows: RawEmenda[]) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  let sb: ReturnType<typeof createClient> | null = null;
+  let runId: string | null = null;
+  const log = async (step: string, message: string) => {
+    if (!sb || !runId) return;
+    await sb.from("sync_run_events").insert({ run_id: runId, step, message });
+  };
   try {
     const authHeader = req.headers.get("Authorization") || "";
     const sbUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
@@ -108,17 +114,26 @@ serve(async (req) => {
     if (!parsed.success) return response({ error: parsed.error.flatten().fieldErrors }, 400);
     const body = parsed.data;
 
-    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: run, error: runError } = await sb.from("sync_runs").insert({ casa: "emendas_orcamentarias", ano: body.ano, user_id: claims.claims.sub, status: "running" }).select("id").single();
+    if (runError) throw runError;
+    runId = run.id;
+    await log("inicio", `Sync iniciado para ${body.ano}${body.nomeAutor ? ` · autor: ${body.nomeAutor}` : ""}.`);
+
     const fetched: RawEmenda[] = [];
     for (let pagina = 1; pagina <= body.paginas; pagina++) {
+      await log("portal", `Buscando página ${pagina}/${body.paginas} no Portal da Transparência...`);
       const page = await fetchPortal("/emendas", apiKey, { pagina, ano: body.ano, tipoEmenda: body.tipoEmenda, nomeAutor: body.nomeAutor, codigoFuncao: body.codigoFuncao, codigoSubfuncao: body.codigoSubfuncao });
       const arr = Array.isArray(page) ? page : [];
       fetched.push(...arr);
+      await log("portal", `Página ${pagina}: ${arr.length} registros retornados.`);
       if (arr.length === 0) break;
     }
 
     const unique = Array.from(new Map(fetched.map((e) => [text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${body.ano}-${text(e.nomeAutor)}`, e])).values());
+    await log("dedupe", `${unique.length} emendas únicas serão classificadas por IA.`);
     const classified = await classify(unique);
+    await log("ia", "Classificação temática por IA concluída.");
 
     const names = unique.map((e) => normalizeName(text(e.nomeAutor || e.autor))).filter(Boolean);
     const [deps, sens] = await Promise.all([
@@ -154,12 +169,20 @@ serve(async (req) => {
     }
 
     for (let i = 0; i < rows.length; i += 100) {
+      await log("gravacao", `Gravando lote ${Math.floor(i / 100) + 1} (${Math.min(i + 100, rows.length)}/${rows.length}).`);
       const { error } = await sb.from("emendas_orcamentarias_transparencia").upsert(rows.slice(i, i + 100), { onConflict: "codigo_emenda" });
       if (error) throw error;
     }
-    return response({ ok: true, fetched: fetched.length, upserted: rows.length, ano: body.ano });
+    await log("concluido", `${rows.length} emendas gravadas/atualizadas.`);
+    await sb.from("sync_runs").update({ status: "completed", finished_at: new Date().toISOString(), summary: { fetched: fetched.length, upserted: rows.length, ano: body.ano } }).eq("id", runId);
+    return response({ ok: true, fetched: fetched.length, upserted: rows.length, ano: body.ano, runId });
   } catch (e) {
     console.error("sync-emendas-transparencia error", e);
-    return response({ error: e instanceof Error ? e.message : "Erro desconhecido" }, 500);
+    const message = e instanceof Error ? e.message : "Erro desconhecido";
+    if (sb && runId) {
+      await sb.from("sync_run_events").insert({ run_id: runId, step: "error", message });
+      await sb.from("sync_runs").update({ status: "error", error: message, finished_at: new Date().toISOString() }).eq("id", runId);
+    }
+    return response({ error: message, runId }, 500);
   }
 });
