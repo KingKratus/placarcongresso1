@@ -56,7 +56,9 @@ function normalizeName(s: string) {
 async function fetchPortal(path: string, apiKey: string, params: Record<string, string | number | undefined>) {
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && String(v).trim()) url.searchParams.set(k, String(v));
-  const r = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "Monitor-Legislativo/1.0", "chave-api-dados": apiKey } });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  const r = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json", "User-Agent": "Monitor-Legislativo/1.0", "chave-api-dados": apiKey } }).finally(() => clearTimeout(timeout));
   const body = await r.text();
   if (!r.ok) throw new Error(`Portal da Transparência HTTP ${r.status}: ${body.slice(0, 300)}`);
   if (!body.trim()) return [];
