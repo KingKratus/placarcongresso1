@@ -6,6 +6,7 @@ import { AdminBulkSync } from "@/components/AdminBulkSync";
 import { AdminPerformanceSync } from "@/components/AdminPerformanceSync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
@@ -46,6 +47,10 @@ const Admin = () => {
   const [stuckCount, setStuckCount] = useState(0);
   const [cleaningStuck, setCleaningStuck] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [emendasSyncing, setEmendasSyncing] = useState(false);
+  const [emendasProgress, setEmendasProgress] = useState(0);
+  const [emendasNotice, setEmendasNotice] = useState<string | null>(null);
+  const [emendasAno, setEmendasAno] = useState(new Date().getFullYear());
 
   // Check admin role
   useEffect(() => {
@@ -105,6 +110,26 @@ const Admin = () => {
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const stuck = runs.filter(r => r.status === "running" && r.started_at < thirtyMinAgo);
     setStuckCount(stuck.length);
+  };
+
+  const syncEmendasOrcamentarias = async () => {
+    setEmendasSyncing(true); setEmendasProgress(10); setEmendasNotice("Iniciando sync de emendas $...");
+    const timer = setInterval(() => setEmendasProgress((p) => Math.min(90, p + 10)), 1200);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", {
+        body: { ano: emendasAno, paginas: 5, incluirDocumentos: true },
+      });
+      if (error) throw error;
+      setEmendasNotice(`${data?.upserted || 0} emendas $ atualizadas; ${data?.fetched || 0} retornadas pelo Portal.`);
+      setEmendasProgress(100);
+      await loadData();
+    } catch (e: any) {
+      setEmendasNotice(e.message || "Erro ao sincronizar emendas $.");
+      setEmendasProgress(100);
+    } finally {
+      clearInterval(timer);
+      setEmendasSyncing(false);
+    }
   };
 
   const cleanStuckRuns = async () => {
@@ -253,6 +278,25 @@ const Admin = () => {
             <AdminBulkSync userId={user.id} />
 
             <AdminPerformanceSync ano={ano} />
+
+            <Card className="border-primary/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest">Sync manual de Emendas $</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <select className="h-9 rounded-md border bg-background px-3 text-xs" value={emendasAno} onChange={(e) => setEmendasAno(Number(e.target.value))}>
+                    {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2, new Date().getFullYear() - 3].map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <Button size="sm" onClick={syncEmendasOrcamentarias} disabled={emendasSyncing} className="gap-2">
+                    {emendasSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                    Sincronizar emendas $
+                  </Button>
+                  {emendasNotice && <span className="text-xs text-muted-foreground">{emendasNotice}</span>}
+                </div>
+                {(emendasSyncing || emendasProgress > 0) && <Progress value={emendasProgress} className="h-2" />}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader className="pb-2">
