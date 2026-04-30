@@ -448,6 +448,8 @@ export default function Insights() {
               <TabsTrigger value="prioridades" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Vote size={14} /> Prioridades</TabsTrigger>
               <TabsTrigger value="ask-ai" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><MessageSquare size={14} /> IA</TabsTrigger>
               <TabsTrigger value="ao-vivo" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Radio size={14} /> Ao Vivo</TabsTrigger>
+              <TabsTrigger value="meu-partido" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Flag size={14} /> Meu Partido</TabsTrigger>
+              <TabsTrigger value="ideias" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Lightbulb size={14} /> Ideias</TabsTrigger>
             </TabsList>
 
             {/* Visão Geral */}
