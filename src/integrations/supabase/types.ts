@@ -68,6 +68,51 @@ export type Database = {
         }
         Relationships: []
       }
+      analises_ponderadas: {
+        Row: {
+          ano: number
+          casa: string
+          components: Json
+          id: string
+          nome: string | null
+          parlamentar_id: number
+          partido: string | null
+          score_ia: number
+          score_tradicional: number
+          total_votos: number
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          casa: string
+          components?: Json
+          id?: string
+          nome?: string | null
+          parlamentar_id: number
+          partido?: string | null
+          score_ia?: number
+          score_tradicional?: number
+          total_votos?: number
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          casa?: string
+          components?: Json
+          id?: string
+          nome?: string | null
+          parlamentar_id?: number
+          partido?: string | null
+          score_ia?: number
+          score_tradicional?: number
+          total_votos?: number
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       analises_senadores: {
         Row: {
           ano: number
@@ -437,6 +482,33 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_suggestions: {
+        Row: {
+          context: string | null
+          created_at: string
+          feature_key: string
+          id: string
+          user_id: string | null
+          vote: number
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          feature_key: string
+          id?: string
+          user_id?: string | null
+          vote?: number
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          feature_key?: string
+          id?: string
+          user_id?: string | null
+          vote?: number
+        }
+        Relationships: []
+      }
       nolan_diagrams: {
         Row: {
           ano: number
@@ -504,6 +576,27 @@ export type Database = {
             referencedColumns: ["id_votacao"]
           },
         ]
+      }
+      portal_api_quota: {
+        Row: {
+          daily_limit: number
+          date: string
+          requests_used: number
+          updated_at: string
+        }
+        Insert: {
+          daily_limit?: number
+          date?: string
+          requests_used?: number
+          updated_at?: string
+        }
+        Update: {
+          daily_limit?: number
+          date?: string
+          requests_used?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       prioridade_agregada: {
         Row: {
@@ -601,6 +694,7 @@ export type Database = {
           display_name: string | null
           favoritos: number[] | null
           id: string
+          partido_filiacao: string | null
           updated_at: string
           user_id: string
         }
@@ -610,6 +704,7 @@ export type Database = {
           display_name?: string | null
           favoritos?: number[] | null
           id?: string
+          partido_filiacao?: string | null
           updated_at?: string
           user_id: string
         }
@@ -619,6 +714,7 @@ export type Database = {
           display_name?: string | null
           favoritos?: number[] | null
           id?: string
+          partido_filiacao?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -744,6 +840,39 @@ export type Database = {
           created_at?: string
           id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      sync_query_cache: {
+        Row: {
+          cache_key: string
+          created_at: string
+          endpoint: string
+          expires_at: string
+          hit_count: number
+          id: string
+          params: Json
+          response: Json
+        }
+        Insert: {
+          cache_key: string
+          created_at?: string
+          endpoint: string
+          expires_at: string
+          hit_count?: number
+          id?: string
+          params?: Json
+          response: Json
+        }
+        Update: {
+          cache_key?: string
+          created_at?: string
+          endpoint?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          params?: Json
+          response?: Json
         }
         Relationships: []
       }
@@ -1064,6 +1193,17 @@ export type Database = {
           casa: string
           mes: number
           score: number
+          total: number
+        }[]
+      }
+      get_parlamentar_badges: {
+        Args: { _ano: number; _casa: string; _parlamentar_id: number }
+        Returns: {
+          badge: string
+          nao: number
+          ratio: number
+          sim: number
+          tema: string
           total: number
         }[]
       }
