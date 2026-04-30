@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSyncRun } from "@/hooks/useSyncRun";
+import { usePortalQuota } from "@/hooks/usePortalQuota";
+import { SyncLogViewer } from "@/components/SyncLogViewer";
 
 interface TableCount {
   table: string;
@@ -48,9 +51,12 @@ const Admin = () => {
   const [cleaningStuck, setCleaningStuck] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [emendasSyncing, setEmendasSyncing] = useState(false);
-  const [emendasProgress, setEmendasProgress] = useState(0);
-  const [emendasNotice, setEmendasNotice] = useState<string | null>(null);
   const [emendasAno, setEmendasAno] = useState(new Date().getFullYear());
+  const [emendasTipo, setEmendasTipo] = useState<string>("");
+  const [emendasAutor, setEmendasAutor] = useState("");
+  const [emendasPaginas, setEmendasPaginas] = useState(3);
+  const emendasRun = useSyncRun();
+  const { quota, refresh: refreshQuota } = usePortalQuota();
 
   // Check admin role
   useEffect(() => {
@@ -113,21 +119,25 @@ const Admin = () => {
   };
 
   const syncEmendasOrcamentarias = async () => {
-    setEmendasSyncing(true); setEmendasProgress(10); setEmendasNotice("Iniciando sync de emendas $...");
-    const timer = setInterval(() => setEmendasProgress((p) => Math.min(90, p + 10)), 1200);
+    setEmendasSyncing(true);
+    emendasRun.reset();
     try {
-      const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", {
-        body: { ano: emendasAno, paginas: 5, incluirDocumentos: true },
-      });
-      if (error) throw error;
-      setEmendasNotice(`${data?.upserted || 0} emendas $ atualizadas; ${data?.fetched || 0} retornadas pelo Portal.`);
-      setEmendasProgress(100);
-      await loadData();
+      const payload: any = { ano: emendasAno, paginas: emendasPaginas, incluirDocumentos: false };
+      if (emendasTipo) payload.tipoEmenda = emendasTipo;
+      if (emendasAutor.trim()) payload.nomeAutor = emendasAutor.trim();
+      const { data, error } = await supabase.functions.invoke("sync-emendas-transparencia", { body: payload });
+      if (data?.runId) emendasRun.startRun(data.runId);
+      if (error) {
+        emendasRun.finishRun("error", error.message || "Falha ao sincronizar.");
+      } else if (data?.error) {
+        emendasRun.finishRun("error", data.error);
+      } else {
+        toast({ title: "Sync concluído", description: `${data?.upserted || 0} emendas atualizadas.` });
+      }
+      await Promise.all([loadData(), refreshQuota()]);
     } catch (e: any) {
-      setEmendasNotice(e.message || "Erro ao sincronizar emendas $.");
-      setEmendasProgress(100);
+      emendasRun.finishRun("error", e.message || "Erro ao sincronizar emendas $.");
     } finally {
-      clearInterval(timer);
       setEmendasSyncing(false);
     }
   };
@@ -279,6 +289,25 @@ const Admin = () => {
 
             <AdminPerformanceSync ano={ano} />
 
+            {quota && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-black uppercase tracking-widest">Cota do Portal da Transparência (hoje)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span><b>{quota.used}</b>/{quota.limit} requisições usadas</span>
+                    <span className="text-muted-foreground">{quota.limit - quota.used} restantes</span>
+                  </div>
+                  <Progress value={(quota.used / quota.limit) * 100} className="h-2" />
+                  <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground pt-1">
+                    <Badge variant="outline" className="text-[9px]">Cache: {quota.cacheTotal} entradas</Badge>
+                    <Badge variant="outline" className="text-[9px] bg-blue-500/5">Hits 24h: {quota.cacheHits24h}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="border-primary/20">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xs font-black uppercase tracking-widest">Sync manual de Emendas $</CardTitle>
@@ -288,13 +317,29 @@ const Admin = () => {
                   <select className="h-9 rounded-md border bg-background px-3 text-xs" value={emendasAno} onChange={(e) => setEmendasAno(Number(e.target.value))}>
                     {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2, new Date().getFullYear() - 3].map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
+                  <select className="h-9 rounded-md border bg-background px-3 text-xs" value={emendasTipo} onChange={(e) => setEmendasTipo(e.target.value)}>
+                    <option value="">Todos os tipos</option>
+                    <option value="Individual">Individual</option>
+                    <option value="Bancada">Bancada</option>
+                    <option value="Comissão">Comissão</option>
+                    <option value="Relator">Relator</option>
+                    <option value="Pix">Especial (PIX)</option>
+                  </select>
+                  <input className="h-9 rounded-md border bg-background px-3 text-xs flex-1 min-w-[160px]" placeholder="Filtrar por autor (opcional)" value={emendasAutor} onChange={(e) => setEmendasAutor(e.target.value)} />
+                  <select className="h-9 rounded-md border bg-background px-3 text-xs" value={emendasPaginas} onChange={(e) => setEmendasPaginas(Number(e.target.value))}>
+                    {[1, 2, 3, 5, 8, 10].map((n) => <option key={n} value={n}>{n} pág.</option>)}
+                  </select>
                   <Button size="sm" onClick={syncEmendasOrcamentarias} disabled={emendasSyncing} className="gap-2">
                     {emendasSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
                     Sincronizar emendas $
                   </Button>
-                  {emendasNotice && <span className="text-xs text-muted-foreground">{emendasNotice}</span>}
                 </div>
-                {(emendasSyncing || emendasProgress > 0) && <Progress value={emendasProgress} className="h-2" />}
+                <SyncLogViewer
+                  events={emendasRun.events}
+                  status={emendasRun.status}
+                  error={emendasRun.error}
+                  onRetry={syncEmendasOrcamentarias}
+                />
               </CardContent>
             </Card>
 
