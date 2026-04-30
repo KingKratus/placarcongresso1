@@ -43,6 +43,7 @@ import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 import { InfograficoButton } from "@/components/InfograficoButton";
 import { EmendasTab } from "@/components/EmendasTab";
 import { ParlamentarContact } from "@/components/ParlamentarContact";
+import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
@@ -344,6 +345,7 @@ export default function DeputadoDetail() {
               <div className="mt-2">
                 <ParlamentarContact parlamentarId={depId} casa="camara" compact />
               </div>
+              <ParlamentarBadgesTema parlamentarId={depId} casa="camara" ano={currentAnalise.ano} max={4} />
             </div>
           </div>
         </div>

@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote } from "lucide-react";
+import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote, Flag } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar } from "recharts";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
+import { getBancada } from "@/lib/bancadas";
+import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -106,6 +108,47 @@ function rankOf(list: Parlamentar[], p?: Parlamentar | null) {
   return idx >= 0 ? idx + 1 : null;
 }
 
+function expectedRange(bancada: string): [number, number] {
+  if (bancada === "Base Gov") return [70, 100];
+  if (bancada === "Oposição") return [0, 35];
+  return [35, 70];
+}
+
+function alignmentLabel(score: number, bancada: string) {
+  const [lo, hi] = expectedRange(bancada);
+  if (score >= lo && score <= hi) return { text: "Alinhado ao perfil esperado", tone: "governo" as const };
+  if (score > hi) return { text: bancada === "Oposição" ? "Mais governista que o partido" : "Acima do esperado", tone: "primary" as const };
+  return { text: bancada === "Base Gov" ? "Dissidente do governo" : "Abaixo do esperado", tone: "oposicao" as const };
+}
+
+function PartyAlignmentCard({ p, partyAvg }: { p: Parlamentar; partyAvg: number | null }) {
+  const bancada = getBancada(p.partido || "");
+  const [lo, hi] = expectedRange(bancada);
+  const lbl = alignmentLabel(p.score, bancada);
+  const desvio = partyAvg !== null ? p.score - partyAvg : null;
+  const toneClass = lbl.tone === "governo" ? "text-governo" : lbl.tone === "oposicao" ? "text-oposicao" : "text-primary";
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-2 bg-card">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+          <Flag size={10} /> Bancada esperada
+        </span>
+        <Badge variant="outline" className="text-[9px]">{bancada}</Badge>
+      </div>
+      <p className={`text-xs font-bold ${toneClass}`}>{lbl.text}</p>
+      <div className="text-[10px] text-muted-foreground">
+        Faixa esperada: <b>{lo}–{hi}%</b> · Score real: <b>{p.score.toFixed(1)}%</b>
+      </div>
+      {desvio !== null && (
+        <div className="text-[10px] text-muted-foreground">
+          Média do partido ({p.partido}): <b>{partyAvg!.toFixed(1)}%</b> ·
+          Desvio: <b className={desvio >= 0 ? "text-governo" : "text-oposicao"}>{desvio >= 0 ? "+" : ""}{desvio.toFixed(1)}pp</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MiniProfile({ p, rank, houseRank }: { p?: Parlamentar | null; rank: number | null; houseRank: number | null }) {
   if (!p) return <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Selecione um parlamentar.</div>;
   return (
@@ -130,6 +173,7 @@ function MiniProfile({ p, rank, houseRank }: { p?: Parlamentar | null; rank: num
         <span className="inline-flex items-center gap-1"><Vote size={12} /> {p.totalVotos} votos</span>
         <span>{p.votosAlinhados} alinhados</span>
       </div>
+      <ParlamentarBadgesTema parlamentarId={p.id} casa={p.casa === "Câmara" ? "camara" : "senado"} ano={p.ano} max={3} />
     </div>
   );
 }
@@ -175,6 +219,23 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
   const spread = selectedA && selectedB ? Math.abs(selectedA.score - selectedB.score) : 0;
 
   const houseList = (p?: Parlamentar | null) => p?.casa === "Câmara" ? camaraRank : senadoRank;
+
+  const partyAverages = useMemo(() => {
+    const map = new Map<string, { sum: number; n: number }>();
+    for (const p of current) {
+      if (!p.partido || p.score <= 0) continue;
+      const k = `${p.casa}|${p.partido}`;
+      const e = map.get(k) || { sum: 0, n: 0 };
+      e.sum += p.score; e.n += 1; map.set(k, e);
+    }
+    return map;
+  }, [current]);
+  const avgFor = (p?: Parlamentar | null) => {
+    if (!p?.partido) return null;
+    const e = partyAverages.get(`${p.casa}|${p.partido}`);
+    return e && e.n > 0 ? e.sum / e.n : null;
+  };
+
   const report = selectedA && selectedB ? {
     title: `Comparação ${selectedA.nome} x ${selectedB.nome}`,
     summary: `${selectedA.nome} (${selectedA.score.toFixed(1)}%) e ${selectedB.nome} (${selectedB.score.toFixed(1)}%) têm diferença de ${spread.toFixed(1)} pontos em ${ano}.`,
@@ -212,6 +273,11 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <MiniProfile p={selectedA} rank={rankOf(allCurrentRank, selectedA)} houseRank={rankOf(houseList(selectedA), selectedA)} />
             <MiniProfile p={selectedB} rank={rankOf(allCurrentRank, selectedB)} houseRank={rankOf(houseList(selectedB), selectedB)} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {selectedA && <PartyAlignmentCard p={selectedA} partyAvg={avgFor(selectedA)} />}
+            {selectedB && <PartyAlignmentCard p={selectedB} partyAvg={avgFor(selectedB)} />}
           </div>
         </CardContent>
       </Card>

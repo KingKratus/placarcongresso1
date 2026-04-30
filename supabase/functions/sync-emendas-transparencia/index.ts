@@ -24,6 +24,40 @@ type RawEmenda = Record<string, unknown>;
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
+
+// ---------- Cache + Quota helpers ----------
+async function sha256(s: string) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function cacheGet(sb: any, key: string): Promise<unknown | null> {
+  const { data } = await sb.from("sync_query_cache").select("response,expires_at,id,hit_count").eq("cache_key", key).maybeSingle();
+  if (!data) return null;
+  if (new Date(data.expires_at).getTime() < Date.now()) return null;
+  await sb.from("sync_query_cache").update({ hit_count: (data.hit_count || 0) + 1 }).eq("id", data.id);
+  return data.response;
+}
+
+async function cacheSet(sb: any, key: string, endpoint: string, params: Record<string, unknown>, response: unknown, ttlHours: number) {
+  const expires = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
+  await sb.from("sync_query_cache").upsert({ cache_key: key, endpoint, params, response, expires_at: expires, hit_count: 0 }, { onConflict: "cache_key" });
+}
+
+async function checkAndIncQuota(sb: any): Promise<{ ok: boolean; used: number; limit: number }> {
+  const today = new Date().toISOString().slice(0, 10);
+  // Get or create today's row
+  const { data: existing } = await sb.from("portal_api_quota").select("*").eq("date", today).maybeSingle();
+  const limit = existing?.daily_limit ?? 600;
+  const used = existing?.requests_used ?? 0;
+  if (used >= limit) return { ok: false, used, limit };
+  await sb.from("portal_api_quota").upsert(
+    { date: today, requests_used: used + 1, daily_limit: limit, updated_at: new Date().toISOString() },
+    { onConflict: "date" }
+  );
+  return { ok: true, used: used + 1, limit };
+}
+
 function money(value: unknown) {
   const s = String(value ?? "0").replace(/\s/g, "").replace(/R\$/g, "");
   if (!s) return 0;
@@ -53,22 +87,64 @@ function normalizeName(s: string) {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-async function fetchPortal(path: string, apiKey: string, params: Record<string, string | number | undefined>) {
+type FetchOpts = { ttlHours?: number; timeoutMs?: number };
+type FetchResult = { data: unknown; fromCache: boolean; latencyMs: number };
+
+async function fetchPortal(
+  sb: any,
+  path: string,
+  apiKey: string,
+  params: Record<string, string | number | undefined>,
+  log: (step: string, msg: string) => Promise<void>,
+  opts: FetchOpts = {}
+): Promise<FetchResult> {
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && String(v).trim()) url.searchParams.set(k, String(v));
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  const r = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json", "User-Agent": "Monitor-Legislativo/1.0", "chave-api-dados": apiKey } }).catch((e) => {
-    if (e?.name === "AbortError") throw new Error("Portal da Transparência demorou para responder. Tente novamente com menos páginas ou em alguns minutos.");
-    throw e;
-  }).finally(() => clearTimeout(timeout));
-  const body = await r.text();
-  if (!r.ok) throw new Error(`Portal da Transparência HTTP ${r.status}: ${body.slice(0, 300)}`);
-  if (!body.trim()) return [];
-  if (!body.trim().startsWith("[") && !body.trim().startsWith("{")) {
-    throw new Error(`Portal da Transparência retornou uma resposta não JSON para ${url.pathname}. Confira a chave/API ou tente novamente. Trecho: ${body.slice(0, 160)}`);
+
+  const cleanParams: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && String(v).trim()) cleanParams[k] = v;
+  const cacheKey = await sha256(`${path}::${JSON.stringify(cleanParams)}`);
+
+  // Cache lookup
+  const cached = await cacheGet(sb, cacheKey);
+  if (cached !== null) {
+    await log("cache_hit", `Cache: ${path} (${url.search}) — sem consumir cota.`);
+    return { data: cached, fromCache: true, latencyMs: 0 };
   }
-  return JSON.parse(body);
+
+  // Quota check before real fetch
+  const quota = await checkAndIncQuota(sb);
+  if (!quota.ok) {
+    throw new Error(`Limite diário do Portal da Transparência atingido (${quota.used}/${quota.limit}). Tente após 00:00 (Brasília) ou aumente o limite no painel admin.`);
+  }
+
+  const timeoutMs = opts.timeoutMs ?? 15000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = Date.now();
+  let r: Response;
+  try {
+    r = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json", "User-Agent": "Monitor-Legislativo/1.0", "chave-api-dados": apiKey } });
+  } catch (e: any) {
+    clearTimeout(timeout);
+    if (e?.name === "AbortError") throw new Error(`Timeout (${timeoutMs}ms) ao buscar ${path}. Considere reduzir páginas.`);
+    throw e;
+  }
+  clearTimeout(timeout);
+  const latencyMs = Date.now() - t0;
+  const body = await r.text();
+  if (r.status === 429) throw new Error("Portal retornou 429 (rate limit). Aguarde alguns minutos.");
+  if (!r.ok) throw new Error(`Portal da Transparência HTTP ${r.status}: ${body.slice(0, 300)}`);
+  if (!body.trim()) {
+    await cacheSet(sb, cacheKey, path, cleanParams, [], opts.ttlHours ?? 6);
+    return { data: [], fromCache: false, latencyMs };
+  }
+  if (!body.trim().startsWith("[") && !body.trim().startsWith("{")) {
+    throw new Error(`Portal retornou resposta não JSON para ${url.pathname}. Trecho: ${body.slice(0, 160)}`);
+  }
+  const parsed = JSON.parse(body);
+  await cacheSet(sb, cacheKey, path, cleanParams, parsed, opts.ttlHours ?? 6);
+  return { data: parsed, fromCache: false, latencyMs };
 }
 
 async function classify(rows: RawEmenda[]) {
@@ -130,14 +206,26 @@ serve(async (req) => {
     await log("inicio", `Sync iniciado para ${body.ano}${body.nomeAutor ? ` · autor: ${body.nomeAutor}` : ""}.`);
 
     const fetched: RawEmenda[] = [];
-    for (let pagina = 1; pagina <= body.paginas; pagina++) {
-      await log("portal", `Buscando página ${pagina}/${body.paginas} no Portal da Transparência...`);
-      const page = await fetchPortal("/emendas", apiKey, { pagina, ano: body.ano, tipoEmenda: body.tipoEmenda, nomeAutor: body.nomeAutor, codigoFuncao: body.codigoFuncao, codigoSubfuncao: body.codigoSubfuncao });
-      const arr = Array.isArray(page) ? page : [];
+    let maxPaginas = body.paginas;
+    let cacheHits = 0;
+    for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+      await log("portal", `Buscando página ${pagina}/${maxPaginas} no Portal...`);
+      const res = await fetchPortal(sb, "/emendas", apiKey, { pagina, ano: body.ano, tipoEmenda: body.tipoEmenda, nomeAutor: body.nomeAutor, codigoFuncao: body.codigoFuncao, codigoSubfuncao: body.codigoSubfuncao }, log, { ttlHours: 6, timeoutMs: 15000 });
+      const arr = Array.isArray(res.data) ? (res.data as RawEmenda[]) : [];
       fetched.push(...arr);
-      await log("portal", `Página ${pagina}: ${arr.length} registros retornados.`);
+      if (res.fromCache) cacheHits++;
+      await log("portal", `Página ${pagina}: ${arr.length} registros (${res.fromCache ? "cache" : `${res.latencyMs}ms`}).`);
+      // Adaptive paging: se latência > 5s, reduz páginas restantes pela metade
+      if (!res.fromCache && res.latencyMs > 5000 && pagina < maxPaginas) {
+        const novoMax = pagina + Math.max(1, Math.floor((maxPaginas - pagina) / 2));
+        if (novoMax < maxPaginas) {
+          await log("adaptive", `Latência alta (${res.latencyMs}ms). Reduzindo de ${maxPaginas} para ${novoMax} páginas para manter o sync.`);
+          maxPaginas = novoMax;
+        }
+      }
       if (arr.length === 0) break;
     }
+    if (cacheHits > 0) await log("cache_summary", `${cacheHits} de ${maxPaginas} páginas vieram do cache.`);
 
     const unique = Array.from(new Map(fetched.map((e) => [text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${body.ano}-${text(e.nomeAutor)}`, e])).values());
     await log("dedupe", `${unique.length} emendas únicas serão classificadas por IA.`);
@@ -162,7 +250,10 @@ serve(async (req) => {
       const person = people.find((p) => p.key === authorKey || authorKey.includes(p.key) || p.key.includes(authorKey));
       let documentos: unknown[] = [];
       if (body.incluirDocumentos && text(e.codigoEmenda)) {
-        try { documentos = await fetchPortal(`/emendas/documentos/${encodeURIComponent(text(e.codigoEmenda))}`, apiKey, { pagina: 1 }); } catch { documentos = []; }
+        try {
+          const r = await fetchPortal(sb, `/emendas/documentos/${encodeURIComponent(text(e.codigoEmenda))}`, apiKey, { pagina: 1 }, log, { ttlHours: 24, timeoutMs: 12000 });
+          documentos = Array.isArray(r.data) ? r.data : [];
+        } catch { documentos = []; }
       }
       rows.push({
         codigo_emenda: text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${body.ano}-${text(e.nomeAutor)}`,

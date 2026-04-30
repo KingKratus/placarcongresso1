@@ -43,6 +43,7 @@ import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 import { InfograficoButton } from "@/components/InfograficoButton";
 import { EmendasTab } from "@/components/EmendasTab";
 import { ParlamentarContact } from "@/components/ParlamentarContact";
+import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
 
 type Analise = Tables<"analises_senadores">;
 type VotoSenador = Tables<"votos_senadores">;
@@ -314,6 +315,7 @@ export default function SenadorDetail() {
               <div className="mt-2">
                 <ParlamentarContact parlamentarId={senId} casa="senado" compact />
               </div>
+              <ParlamentarBadgesTema parlamentarId={senId} casa="senado" ano={currentAnalise.ano} max={4} />
             </div>
           </div>
         </div>
