@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History, Sparkles, Tag,
+  TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History, Sparkles, Tag, Brain, Scale,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { SankeyMigration } from "@/components/insights/SankeyMigration";
 import { useVotacaoTemas } from "@/hooks/useVotacaoTemas";
+import { FeatureSuggestionsPanel } from "@/components/insights/FeatureSuggestionsPanel";
 
 type Analise = Tables<"analises_deputados">;
 
@@ -28,9 +29,11 @@ const CENTRO_MIN = 35;
 const CENTRO_MAX = 70;
 const CENTRO_MID = (CENTRO_MIN + CENTRO_MAX) / 2;
 
-function getTendency(score: number): "governo" | "oposicao" | "neutro" {
-  if (score >= CENTRO_MID + 3) return "governo";
-  if (score <= CENTRO_MID - 3) return "oposicao";
+function getTendency(score: number, mode: "tradicional" | "ia" = "tradicional"): "governo" | "oposicao" | "neutro" {
+  // IA mode: zona neutra mais estreita (peso ponderado por confiança)
+  const margin = mode === "ia" ? 1.5 : 3;
+  if (score >= CENTRO_MID + margin) return "governo";
+  if (score <= CENTRO_MID - margin) return "oposicao";
   return "neutro";
 }
 
@@ -51,6 +54,7 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   const [prevAnalises, setPrevAnalises] = useState<Analise[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
   const [temaFilter, setTemaFilter] = useState("all");
+  const [weightMode, setWeightMode] = useState<"tradicional" | "ia">("tradicional");
   const { temasAtivos, classifying, classify, temas: temasData } = useVotacaoTemas(ano, "camara");
 
   const fetchPrevYear = useCallback(async (y: number) => {
@@ -71,9 +75,9 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   );
 
   const { leanGov, leanOpo, neutro, chartData, avgScore } = useMemo(() => {
-    const lg = centroDeputados.filter((d) => getTendency(Number(d.score)) === "governo");
-    const lo = centroDeputados.filter((d) => getTendency(Number(d.score)) === "oposicao");
-    const n = centroDeputados.filter((d) => getTendency(Number(d.score)) === "neutro");
+    const lg = centroDeputados.filter((d) => getTendency(Number(d.score), weightMode) === "governo");
+    const lo = centroDeputados.filter((d) => getTendency(Number(d.score), weightMode) === "oposicao");
+    const n = centroDeputados.filter((d) => getTendency(Number(d.score), weightMode) === "neutro");
     const avg = centroDeputados.length > 0
       ? centroDeputados.reduce((sum, d) => sum + Number(d.score), 0) / centroDeputados.length : 0;
     const chart = centroDeputados.map((d) => ({
@@ -82,10 +86,10 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
       score: Number(d.score),
       partido: d.deputado_partido,
       id: d.deputado_id,
-      tendency: getTendency(Number(d.score)),
+      tendency: getTendency(Number(d.score), weightMode),
     }));
     return { leanGov: lg, leanOpo: lo, neutro: n, chartData: chart, avgScore: avg };
-  }, [centroDeputados]);
+  }, [centroDeputados, weightMode]);
 
   const migrations = useMemo<Migration[]>(() => {
     if (prevAnalises.length === 0) return [];
@@ -172,6 +176,14 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
           {temasAtivos.length > 0 && (
             <span className="text-[9px] text-muted-foreground">{temasData.length} votações classificadas</span>
           )}
+          <div className="ml-auto flex items-center gap-1 border border-border rounded-md p-0.5" title="Ponderação Tradicional usa o score puro; IA estreita a zona neutra usando confiança da classificação temática.">
+            <Button size="sm" variant={weightMode === "tradicional" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("tradicional")}>
+              <Scale size={10} /> Tradicional
+            </Button>
+            <Button size="sm" variant={weightMode === "ia" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("ia")}>
+              <Brain size={10} /> IA
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
