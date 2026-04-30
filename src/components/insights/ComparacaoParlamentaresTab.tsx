@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar } from "recharts";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
 import { getBancada } from "@/lib/bancadas";
+import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -172,6 +173,7 @@ function MiniProfile({ p, rank, houseRank }: { p?: Parlamentar | null; rank: num
         <span className="inline-flex items-center gap-1"><Vote size={12} /> {p.totalVotos} votos</span>
         <span>{p.votosAlinhados} alinhados</span>
       </div>
+      <ParlamentarBadgesTema parlamentarId={p.id} casa={p.casa === "Câmara" ? "camara" : "senado"} ano={p.ano} max={3} />
     </div>
   );
 }
