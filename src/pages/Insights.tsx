@@ -677,6 +677,14 @@ export default function Insights() {
             <TabsContent value="ao-vivo">
               <AgendaAoVivo />
             </TabsContent>
+
+            <TabsContent value="meu-partido">
+              <PartidoInsightsTab ano={ano} deputados={rawDeputados} senadores={rawSenadores} partidos={availablePartidos} />
+            </TabsContent>
+
+            <TabsContent value="ideias" className="space-y-4">
+              <FeatureSuggestionsPanel context="insights" />
+            </TabsContent>
           </Tabs>
         )}
       </main>
