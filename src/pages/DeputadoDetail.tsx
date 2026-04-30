@@ -43,6 +43,7 @@ import { ProfileScoreNolan } from "@/components/ProfileScoreNolan";
 import { InfograficoButton } from "@/components/InfograficoButton";
 import { EmendasTab } from "@/components/EmendasTab";
 import { ParlamentarContact } from "@/components/ParlamentarContact";
+import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
 
 type Analise = Tables<"analises_deputados">;
 type VotoDeputado = Tables<"votos_deputados">;
