@@ -345,6 +345,7 @@ export default function DeputadoDetail() {
               <div className="mt-2">
                 <ParlamentarContact parlamentarId={depId} casa="camara" compact />
               </div>
+              <ParlamentarBadgesTema parlamentarId={depId} casa="camara" ano={currentAnalise.ano} max={4} />
             </div>
           </div>
         </div>
