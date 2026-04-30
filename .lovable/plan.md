@@ -1,97 +1,158 @@
-Plano de implementação
+## Objetivo
 
-1. Melhorar a aba Emendas $ em Insights
-- Manter o filtro de ano no topo e destacar que ele controla a consulta antes do recálculo dos rankings.
-- Adicionar um filtro de tema específico ao bloco principal de controles, junto do ano, para o ranking de risco ser recalculado imediatamente no recorte selecionado.
-- Ajustar o ranking por tema e por autor para respeitar explicitamente os filtros de ano, tema, tipo, UF, subtema, risco e busca.
-- Incluir botões separados de exportação do ranking de risco:
-  - CSV por tema
-  - CSV por autor
-  - PDF por tema
-  - PDF por autor
-- Os arquivos terão: nome do tema/autor, risco, total de emendas, empenhado, liquidado, pago, taxa de pagamento (pago/liquidado) e taxa de execução (pago/empenhado).
+Tornar o sync de Emendas $ resiliente a limites diários do Portal da Transparência, melhorar a aba Comparar com viés partidário (Gov/Centro/Oposição), criar ferramentas de insight para filiados, badges temáticas dos parlamentares, cache de execução com anti-duplicação, ponderação tradicional vs IA na aba Tendências e melhorias de observabilidade.
 
-2. Modal ao clicar nas linhas do ranking
-- Tornar as linhas dos rankings clicáveis.
-- Ao clicar em um tema ou autor, abrir um modal com:
-  - resumo do grupo selecionado;
-  - totais de empenhado, liquidado e pago;
-  - taxa de pagamento e taxa de execução;
-  - contagem por risco;
-  - lista das emendas que justificam o ranking.
-- Em cada emenda do modal, mostrar:
-  - código, tipo, ano, autor, partido/UF;
-  - tema/subtema, função/subfunção;
-  - valores empenhado/liquidado/pago;
-  - taxas de pagamento e execução;
-  - risco e estágio;
-  - resumo IA;
-  - botão de link quando houver URL oficial ou quando for possível montar uma busca oficial pelo código.
+## 1. Sync com rate-limit diário (Portal da Transparência)
 
-3. Links de emendas PIX, individuais e bancada
-- Ampliar o tipo local `EmendaOrcamentaria` para ler `raw_data` e possíveis campos de link/documentos vindos do Portal.
-- Criar uma função segura no front para extrair link oficial de:
-  - `raw_data.link`, `raw_data.url`, `raw_data.uri`, `raw_data.urlDocumento`, documentos etc., quando existirem;
-  - fallback para busca no Portal da Transparência com o código/número da emenda.
-- Mostrar botão “Ver emenda” nas linhas de dados completos e no modal de validação.
-- Evidenciar tipo de emenda no card/tabela: PIX/transferência especial quando o texto indicar, individual, bancada, relator ou comissão.
+O Portal limita ~700 req/dia/chave. Hoje o cron horário pode estourar. Vou implementar um **orçamento diário** persistido + adaptação.
 
-4. Insights adicionais de impacto público
-- Adicionar cards de insights automáticos na aba Emendas $:
-  - municípios/localidades atendidos no recorte;
-  - parlamentares com municípios atendidos;
-  - temas com maior cobertura territorial;
-  - quantidade estimada de escolas/educação, saúde e segurança atendidas com base em tema, subtema, função, subfunção e resumo IA;
-  - maiores gargalos: alto empenho com baixa execução;
-  - concentração por autor/partido/UF.
-- Para “quais escolas foram ajudadas”, usar apenas o que estiver disponível nos dados (`localidade_gasto`, `publico_beneficiado`, `resumo_ia`, `raw_data`/documentos). Se o Portal não fornecer o nome da escola, a interface mostrará como “entidade não identificada no retorno oficial”, evitando inventar dados.
+**Backend** (`sync-emendas-transparencia` + nova tabela `portal_api_quota`):
 
-5. Sync manual de Emendas $ no painel Admin
-- Criar um componente de sync administrativo para Emendas $, ou inserir um card na aba “Syncs”.
-- Controles previstos:
-  - ano;
-  - tipo de emenda: todos, individual, bancada, comissão, relator, PIX/transferência especial quando aplicável;
-  - número de páginas;
-  - incluir documentos.
-- Ao executar, chamar `sync-emendas-transparencia` com os parâmetros escolhidos.
-- Exibir barra de progresso estimada e log visual com etapas: início, buscando Portal, classificação IA, gravação e conclusão/erro.
-- Atualizar contadores e histórico após o sync.
+- Nova tabela `portal_api_quota (date, requests_used, daily_limit default 600, updated_at)` — única linha por dia.
+- Antes de cada `fetchPortal()`, incrementa contador via UPSERT atômico; se `requests_used >= daily_limit`, aborta com erro amigável `"Limite diário do Portal atingido (X/Y). Tente após 00:00."` e marca o run como `error` com `step: "rate_limit"`.
+- **Adaptive paging**: ao detectar latência > 5s em uma página, reduz `paginas` restantes pela metade e loga `step: "adaptive"` ("Reduzindo páginas por lentidão"). Substitui o timeout fixo de 8s por timeout escalonado (10s → 15s → 25s) com retry.
+- **Cron de emendas removido**. O sync de emendas passa a ser **apenas manual** (admin) via UI. Câmara/Senado mantêm cron, mas **emendas $ não consomem cota automaticamente**.
 
-6. Sync manual no perfil do parlamentar
-- Na aba de emendas do perfil parlamentar, adicionar uma seção “Emendas $ do Portal da Transparência”.
-- Botão para sincronizar emendas orçamentárias daquele parlamentar/ano usando `nomeAutor` e ano.
-- Mostrar barra de progresso/log durante a chamada.
-- Depois do sync, carregar e exibir resumo financeiro do parlamentar:
-  - total de emendas $ encontradas;
-  - empenhado, liquidado, pago;
-  - taxa de execução;
-  - riscos por emenda;
-  - links oficiais.
-- Isso será integrado tanto em `DeputadoDetail` quanto em `SenadorDetail`, reutilizando um componente único para evitar duplicação.
+**Migration**:
 
-7. Backend/logs do sync
-- Ajustar a função `sync-emendas-transparencia` para também registrar `sync_runs` e `sync_run_events` com `casa = 'emendas_orcamentarias'`.
-- Registrar eventos reais durante execução: validação, páginas buscadas, registros únicos, classificação IA, gravação, conclusão ou erro.
-- Retornar `runId`, `fetched`, `upserted`, `ano` e resumo para o front.
-- Manter a exigência de login para sync e continuar usando a chave do Portal já configurada.
-- Não abrir escrita pública na tabela de emendas; a gravação continuará restrita à função com credenciais de backend.
+- Cria `portal_api_quota` (RLS: select público, write apenas service_role).
+- Não toca em `sync-camara`/`sync-senado` (não usam Portal).
 
-8. Teste do sync
-- Após a aprovação, implementar e testar a chamada da função com um recorte pequeno, por exemplo ano atual e 1 página.
-- Validar se os logs aparecem no painel e se os dados recalculam o ranking.
-- Verificar o comportamento de erro quando o Portal retorna falha ou sem dados.
+## 2. Sync manual de Emendas $ no Admin (já existe — reforçar)
 
-Arquivos principais a alterar
-- `src/components/insights/EmendasOrcamentariasTab.tsx`
-- `src/components/EmendasTab.tsx`
-- `src/pages/Admin.tsx`
-- `src/pages/DeputadoDetail.tsx`
-- `src/pages/SenadorDetail.tsx`
-- possível novo componente reutilizável para sync/financeiro de emendas por parlamentar
-- `supabase/functions/sync-emendas-transparencia/index.ts`
+Já há um card no Admin. Vou:
 
-Observações técnicas
-- Não vou alterar os arquivos autogerados do backend (`src/integrations/supabase/client.ts` ou `types.ts`).
-- A exportação PDF continuará usando o utilitário existente `downloadPdfReport`.
-- Onde o dado oficial não trouxer entidade beneficiada específica, a interface vai indicar ausência do dado em vez de gerar inferências falsas.
-- Se o Portal não fornecer link direto em algum item, o botão usará um fallback de busca oficial pelo código/número da emenda.
+- Adicionar **selector de tipo (PIX/Individual/Bancada/Comissão/Relator)** + **input de autor** opcional.
+- Mostrar "**Cota do Portal hoje: X/Y**" puxado de `portal_api_quota`.
+- Substituir progress por `<SyncLogViewer>` real (via `useSyncRun`) em vez do timer fake.
+- Botão "Tentar novamente" aparece quando o último run falhou — reusa último payload.
+
+## 3. Cache de execução + anti-duplicação
+
+Nova tabela `sync_query_cache`:
+
+- Colunas: `id, cache_key (text unique), endpoint, params (jsonb), response (jsonb), created_at, expires_at, hit_count`.
+- TTL padrão 6h para listagens, 24h para `documentos`.
+- `fetchPortal()` calcula `cache_key = sha256(endpoint + params)`; se hit válido → retorna do cache, **não consome cota**, loga `step: "cache_hit"` ("Cache: pulou requisição X").
+- Upsert em **lotes de 100** (já é) com `onConflict: "codigo_emenda"` — anti-duplicação preservada e reforçada por `Map` em memória antes do upsert.
+- **Painel Admin**: novo card "Cache de Sync" mostrando totais (hits/miss últimas 24h, % economia, quota usada). Eventos do log que tenham `step: "cache_hit"` recebem badge azul "CACHE" no `SyncLogViewer`.
+
+## 4. Modal de erro com retry contextual
+
+`SyncLogViewer` ganha:
+
+- Quando `status === "error"`, exibe banner com a `error` (já vem de `sync_runs.error`) + botão **"Tentar novamente"** que reinvoca a função com o mesmo payload (passado por prop `onRetry`).
+- Identifica erros conhecidos: timeout do Portal, rate limit, JSON inválido — cada um com ação sugerida ("Aguardar X min", "Reduzir páginas", "Ver cota").
+- Aplicado em: `EmendasOrcamentariasTab` (modal de validação), `Admin` (card de sync), `EmendasFinanceirasParlamentar` (perfil).
+
+## 5. Aba Comparar — bloco partidário Gov/Centro/Oposição
+
+Em `ComparacaoParlamentaresTab.tsx`, adicionar **terceira coluna** abaixo dos dois MiniProfile:
+
+- **Card "Esperado vs Real"** por parlamentar:
+  - Lê `getBancada(partido)` de `src/lib/bancadas.ts` → "Base Gov" (esperado ≥70%), "Oposição" (≤35%), "Independente" (35-70%).
+  - Compara com `score` real → mostra delta colorido + label "Alinhado ao esperado", "Mais governista que o partido", "Dissidente".
+- **Card "Coerência partidária"**: agrega média do partido no ano e mostra desvio do parlamentar vs partido (pp).
+- Novo gráfico de barras lado-a-lado: score real vs média do partido vs faixa esperada.
+
+## 6. Ferramentas para filiados/apoiadores
+
+Nova aba **"Meu Partido"** em Insights (`PartidoInsightsTab.tsx`):
+
+- Selector de partido (preenchido por padrão se usuário tiver partido salvo no perfil — adicionar `partido_filiacao` em `profiles`).
+- Métricas: ranking interno, dissidentes top-5, alinhamento médio, evolução anual, temas onde o partido mais vota a favor/contra.
+- "Radar de coerência": top dissidentes (parlamentares com maior delta vs média do partido).
+- Botão "Acompanhar este partido" — salva preferência e habilita notificações futuras (placeholder).
+- Export CSV/PDF do relatório do partido.
+
+## 7. Badges temáticas por parlamentar
+
+Função utilitária + view materializada `parlamentar_badges_tema`:
+
+- Para cada parlamentar/ano, agrega votos por `votacao_temas.tema` (já existe).
+- Se ≥70% dos votos em um tema foram "Sim" → badge **"Pró-{tema}"**; ≥70% "Não" → **"Anti-{tema}"**; senão sem badge para esse tema.
+- Limita a top 3 badges mais expressivos.
+- Renderiza em `DeputyCard`, `SenadorCard`, `MiniProfile` da aba Comparar e nos detalhes (`DeputadoDetail`/`SenadorDetail`).
+- Migration cria a view + função `get_parlamentar_badges(_id, _casa, _ano)`.
+
+## 8. Aba Tendências — Ponderação Tradicional vs IA
+
+Em `CentroTrendsCamara.tsx` e `CentroTrendsSenado.tsx`:
+
+- Toggle no topo: **"Ponderação: [Tradicional] [IA]"**.
+- **Tradicional** (atual): conta voto cru = orientação do governo.
+- **IA**: novo edge function `weight-votes-ia` que pondera cada votação por `votacao_temas.confianca` × peso de impacto (PEC=1.5, MP=1.3, PL=1.0, REQ=0.5) já classificado por IA. Resultado salvo em nova tabela `analises_ponderadas (parlamentar_id, casa, ano, score_ia, components jsonb)` — recalculado on-demand por ano.
+- Gráfico exibe ambas as curvas quando o toggle estiver em "Comparar".
+- Tooltip explica a diferença ao passar o mouse no toggle.
+
+## 9. Sugestões de novas features
+
+Novo componente `FeatureSuggestionsPanel` exibido em **Tendências** e **Visão Geral**:
+
+- "Heatmap mensal": calor de alinhamento por mês × partido.
+- "Detecção de viradas": parlamentares que mudaram >20pp entre dois anos.
+- "Alerta de votação atípica": parlamentar que votou contra a média do partido em 3+ votações seguidas.
+- "Comparador histórico de governos": agrega scores médios por mandato presidencial.
+- "Ranking de produtividade": cruza proposições autorais × emendas pagas × presença.
+- Cada cartão tem botão "Sugerir" (telemetria simples) e "Implementar" (link para abrir uma issue interna — registrar em nova tabela `feature_suggestions`).
+
+## Arquivos afetados
+
+**Novos**:
+
+- `supabase/migrations/<ts>_portal_quota_cache_badges.sql` (4 tabelas + view + funções)
+- `supabase/functions/weight-votes-ia/index.ts`
+- `src/components/insights/PartidoInsightsTab.tsx`
+- `src/components/insights/FeatureSuggestionsPanel.tsx`
+- `src/components/ParlamentarBadgesTema.tsx`
+- `src/lib/portalCache.ts` (helpers de cache)
+- `src/hooks/usePortalQuota.ts`
+
+**Editados**:
+
+- `supabase/functions/sync-emendas-transparencia/index.ts` (cache, quota, adaptive)
+- `supabase/migrations/...` adicional para remover cron de emendas (se houver)
+- `src/components/SyncLogViewer.tsx` (retry button + error parsing + badge cache)
+- `src/hooks/useSyncRun.ts` (suporte a onRetry)
+- `src/pages/Admin.tsx` (card de quota + cache)
+- `src/pages/Insights.tsx` (nova aba "Meu Partido")
+- `src/components/insights/ComparacaoParlamentaresTab.tsx` (bloco bancada)
+- `src/components/insights/EmendasOrcamentariasTab.tsx` (retry no modal)
+- `src/components/CentroTrendsCamara.tsx` + `CentroTrendsSenado.tsx` (toggle Trad/IA)
+- `src/components/DeputyCard.tsx` + `SenadorCard.tsx` (badges temáticas)
+- `src/components/insights/EmendasFinanceirasParlamentar.tsx` (retry)
+
+## Detalhes técnicos
+
+```text
+sync-emendas-transparencia
+  ├── checkQuota() → portal_api_quota (UPSERT atômico)
+  ├── fetchPortal()
+  │     ├── cacheLookup(key) → sync_query_cache (TTL)
+  │     ├── if hit: log "cache_hit", return
+  │     ├── else: fetch (timeout escalonado), incQuota
+  │     └── cacheStore(key, response)
+  ├── adaptivePaging (latency > 5s → halve)
+  └── on error: sync_runs.error + step "rate_limit"|"timeout"
+```
+
+```text
+weight-votes-ia (novo)
+  Input: { ano, casa }
+  → Lê votos + votacao_temas + tipo proposição
+  → score = Σ(voto_alinhado × confianca_ia × peso_tipo) / Σ(confianca × peso)
+  → Upsert em analises_ponderadas
+```
+
+## Pontos de atenção
+
+- Cron de emendas é removido para respeitar cota — Câmara/Senado seguem horários (não usam Portal).
+- Badges temáticas requerem `votacao_temas` populado; já existe pipeline `classify-votacoes`.
+- `analises_ponderadas` é opcional (só preenche quando usuário ativa toggle IA).
+- Cache anti-duplicação usa `Map` em memória + `onConflict` no upsert — sem risco de dupes.
+
+&nbsp;
+
+Scan vulnerabilidades e bugs. Otimize código. 
+
+Aba Ao Vivo servir para o Senado também. 
