@@ -12,6 +12,8 @@ import { AskAI } from "@/components/insights/AskAI";
 import { ThemeDistribution } from "@/components/insights/ThemeDistribution";
 import { PartidosPorTema } from "@/components/insights/PartidosPorTema";
 import { PrioridadesTab } from "@/components/insights/PrioridadesTab";
+import { PartidoInsightsTab } from "@/components/insights/PartidoInsightsTab";
+import { FeatureSuggestionsPanel } from "@/components/insights/FeatureSuggestionsPanel";
 import { ComparacaoParlamentaresTab } from "@/components/insights/ComparacaoParlamentaresTab";
 import { EmendasOrcamentariasTab } from "@/components/insights/EmendasOrcamentariasTab";
 import {
