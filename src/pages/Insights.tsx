@@ -31,7 +31,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark, Lightbulb, Flag } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
 const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
