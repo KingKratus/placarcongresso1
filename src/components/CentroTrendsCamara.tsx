@@ -398,6 +398,8 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
         <TendencyList title="Tendência Oposição" icon={<TrendingDown size={14} className="text-oposicao" />}
           deputados={leanOpo} accentClass="oposicao" onClick={onDeputadoClick} />
       </div>
+
+      <FeatureSuggestionsPanel context="tendencias-camara" />
     </div>
   );
 }
