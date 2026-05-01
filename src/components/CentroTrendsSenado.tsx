@@ -220,6 +220,14 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
           {temasAtivos.length > 0 && (
             <span className="text-[9px] text-muted-foreground">{temasData.length} votações classificadas</span>
           )}
+          <div className="ml-auto flex items-center gap-1 border border-border rounded-md p-0.5" title="Tradicional usa o score puro; IA estreita a zona neutra (margem 1.5pp vs 3pp).">
+            <Button size="sm" variant={weightMode === "tradicional" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("tradicional")}>
+              <Scale size={10} /> Tradicional
+            </Button>
+            <Button size="sm" variant={weightMode === "ia" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("ia")}>
+              <Brain size={10} /> IA
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
