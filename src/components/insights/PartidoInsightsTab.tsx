@@ -157,8 +157,11 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
                   {stats.dissidentes.length === 0 ? <p className="text-xs text-muted-foreground">Partido coeso — nenhum dissidente claro.</p> : (
                     <ul className="space-y-1">
                       {stats.dissidentes.map((d) => (
-                        <li key={`${d.casa}-${d.id}`} className="flex items-center justify-between text-xs">
-                          <span className="truncate">{d.nome} <Badge variant="outline" className="text-[9px] ml-1">{d.casa}</Badge></span>
+                        <li key={`${d.casa}-${d.id}`} className="flex items-center justify-between text-xs gap-2">
+                          <button onClick={() => navigate(`/${d.casa === "Câmara" ? "deputado" : "senador"}/${d.id}`)} className="truncate text-left hover:underline flex items-center gap-1">
+                            {d.nome} <Badge variant="outline" className="text-[9px] ml-1">{d.casa}</Badge>
+                            <ExternalLink size={10} className="text-muted-foreground" />
+                          </button>
                           <span className={d.score > stats.avg ? "text-governo font-bold" : "text-oposicao font-bold"}>
                             {d.score > stats.avg ? <TrendingUp size={10} className="inline" /> : <TrendingDown size={10} className="inline" />}
                             {" "}{d.score.toFixed(1)}% ({d.score > stats.avg ? "+" : ""}{(d.score - stats.avg).toFixed(1)}pp)
@@ -166,6 +169,48 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
                         </li>
                       ))}
                     </ul>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Distribuição por bloco */}
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Users size={14} className="text-primary" /> Atuação por bloco (Gov / Centro / Opo)</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                  {(["Governo", "Centro", "Oposição"] as const).map((cls) => stats.blocos[cls].length > 0 && (
+                    <div key={cls} className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Atuando como {cls} ({stats.blocos[cls].length})</p>
+                      <div className="flex flex-wrap gap-1">
+                        {stats.blocos[cls].slice(0, 30).map((x) => (
+                          <button key={`${x.casa}-${x.id}`} onClick={() => navigate(`/${x.casa === "Câmara" ? "deputado" : "senador"}/${x.id}`)} className="text-[10px] bg-muted hover:bg-accent rounded-full px-2 py-0.5">
+                            {x.nome.split(" ").slice(0, 2).join(" ")} <b className="ml-1">{x.score.toFixed(0)}%</b>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Distribuição por tema */}
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Tag size={14} className="text-primary" /> Distribuição por tema (votos do partido em {ano})</CardTitle></CardHeader>
+                <CardContent>
+                  {loadingTemas ? <p className="text-xs text-muted-foreground py-4 text-center">Carregando temas...</p> : temaDist.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-4 text-center">Sem votações classificadas por tema neste ano.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={Math.max(220, temaDist.length * 28)}>
+                      <BarChart data={temaDist} layout="vertical" margin={{ left: 80 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis type="number" />
+                        <YAxis type="category" dataKey="tema" width={75} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="sim" stackId="a" name="Sim" fill="hsl(var(--governo))" />
+                        <Bar dataKey="nao" stackId="a" name="Não" fill="hsl(var(--oposicao))" />
+                        <Bar dataKey="outros" stackId="a" name="Outros" fill="hsl(var(--muted-foreground))" />
+                      </BarChart>
+                    </ResponsiveContainer>
                   )}
                 </CardContent>
               </Card>
