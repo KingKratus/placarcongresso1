@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History, Sparkles, Tag, Brain, Scale,
 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -113,6 +114,7 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   }, [analises, prevAnalises]);
 
   const classChanges = useMemo(() => migrations.filter((m) => m.classPrev !== m.classCurr), [migrations]);
+  const alertasMudanca = useMemo(() => migrations.filter((m) => Math.abs(m.delta) >= 20).slice(0, 5), [migrations]);
 
   // Sankey flow data: count transitions between classifications
   const sankeyFlows = useMemo(() => {
@@ -266,6 +268,21 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
           ) : (
             <div className="space-y-4">
               {/* Sankey diagram */}
+              {alertasMudanca.length > 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mb-2">
+                    <AlertTriangle size={12} /> Movimentações alarmantes (≥20pp)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {alertasMudanca.map((m) => (
+                      <button key={`alert-${m.id}`} onClick={() => onDeputadoClick?.(m.id)} className="text-[10px] bg-background border border-amber-500/30 rounded-full px-2 py-0.5 hover:bg-amber-500/10">
+                        <span className="font-bold">{m.nome.split(" ").slice(0, 2).join(" ")}</span>
+                        <span className={`ml-1 font-black ${m.delta > 0 ? "text-governo" : "text-oposicao"}`}>{m.delta > 0 ? "+" : ""}{m.delta.toFixed(1)}pp</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {sankeyFlows.length > 0 && (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">

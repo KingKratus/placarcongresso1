@@ -10,6 +10,9 @@ import {
   Minus,
   Sparkles,
   Tag,
+  Brain,
+  Scale,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,9 +47,10 @@ const CENTRO_MIN = 35;
 const CENTRO_MAX = 70;
 const CENTRO_MID = (CENTRO_MIN + CENTRO_MAX) / 2;
 
-function getTendency(score: number): "governo" | "oposicao" | "neutro" {
-  if (score >= CENTRO_MID + 3) return "governo";
-  if (score <= CENTRO_MID - 3) return "oposicao";
+function getTendency(score: number, mode: "tradicional" | "ia" = "tradicional"): "governo" | "oposicao" | "neutro" {
+  const margin = mode === "ia" ? 1.5 : 3;
+  if (score >= CENTRO_MID + margin) return "governo";
+  if (score <= CENTRO_MID - margin) return "oposicao";
   return "neutro";
 }
 
@@ -74,6 +78,7 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
   const [prevAnalises, setPrevAnalises] = useState<Analise[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
   const [temaFilter, setTemaFilter] = useState("all");
+  const [weightMode, setWeightMode] = useState<"tradicional" | "ia">("tradicional");
   const { temasAtivos, classifying, classify, temas: temasData } = useVotacaoTemas(ano, "senado");
   const fetchPrevYear = useCallback(async (y: number) => {
     setLoadingPrev(true);
@@ -96,9 +101,9 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
   );
 
   const { leanGov, leanOpo, neutro, chartData, avgScore } = useMemo(() => {
-    const lg = centroSenadores.filter((s) => getTendency(Number(s.score)) === "governo");
-    const lo = centroSenadores.filter((s) => getTendency(Number(s.score)) === "oposicao");
-    const n = centroSenadores.filter((s) => getTendency(Number(s.score)) === "neutro");
+    const lg = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "governo");
+    const lo = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "oposicao");
+    const n = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "neutro");
     const avg = centroSenadores.length > 0
       ? centroSenadores.reduce((sum, s) => sum + Number(s.score), 0) / centroSenadores.length
       : 0;
@@ -108,10 +113,13 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
       score: Number(s.score),
       partido: s.senador_partido,
       id: s.senador_id,
-      tendency: getTendency(Number(s.score)),
+      tendency: getTendency(Number(s.score), weightMode),
     }));
     return { leanGov: lg, leanOpo: lo, neutro: n, chartData: chart, avgScore: avg };
-  }, [centroSenadores]);
+  }, [centroSenadores, weightMode]);
+
+  // Alertas: maiores migrações com delta > 20pp
+  const alertasMigracao = useMemo<Migration[]>(() => [], []);
 
   // Year-over-year migrations
   const migrations = useMemo<Migration[]>(() => {
@@ -149,6 +157,8 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
   const classChanges = useMemo(() => {
     return migrations.filter((m) => m.classPrev !== m.classCurr);
   }, [migrations]);
+
+  const alertasMudanca = useMemo(() => migrations.filter((m) => Math.abs(m.delta) >= 20).slice(0, 5), [migrations]);
 
   // Sankey flow data
   const sankeyFlows = useMemo(() => {
@@ -212,6 +222,14 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
           {temasAtivos.length > 0 && (
             <span className="text-[9px] text-muted-foreground">{temasData.length} votações classificadas</span>
           )}
+          <div className="ml-auto flex items-center gap-1 border border-border rounded-md p-0.5" title="Tradicional usa o score puro; IA estreita a zona neutra (margem 1.5pp vs 3pp).">
+            <Button size="sm" variant={weightMode === "tradicional" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("tradicional")}>
+              <Scale size={10} /> Tradicional
+            </Button>
+            <Button size="sm" variant={weightMode === "ia" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("ia")}>
+              <Brain size={10} /> IA
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -307,6 +325,21 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
           ) : (
             <div className="space-y-4">
               {/* Sankey diagram */}
+              {alertasMudanca.length > 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mb-2">
+                    <AlertTriangle size={12} /> Movimentações alarmantes (≥20pp)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {alertasMudanca.map((m) => (
+                      <button key={`alert-${m.senador_id}`} onClick={() => onSenadorClick?.(m.senador_id)} className="text-[10px] bg-background border border-amber-500/30 rounded-full px-2 py-0.5 hover:bg-amber-500/10">
+                        <span className="font-bold">{m.nome.split(" ").slice(0, 2).join(" ")}</span>
+                        <span className={`ml-1 font-black ${m.delta > 0 ? "text-governo" : "text-oposicao"}`}>{m.delta > 0 ? "+" : ""}{m.delta.toFixed(1)}pp</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {sankeyFlows.length > 0 && (
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">

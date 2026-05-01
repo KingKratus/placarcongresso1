@@ -140,7 +140,17 @@ export function EmendasOrcamentariasTab() {
       setNotice(error.message); setSyncError(error.message); setSyncStatus("error");
       setSyncEvents((prev) => [...prev, { id: "error", step: "error", message: `Falha no sync: ${error.message}`, created_at: new Date().toISOString() }]);
     } else {
-      setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas atualizadas para ${ano}.`); setSyncStatus("completed");
+      const empty = (data as any)?.empty_reason as string | undefined;
+      const fallback = (data as any)?.fallback_usado;
+      const anoUsado = (data as any)?.ano_usado;
+      if (empty) {
+        setNotice(`⚠️ ${empty}`);
+      } else if (fallback && anoUsado && anoUsado !== Number(ano)) {
+        setNotice(`Portal sem dados para ${ano} — usei fallback automático: ${data?.upserted || 0} emendas de ${anoUsado} foram gravadas. Mude o filtro de ano para visualizá-las.`);
+      } else {
+        setNotice(`Sincronização concluída: ${data?.upserted || 0} emendas atualizadas para ${ano}.`);
+      }
+      setSyncStatus("completed");
       setSyncEvents((prev) => [...prev, { id: "done", step: "concluido", message: `Run ${data?.runId || "local"}: ${data?.fetched || 0} retornadas; ${data?.upserted || 0} gravadas/classificadas.`, created_at: new Date().toISOString() }]);
     }
     await load(); setSyncing(false);

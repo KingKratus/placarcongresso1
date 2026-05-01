@@ -1,12 +1,15 @@
-import { useMemo, useState } from "react";
-import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote, Flag } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote, Flag, Brain, Scale, Info, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar } from "recharts";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
 import { getBancada } from "@/lib/bancadas";
 import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
+import { supabase } from "@/integrations/supabase/client";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -121,11 +124,11 @@ function alignmentLabel(score: number, bancada: string) {
   return { text: bancada === "Base Gov" ? "Dissidente do governo" : "Abaixo do esperado", tone: "oposicao" as const };
 }
 
-function PartyAlignmentCard({ p, partyAvg }: { p: Parlamentar; partyAvg: number | null }) {
+function PartyAlignmentCard({ p, partyAvg, effective }: { p: Parlamentar; partyAvg: number | null; effective: number }) {
   const bancada = getBancada(p.partido || "");
   const [lo, hi] = expectedRange(bancada);
-  const lbl = alignmentLabel(p.score, bancada);
-  const desvio = partyAvg !== null ? p.score - partyAvg : null;
+  const lbl = alignmentLabel(effective, bancada);
+  const desvio = partyAvg !== null ? effective - partyAvg : null;
   const toneClass = lbl.tone === "governo" ? "text-governo" : lbl.tone === "oposicao" ? "text-oposicao" : "text-primary";
   return (
     <div className="rounded-lg border border-border p-3 space-y-2 bg-card">
@@ -137,7 +140,7 @@ function PartyAlignmentCard({ p, partyAvg }: { p: Parlamentar; partyAvg: number 
       </div>
       <p className={`text-xs font-bold ${toneClass}`}>{lbl.text}</p>
       <div className="text-[10px] text-muted-foreground">
-        Faixa esperada: <b>{lo}–{hi}%</b> · Score real: <b>{p.score.toFixed(1)}%</b>
+        Faixa esperada: <b>{lo}–{hi}%</b> · Score real: <b>{effective.toFixed(1)}%</b>
       </div>
       {desvio !== null && (
         <div className="text-[10px] text-muted-foreground">
@@ -178,6 +181,60 @@ function MiniProfile({ p, rank, houseRank }: { p?: Parlamentar | null; rank: num
   );
 }
 
+function PartyBreakdownCard({ p, all }: { p: Parlamentar; all: Parlamentar[] }) {
+  if (!p.partido) return null;
+  const colegas = all.filter((x) => x.partido === p.partido && x.casa === p.casa);
+  if (colegas.length === 0) return null;
+  const blocos = {
+    Governo: colegas.filter((x) => x.classificacao === "Governo"),
+    Centro: colegas.filter((x) => x.classificacao === "Centro"),
+    Oposição: colegas.filter((x) => x.classificacao === "Oposição"),
+  };
+  const blocoMaior = (Object.entries(blocos) as [keyof typeof blocos, Parlamentar[]][]).sort((a, b) => b[1].length - a[1].length)[0];
+  const minhaCls = p.classificacao;
+  const dissidente = blocoMaior[1].length > 0 && minhaCls !== blocoMaior[0];
+  const avgFor = (arr: Parlamentar[]) => arr.length > 0 ? arr.reduce((s, x) => s + x.score, 0) / arr.length : 0;
+  const accent = (cls: string) => cls === "Governo" ? "text-governo border-governo/40 bg-governo/5" : cls === "Oposição" ? "text-oposicao border-oposicao/40 bg-oposicao/5" : "text-centro border-centro/40 bg-centro/5";
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-3 bg-card">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+          <Users size={10} /> Detalhamento do partido — {p.partido} ({p.casa})
+        </span>
+        {dissidente ? (
+          <Badge className="text-[9px] bg-amber-500 text-white border-0">Dissidente do bloco majoritário</Badge>
+        ) : (
+          <Badge variant="outline" className="text-[9px]">Alinhado ao bloco majoritário</Badge>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        {colegas.length} colegas · Bloco majoritário do partido: <b>{blocoMaior[0]}</b> ({blocoMaior[1].length})
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {(Object.entries(blocos) as [string, Parlamentar[]][]).map(([cls, lista]) => (
+          <div key={cls} className={`rounded-md border p-2 ${accent(cls)}`}>
+            <p className="text-[9px] uppercase font-black tracking-widest">{cls}</p>
+            <p className="text-lg font-black">{lista.length}</p>
+            <p className="text-[9px] text-muted-foreground">média {avgFor(lista).toFixed(1)}%</p>
+          </div>
+        ))}
+      </div>
+      {(["Governo", "Centro", "Oposição"] as const).map((cls) => blocos[cls].length > 0 && (
+        <div key={cls} className="space-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{cls} ({blocos[cls].length})</p>
+          <div className="flex flex-wrap gap-1">
+            {blocos[cls].slice(0, 30).map((x) => (
+              <span key={x.key} className="text-[10px] bg-muted rounded-full px-2 py-0.5" title={`${x.nome} — ${x.score.toFixed(1)}%`}>
+                {x.nome.split(" ").slice(0, 2).join(" ")} <b className="ml-1">{x.score.toFixed(0)}%</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeputados, allYearsSenadores, ano }: Props) {
   const current = useMemo(() => [
     ...deputados.map(normalizeDeputado),
@@ -186,6 +243,37 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
 
   const [leftKey, setLeftKey] = useState("");
   const [rightKey, setRightKey] = useState("");
+  const [weightMode, setWeightMode] = useState<"tradicional" | "ia">("tradicional");
+  const [iaScores, setIaScores] = useState<Record<string, number>>({});
+
+  // Carrega scores IA das análises ponderadas
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("analises_ponderadas")
+        .select("parlamentar_id, casa, ano, score_ia")
+        .eq("ano", ano)
+        .limit(2000);
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => {
+        const casa = r.casa === "camara" ? "camara" : "senado";
+        map[`${casa}-${r.parlamentar_id}`] = Number(r.score_ia) || 0;
+      });
+      setIaScores(map);
+    })();
+    return () => { cancelled = true; };
+  }, [ano]);
+
+  const effectiveScore = (p: Parlamentar) => {
+    if (weightMode === "ia") {
+      const k = `${p.casa === "Câmara" ? "camara" : "senado"}-${p.id}`;
+      const ia = iaScores[k];
+      if (ia && ia > 0) return ia;
+    }
+    return p.score;
+  };
 
   const selectedA = current.find((p) => p.key === leftKey) || current[0] || null;
   const selectedB = current.find((p) => p.key === rightKey) || current.find((p) => p.key !== selectedA?.key) || null;
@@ -275,10 +363,46 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
             <MiniProfile p={selectedB} rank={rankOf(allCurrentRank, selectedB)} houseRank={rankOf(houseList(selectedB), selectedB)} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {selectedA && <PartyAlignmentCard p={selectedA} partyAvg={avgFor(selectedA)} />}
-            {selectedB && <PartyAlignmentCard p={selectedB} partyAvg={avgFor(selectedB)} />}
+          {/* Toggle Tradicional/IA */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ponderação:</span>
+            <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
+              <Button size="sm" variant={weightMode === "tradicional" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("tradicional")}>
+                <Scale size={10} /> Tradicional
+              </Button>
+              <Button size="sm" variant={weightMode === "ia" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("ia")}>
+                <Brain size={10} /> IA
+              </Button>
+            </div>
+            {weightMode === "ia" && Object.keys(iaScores).length === 0 && (
+              <span className="text-[10px] text-amber-600">Sem scores IA salvos para {ano}; usando tradicional como fallback.</span>
+            )}
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {selectedA && <PartyAlignmentCard p={selectedA} partyAvg={avgFor(selectedA)} effective={effectiveScore(selectedA)} />}
+            {selectedB && <PartyAlignmentCard p={selectedB} partyAvg={avgFor(selectedB)} effective={effectiveScore(selectedB)} />}
+          </div>
+
+          {/* Metodologia expansível */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1 w-full justify-start"><Info size={12} /> Metodologia do cálculo</Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-[11px] leading-relaxed">
+                <p><b>Tradicional:</b> Percentual de votos do parlamentar coincidentes com a orientação do <b>Líder do Governo</b> nas votações nominais do ano. <code>score = alinhados / total × 100</code>.</p>
+                <p><b>IA (ponderada):</b> Cada voto é multiplicado pela <b>confiança da classificação temática</b> (0–1) e pelo <b>peso do tipo de proposição</b>. Pesos: <b>PEC 1.5</b>, <b>MPV 1.3</b>, <b>PLP 1.2</b>, <b>PL 1.0</b>, demais <b>0.7</b>. Fórmula: <code>score_ia = Σ(alinhado × confiança × peso) / Σ(confiança × peso)</code>.</p>
+                <p><b>Bancada esperada:</b> Base Gov <b>70–100%</b>, Centro <b>35–70%</b>, Oposição <b>0–35%</b>. Faixa derivada do partido oficial via <code>getBancada()</code>.</p>
+                <p><b>Desvio:</b> diferença em pontos percentuais (pp) entre o score do parlamentar e a média do partido na mesma casa. Desvio positivo = mais governista que o partido; negativo = mais opositor.</p>
+                <p><b>Modo IA:</b> a zona neutra também encolhe (margem 1.5pp em vez de 3pp ao redor do ponto médio 52.5%), aumentando a sensibilidade a tendências.</p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Detalhamento do partido (blocos Gov/Centro/Opo) */}
+          {selectedA && <PartyBreakdownCard p={selectedA} all={current} />}
+          {selectedB && selectedB.partido !== selectedA?.partido && <PartyBreakdownCard p={selectedB} all={current} />}
         </CardContent>
       </Card>
 

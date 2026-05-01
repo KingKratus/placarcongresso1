@@ -17,6 +17,7 @@ const BodySchema = z.object({
   codigoSubfuncao: z.string().trim().max(20).optional(),
   paginas: z.number().int().min(1).max(10).default(3),
   incluirDocumentos: z.boolean().default(false),
+  tentarAnoAnterior: z.boolean().default(true),
 });
 
 type RawEmenda = Record<string, unknown>;
@@ -205,37 +206,62 @@ serve(async (req) => {
     runId = run.id;
     await log("inicio", `Sync iniciado para ${body.ano}${body.nomeAutor ? ` · autor: ${body.nomeAutor}` : ""}.`);
 
-    const fetched: RawEmenda[] = [];
-    let maxPaginas = body.paginas;
-    let cacheHits = 0;
-    for (let pagina = 1; pagina <= maxPaginas; pagina++) {
-      await log("portal", `Buscando página ${pagina}/${maxPaginas} no Portal...`);
-      const res = await fetchPortal(sb, "/emendas", apiKey, { pagina, ano: body.ano, tipoEmenda: body.tipoEmenda, nomeAutor: body.nomeAutor, codigoFuncao: body.codigoFuncao, codigoSubfuncao: body.codigoSubfuncao }, log, { ttlHours: 6, timeoutMs: 15000 });
-      const arr = Array.isArray(res.data) ? (res.data as RawEmenda[]) : [];
-      fetched.push(...arr);
-      if (res.fromCache) cacheHits++;
-      await log("portal", `Página ${pagina}: ${arr.length} registros (${res.fromCache ? "cache" : `${res.latencyMs}ms`}).`);
-      // Adaptive paging: se latência > 5s, reduz páginas restantes pela metade
-      if (!res.fromCache && res.latencyMs > 5000 && pagina < maxPaginas) {
-        const novoMax = pagina + Math.max(1, Math.floor((maxPaginas - pagina) / 2));
-        if (novoMax < maxPaginas) {
-          await log("adaptive", `Latência alta (${res.latencyMs}ms). Reduzindo de ${maxPaginas} para ${novoMax} páginas para manter o sync.`);
-          maxPaginas = novoMax;
+    async function fetchYear(targetAno: number) {
+      const acc: RawEmenda[] = [];
+      let maxPaginas = body.paginas;
+      let cacheHits = 0;
+      for (let pagina = 1; pagina <= maxPaginas; pagina++) {
+        await log("portal", `Buscando página ${pagina}/${maxPaginas} (ano ${targetAno}) no Portal...`);
+        const res = await fetchPortal(sb, "/emendas", apiKey, { pagina, ano: targetAno, tipoEmenda: body.tipoEmenda, nomeAutor: body.nomeAutor, codigoFuncao: body.codigoFuncao, codigoSubfuncao: body.codigoSubfuncao }, log, { ttlHours: 6, timeoutMs: 15000 });
+        const arr = Array.isArray(res.data) ? (res.data as RawEmenda[]) : [];
+        acc.push(...arr);
+        if (res.fromCache) cacheHits++;
+        await log("portal", `Ano ${targetAno} pág ${pagina}: ${arr.length} registros (${res.fromCache ? "cache" : `${res.latencyMs}ms`}).`);
+        if (!res.fromCache && res.latencyMs > 5000 && pagina < maxPaginas) {
+          const novoMax = pagina + Math.max(1, Math.floor((maxPaginas - pagina) / 2));
+          if (novoMax < maxPaginas) {
+            await log("adaptive", `Latência alta (${res.latencyMs}ms). Reduzindo de ${maxPaginas} para ${novoMax} páginas para manter o sync.`);
+            maxPaginas = novoMax;
+          }
         }
+        if (arr.length === 0) break;
       }
-      if (arr.length === 0) break;
+      return { acc, cacheHits, maxPaginas };
     }
-    if (cacheHits > 0) await log("cache_summary", `${cacheHits} de ${maxPaginas} páginas vieram do cache.`);
 
-    const unique = Array.from(new Map(fetched.map((e) => [text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${body.ano}-${text(e.nomeAutor)}`, e])).values());
+    let anoUsado = body.ano;
+    let { acc: fetched, cacheHits } = await fetchYear(body.ano);
+    let emptyReason: string | null = null;
+    let fallbackUsado = false;
+    if (fetched.length === 0 && body.tentarAnoAnterior && !body.nomeAutor) {
+      const anoFallback = body.ano - 1;
+      await log("fallback", `Portal retornou 0 registros para ${body.ano}. Tentando automaticamente ${anoFallback}...`);
+      const r = await fetchYear(anoFallback);
+      if (r.acc.length > 0) {
+        fetched = r.acc;
+        cacheHits += r.cacheHits;
+        anoUsado = anoFallback;
+        fallbackUsado = true;
+        await log("fallback", `Fallback bem-sucedido: ${r.acc.length} emendas em ${anoFallback}.`);
+      } else {
+        emptyReason = `O Portal da Transparência ainda não publicou emendas executadas para ${body.ano} nem para ${anoFallback}. Tente um ano anterior ou aguarde a próxima atualização do governo.`;
+        await log("vazio", emptyReason);
+      }
+    } else if (fetched.length === 0) {
+      emptyReason = `O Portal da Transparência não retornou emendas para ${body.ano}${body.nomeAutor ? ` (autor: ${body.nomeAutor})` : ""}. Pode estar fora do período de execução publicado.`;
+      await log("vazio", emptyReason);
+    }
+    if (cacheHits > 0) await log("cache_summary", `${cacheHits} páginas vieram do cache.`);
+
+    const unique = Array.from(new Map(fetched.map((e) => [text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${anoUsado}-${text(e.nomeAutor)}`, e])).values());
     await log("dedupe", `${unique.length} emendas únicas serão classificadas por IA.`);
     const classified = await classify(unique);
     await log("ia", "Classificação temática por IA concluída.");
 
     const names = unique.map((e) => normalizeName(text(e.nomeAutor || e.autor))).filter(Boolean);
     const [deps, sens] = await Promise.all([
-      sb.from("analises_deputados").select("deputado_id,deputado_nome,deputado_partido,deputado_uf").eq("ano", body.ano).limit(700),
-      sb.from("analises_senadores").select("senador_id,senador_nome,senador_partido,senador_uf").eq("ano", body.ano).limit(100),
+      sb.from("analises_deputados").select("deputado_id,deputado_nome,deputado_partido,deputado_uf").eq("ano", anoUsado).limit(700),
+      sb.from("analises_senadores").select("senador_id,senador_nome,senador_partido,senador_uf").eq("ano", anoUsado).limit(100),
     ]);
     const people = [
       ...(deps.data || []).map((d: any) => ({ id: d.deputado_id, casa: "camara", nome: d.deputado_nome, partido: d.deputado_partido, uf: d.deputado_uf, key: normalizeName(d.deputado_nome) })),
@@ -256,8 +282,8 @@ serve(async (req) => {
         } catch { documentos = []; }
       }
       rows.push({
-        codigo_emenda: text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${body.ano}-${text(e.nomeAutor)}`,
-        ano: Number(e.ano || body.ano), tipo_emenda: text(e.tipoEmenda) || "Não informado", numero_emenda: text(e.numeroEmenda) || null,
+        codigo_emenda: text(e.codigoEmenda) || `${text(e.numeroEmenda)}-${anoUsado}-${text(e.nomeAutor)}`,
+        ano: Number(e.ano || anoUsado), tipo_emenda: text(e.tipoEmenda) || "Não informado", numero_emenda: text(e.numeroEmenda) || null,
         autor: text(e.autor) || null, nome_autor: text(e.nomeAutor || e.autor) || null,
         parlamentar_id: person?.id || null, casa: person?.casa || null, partido: person?.partido || null, uf: person?.uf || ufFromLocalidade(text(e.localidadeDoGasto)),
         localidade_gasto: text(e.localidadeDoGasto) || null, funcao: text(e.funcao) || null, subfuncao: text(e.subfuncao) || null,
@@ -273,9 +299,13 @@ serve(async (req) => {
       const { error } = await sb.from("emendas_orcamentarias_transparencia").upsert(rows.slice(i, i + 100), { onConflict: "codigo_emenda" });
       if (error) throw error;
     }
-    await log("concluido", `${rows.length} emendas gravadas/atualizadas.`);
-    await sb.from("sync_runs").update({ status: "completed", finished_at: new Date().toISOString(), summary: { fetched: fetched.length, upserted: rows.length, ano: body.ano } }).eq("id", runId);
-    return response({ ok: true, fetched: fetched.length, upserted: rows.length, ano: body.ano, runId });
+    await log("concluido", emptyReason ? `Sync concluído sem dados: ${emptyReason}` : `${rows.length} emendas gravadas/atualizadas (ano efetivo: ${anoUsado}).`);
+    await sb.from("sync_runs").update({
+      status: "completed",
+      finished_at: new Date().toISOString(),
+      summary: { fetched: fetched.length, upserted: rows.length, ano_solicitado: body.ano, ano_usado: anoUsado, fallback_usado: fallbackUsado, empty_reason: emptyReason },
+    }).eq("id", runId);
+    return response({ ok: true, fetched: fetched.length, upserted: rows.length, ano_solicitado: body.ano, ano_usado: anoUsado, fallback_usado: fallbackUsado, empty_reason: emptyReason, runId });
   } catch (e) {
     console.error("sync-emendas-transparencia error", e);
     const message = e instanceof Error ? e.message : "Erro desconhecido";

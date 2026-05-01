@@ -1,158 +1,175 @@
-## Objetivo
+## Escopo
 
-Tornar o sync de Emendas $ resiliente a limites diários do Portal da Transparência, melhorar a aba Comparar com viés partidário (Gov/Centro/Oposição), criar ferramentas de insight para filiados, badges temáticas dos parlamentares, cache de execução com anti-duplicação, ponderação tradicional vs IA na aba Tendências e melhorias de observabilidade.
+Tudo abaixo será implementado em uma única passada após aprovação.
 
-## 1. Sync com rate-limit diário (Portal da Transparência)
+---
 
-O Portal limita ~700 req/dia/chave. Hoje o cron horário pode estourar. Vou implementar um **orçamento diário** persistido + adaptação.
+### 1. Aba "Meu Partido" — finalização
 
-**Backend** (`sync-emendas-transparencia` + nova tabela `portal_api_quota`):
+Arquivo: `src/components/insights/PartidoInsightsTab.tsx`
 
-- Nova tabela `portal_api_quota (date, requests_used, daily_limit default 600, updated_at)` — única linha por dia.
-- Antes de cada `fetchPortal()`, incrementa contador via UPSERT atômico; se `requests_used >= daily_limit`, aborta com erro amigável `"Limite diário do Portal atingido (X/Y). Tente após 00:00."` e marca o run como `error` com `step: "rate_limit"`.
-- **Adaptive paging**: ao detectar latência > 5s em uma página, reduz `paginas` restantes pela metade e loga `step: "adaptive"` ("Reduzindo páginas por lentidão"). Substitui o timeout fixo de 8s por timeout escalonado (10s → 15s → 25s) com retry.
-- **Cron de emendas removido**. O sync de emendas passa a ser **apenas manual** (admin) via UI. Câmara/Senado mantêm cron, mas **emendas $ não consomem cota automaticamente**.
+- Salvar partido de filiação no `profiles.partido_filiacao` já existe — adicionar:
+  - Auto-seleção do partido salvo ao abrir a aba.
+  - Seção **"Dissidentes"** já presente — manter, mas adicionar CTA "Ver perfil" (link `/deputado/:id` ou `/senador/:id`).
+  - Nova seção **"Distribuição por Tema"**: agrupa votos do partido por tema (via `votacao_temas` + `votos_deputados/senadores`) mostrando % alinhado/contrário do partido em cada tema no ano selecionado. Gráfico horizontal de barras empilhadas (favor/contra/abstenção).
+  - Card "Posição esperada vs real" comparando média do partido com a faixa esperada da bancada (Gov 70-100, Centro 35-70, Opo 0-35).
+  - Insights individuais **separados por bloco**: lista de parlamentares do partido segmentados em "Atuando como Governo / Centro / Oposição" baseado no `classificacao` individual — para mobilização do filiado entender quem é dissidente.
 
-**Migration**:
+---
 
-- Cria `portal_api_quota` (RLS: select público, write apenas service_role).
-- Não toca em `sync-camara`/`sync-senado` (não usam Portal).
+### 2. Toggle Tradicional/IA na aba Comparar
 
-## 2. Sync manual de Emendas $ no Admin (já existe — reforçar)
+Arquivo: `src/components/insights/ComparacaoParlamentaresTab.tsx`
 
-Já há um card no Admin. Vou:
+- Adicionar toggle (Tradicional | IA) no topo do card.
+- Quando IA ativo:
+  - Buscar score IA da tabela `analises_ponderadas` (campo `score_ia`) por `parlamentar_id + casa + ano`. Se inexistente, usa `score_tradicional`.
+  - Recalcula "Bancada esperada × real" usando o score IA.
+  - Margens da zona neutra reduzidas (proporcional ao `confianca_ia`).
+- Adicionar **card "Metodologia"** expansível explicando:
+  - Tradicional: % de votos alinhados com líder do governo.
+  - IA: `Σ(voto_alinhado × confianca_tema × peso_tipo_proposicao) / Σ(pesos)`. Pesos: PEC=1.5, PLP=1.2, PL=1.0, MPV=1.3, outros=0.7. Confiança vem da classificação temática IA.
+  - Limiares de bancada esperada e como o desvio é calculado.
 
-- Adicionar **selector de tipo (PIX/Individual/Bancada/Comissão/Relator)** + **input de autor** opcional.
-- Mostrar "**Cota do Portal hoje: X/Y**" puxado de `portal_api_quota`.
-- Substituir progress por `<SyncLogViewer>` real (via `useSyncRun`) em vez do timer fake.
-- Botão "Tentar novamente" aparece quando o último run falhou — reusa último payload.
+---
 
-## 3. Cache de execução + anti-duplicação
+### 3. Insights individuais por partido na aba Comparar
 
-Nova tabela `sync_query_cache`:
+Arquivo: `src/components/insights/ComparacaoParlamentaresTab.tsx`
 
-- Colunas: `id, cache_key (text unique), endpoint, params (jsonb), response (jsonb), created_at, expires_at, hit_count`.
-- TTL padrão 6h para listagens, 24h para `documentos`.
-- `fetchPortal()` calcula `cache_key = sha256(endpoint + params)`; se hit válido → retorna do cache, **não consome cota**, loga `step: "cache_hit"` ("Cache: pulou requisição X").
-- Upsert em **lotes de 100** (já é) com `onConflict: "codigo_emenda"` — anti-duplicação preservada e reforçada por `Map` em memória antes do upsert.
-- **Painel Admin**: novo card "Cache de Sync" mostrando totais (hits/miss últimas 24h, % economia, quota usada). Eventos do log que tenham `step: "cache_hit"` recebem badge azul "CACHE" no `SyncLogViewer`.
+Quando o usuário escolhe um parlamentar, adicionar abaixo do MiniProfile um novo card **"Detalhamento do Partido"**:
 
-## 4. Modal de erro com retry contextual
+- Lista todos os colegas do mesmo partido **separados em três blocos**: Governo / Centro / Oposição (baseado em `classificacao`).
+- Cada parlamentar é clicável (vai ao perfil).
+- Mostra média de cada bloco e contagem.
+- Indica se o parlamentar selecionado está **alinhado** ou **dissidente** em relação à média do bloco majoritário do partido.
+- Útil para o filiado mobilizar dissidentes.
 
-`SyncLogViewer` ganha:
+---
 
-- Quando `status === "error"`, exibe banner com a `error` (já vem de `sync_runs.error`) + botão **"Tentar novamente"** que reinvoca a função com o mesmo payload (passado por prop `onRetry`).
-- Identifica erros conhecidos: timeout do Portal, rate limit, JSON inválido — cada um com ação sugerida ("Aguardar X min", "Reduzir páginas", "Ver cota").
-- Aplicado em: `EmendasOrcamentariasTab` (modal de validação), `Admin` (card de sync), `EmendasFinanceirasParlamentar` (perfil).
+### 4. Aba "Alertas"
 
-## 5. Aba Comparar — bloco partidário Gov/Centro/Oposição
+Nova aba no `src/pages/Insights.tsx` + novo componente `src/components/insights/AlertasTab.tsx`.
 
-Em `ComparacaoParlamentaresTab.tsx`, adicionar **terceira coluna** abaixo dos dois MiniProfile:
+Detecta automaticamente eventos alarmantes:
 
-- **Card "Esperado vs Real"** por parlamentar:
-  - Lê `getBancada(partido)` de `src/lib/bancadas.ts` → "Base Gov" (esperado ≥70%), "Oposição" (≤35%), "Independente" (35-70%).
-  - Compara com `score` real → mostra delta colorido + label "Alinhado ao esperado", "Mais governista que o partido", "Dissidente".
-- **Card "Coerência partidária"**: agrega média do partido no ano e mostra desvio do parlamentar vs partido (pp).
-- Novo gráfico de barras lado-a-lado: score real vs média do partido vs faixa esperada.
+- **Migrações abruptas**: parlamentares que mudaram de classificação (Gov ↔ Opo) entre o ano anterior e atual com delta > 20pp.
+- **Dissidência extrema**: parlamentares cujo score difere > 25pp da média do próprio partido.
+- **Emendas com risco Alto e valor > R$ 5M** (de `emendas_orcamentarias_transparencia`).
+- **Quota Portal Transparência > 80%** (alerta operacional para admin).
+- **Sync com erro nas últimas 24h** (`sync_runs.status = 'error'`).
+- **Proposições prioritárias travadas** (sem evento há > 90 dias) — usa `tramitacoes_cache.ultima_atualizacao`.
 
-## 6. Ferramentas para filiados/apoiadores
+Cada alerta tem severidade (info/warning/danger), botão para abrir o item e timestamp. Filtro por severidade e tipo.
 
-Nova aba **"Meu Partido"** em Insights (`PartidoInsightsTab.tsx`):
+---
 
-- Selector de partido (preenchido por padrão se usuário tiver partido salvo no perfil — adicionar `partido_filiacao` em `profiles`).
-- Métricas: ranking interno, dissidentes top-5, alinhamento médio, evolução anual, temas onde o partido mais vota a favor/contra.
-- "Radar de coerência": top dissidentes (parlamentares com maior delta vs média do partido).
-- Botão "Acompanhar este partido" — salva preferência e habilita notificações futuras (placeholder).
-- Export CSV/PDF do relatório do partido.
+### 5. Bloco "Alertas Recentes" na aba Tendências
 
-## 7. Badges temáticas por parlamentar
+Em `src/components/CentroTrendsCamara.tsx` e `src/components/CentroTrendsSenado.tsx`, no topo da migração entre anos, adicionar pequeno card "Movimentações alarmantes detectadas (delta > 20pp)" listando até 5 casos.
 
-Função utilitária + view materializada `parlamentar_badges_tema`:
+---
 
-- Para cada parlamentar/ano, agrega votos por `votacao_temas.tema` (já existe).
-- Se ≥70% dos votos em um tema foram "Sim" → badge **"Pró-{tema}"**; ≥70% "Não" → **"Anti-{tema}"**; senão sem badge para esse tema.
-- Limita a top 3 badges mais expressivos.
-- Renderiza em `DeputyCard`, `SenadorCard`, `MiniProfile` da aba Comparar e nos detalhes (`DeputadoDetail`/`SenadorDetail`).
-- Migration cria a view + função `get_parlamentar_badges(_id, _casa, _ano)`.
+### 6. Toggle Tradicional/IA em CentroTrendsSenado
 
-## 8. Aba Tendências — Ponderação Tradicional vs IA
+Arquivo: `src/components/CentroTrendsSenado.tsx`
 
-Em `CentroTrendsCamara.tsx` e `CentroTrendsSenado.tsx`:
+- Replicar lógica do `CentroTrendsCamara.tsx`: state `weightMode`, função `getTendency(score, mode)` com margem 1.5 (IA) vs 3 (tradicional), botão toggle no header.
+- Atualizar `leanGov/leanOpo/neutro/chartData` para usar `weightMode`.
 
-- Toggle no topo: **"Ponderação: [Tradicional] [IA]"**.
-- **Tradicional** (atual): conta voto cru = orientação do governo.
-- **IA**: novo edge function `weight-votes-ia` que pondera cada votação por `votacao_temas.confianca` × peso de impacto (PEC=1.5, MP=1.3, PL=1.0, REQ=0.5) já classificado por IA. Resultado salvo em nova tabela `analises_ponderadas (parlamentar_id, casa, ano, score_ia, components jsonb)` — recalculado on-demand por ano.
-- Gráfico exibe ambas as curvas quando o toggle estiver em "Comparar".
-- Tooltip explica a diferença ao passar o mouse no toggle.
+---
 
-## 9. Sugestões de novas features
+### 7. Fix Base do Governo — tela troca de método mas continua mostrando alinhamento com líder
 
-Novo componente `FeatureSuggestionsPanel` exibido em **Tendências** e **Visão Geral**:
+Arquivos: `src/pages/Index.tsx`, `src/pages/Senado.tsx`, `src/components/StatsPanel.tsx`, `src/components/StatsPanelSenado.tsx`, `src/components/ComparisonView.tsx`, `src/components/ComparisonViewSenado.tsx`.
 
-- "Heatmap mensal": calor de alinhamento por mês × partido.
-- "Detecção de viradas": parlamentares que mudaram >20pp entre dois anos.
-- "Alerta de votação atípica": parlamentar que votou contra a média do partido em 3+ votações seguidas.
-- "Comparador histórico de governos": agrega scores médios por mandato presidencial.
-- "Ranking de produtividade": cruza proposições autorais × emendas pagas × presença.
-- Cada cartão tem botão "Sugerir" (telemetria simples) e "Implementar" (link para abrir uma issue interna — registrar em nova tabela `feature_suggestions`).
+**Problema**: o select "Líder do Governo / Média Partido Gov / Bancada" só altera o `govMethod` local mas as `analises_*` no banco têm score calculado com líder do governo. Os cards mostram sempre o mesmo número.
 
-## Arquivos afetados
+**Solução**:
 
-**Novos**:
+- Criar um `useMemo` que recalcula score conforme método:
+  - `lider`: usa `analise.score` (default).
+  - `partido-gov`: para cada parlamentar, score = % de votos coincidentes com a moda do partido governista (PT) — calcula client-side com base nos `votos_deputados/senadores` cacheados ou na `analises_*` do partido governista.
+  - `bancada`: usa orientações de bancada do partido do parlamentar.
+- Re-deriva `classificacao` (Gov/Centro/Opo) com base nesse novo score e passa o array recalculado para `ComparisonView`/`ComparisonViewSenado`.
+- Como cálculo voto-a-voto pode ser pesado, usar abordagem simples e correta: para `partido-gov`, calcular a média do partido governista (PT) e exibir o **delta de cada parlamentar vs essa média**, classificando: |delta| ≤ 10 = Governo, ≤ 25 = Centro, > 25 = Oposição. Tornar o método **realmente visível** alterando os números.
+- Atualizar o texto da metodologia para refletir o método ativo.
 
-- `supabase/migrations/<ts>_portal_quota_cache_badges.sql` (4 tabelas + view + funções)
-- `supabase/functions/weight-votes-ia/index.ts`
-- `src/components/insights/PartidoInsightsTab.tsx`
-- `src/components/insights/FeatureSuggestionsPanel.tsx`
-- `src/components/ParlamentarBadgesTema.tsx`
-- `src/lib/portalCache.ts` (helpers de cache)
-- `src/hooks/usePortalQuota.ts`
+---
 
-**Editados**:
+### 8. Fix Projetos — votos zerados no front
 
-- `supabase/functions/sync-emendas-transparencia/index.ts` (cache, quota, adaptive)
-- `supabase/migrations/...` adicional para remover cron de emendas (se houver)
-- `src/components/SyncLogViewer.tsx` (retry button + error parsing + badge cache)
-- `src/hooks/useSyncRun.ts` (suporte a onRetry)
-- `src/pages/Admin.tsx` (card de quota + cache)
-- `src/pages/Insights.tsx` (nova aba "Meu Partido")
-- `src/components/insights/ComparacaoParlamentaresTab.tsx` (bloco bancada)
-- `src/components/insights/EmendasOrcamentariasTab.tsx` (retry no modal)
-- `src/components/CentroTrendsCamara.tsx` + `CentroTrendsSenado.tsx` (toggle Trad/IA)
-- `src/components/DeputyCard.tsx` + `SenadorCard.tsx` (badges temáticas)
-- `src/components/insights/EmendasFinanceirasParlamentar.tsx` (retry)
+Arquivo: `src/components/insights/ProjetosTab.tsx`, função `openProjectDetail`.
 
-## Detalhes técnicos
+**Problema**: para Senado, quando `votos_senadores` está vazio para a votação, `individualVotes` fica vazio e o breakdown vai zerado. Para Câmara já há fallback à API; falta para Senado e falta também tratamento quando `analises_*` não tem todos os parlamentares (fallback usa só nome do voto).
 
-```text
-sync-emendas-transparencia
-  ├── checkQuota() → portal_api_quota (UPSERT atômico)
-  ├── fetchPortal()
-  │     ├── cacheLookup(key) → sync_query_cache (TTL)
-  │     ├── if hit: log "cache_hit", return
-  │     ├── else: fetch (timeout escalonado), incQuota
-  │     └── cacheStore(key, response)
-  ├── adaptivePaging (latency > 5s → halve)
-  └── on error: sync_runs.error + step "rate_limit"|"timeout"
-```
+**Solução**:
 
-```text
-weight-votes-ia (novo)
-  Input: { ano, casa }
-  → Lê votos + votacao_temas + tipo proposição
-  → score = Σ(voto_alinhado × confianca_ia × peso_tipo) / Σ(confianca × peso)
-  → Upsert em analises_ponderadas
-```
+- Câmara: atual `fetchCamaraApiVotes` ok; garantir que `voto` venha de `tipoVoto` corretamente (alguns retornos da API usam `tipoVoto`/`voto`). Fallback adicional: tentar `https://dadosabertos.camara.leg.br/api/v2/votacoes/{id}` se `/votos` vier vazio.
+- Senado: criar `fetchSenadoApiVotes(codigo)` chamando `https://legis.senado.leg.br/dadosabertos/plenario/votacao/{codigo}.json`, parse de `Votacao.Votos.VotoParlamentar[]` (campos `CodigoParlamentar`, `NomeParlamentar`, `SiglaPartido`, `SiglaUF`, `DescricaoVoto`).
+- Se DB vazio → busca API; se DB tem votos mas analises não tem o parlamentar (faltando nome/partido) → tentar API para enriquecer.
+- Adicionar log no console e mensagem amigável "Sem dados de voto disponíveis no momento" quando ambas as fontes falharem.
 
-## Pontos de atenção
+---
 
-- Cron de emendas é removido para respeitar cota — Câmara/Senado seguem horários (não usam Portal).
-- Badges temáticas requerem `votacao_temas` populado; já existe pipeline `classify-votacoes`.
-- `analises_ponderadas` é opcional (só preenche quando usuário ativa toggle IA).
-- Cache anti-duplicação usa `Map` em memória + `onConflict` no upsert — sem risco de dupes.
+### 9. Sync Emendas $ — diagnóstico e fix
+
+**Diagnóstico já realizado**: o Portal da Transparência retorna **0 registros** para os anos 2025/2026 (executado em 30/abr/2026: 0 registros nas 3 páginas). Anos 2022/2023 retornam dados. O sync **não está quebrado**: o Portal simplesmente ainda não publicou as emendas executadas desses anos novos (delay típico de orçamento federal).
+
+**Solução**:
+
+- Em `supabase/functions/sync-emendas-transparencia/index.ts`:
+  - Quando todas as páginas retornarem 0 registros, gravar `summary.empty_reason = "Portal sem dados publicados para o ano X"` e o status volta `completed` mas com flag.
+  - Tentar fallback: ao detectar 0 registros para o ano solicitado, automaticamente tentar `ano - 1` se nenhum filtro de autor estiver setado, marcando no log.
+  - Adicionar parâmetro opcional `tentarAnoAnterior: boolean` (default `true`).
+- Em `src/components/insights/EmendasOrcamentariasTab.tsx` e nos botões de sync (Admin, perfil): mostrar aviso amarelo quando `summary.empty_reason` estiver presente, com texto: "O Portal ainda não publicou emendas executadas para {ano}. Tente {ano-1} ou aguarde a próxima atualização do governo."
+- Adicionar no painel admin um sub-painel **"Status do Portal por ano"** mostrando quantas emendas existem em `emendas_orcamentarias_transparencia` por ano.
+
+---
+
+### 10. Memória
+
+Atualizar `mem://logic/alignment-calculation-rules` com a fórmula IA ponderada (PEC=1.5, etc.) e o método "partido-gov" como média do partido governista.
+
+---
+
+## Arquivos modificados
+
+- `src/components/insights/PartidoInsightsTab.tsx` (extensão)
+- `src/components/insights/ComparacaoParlamentaresTab.tsx` (toggle IA, metodologia, blocos por partido)
+- `src/components/insights/AlertasTab.tsx` (novo)
+- `src/pages/Insights.tsx` (nova aba Alertas)
+- `src/components/CentroTrendsSenado.tsx` (toggle IA)
+- `src/components/CentroTrendsCamara.tsx` (alertas no topo da migração)
+- `src/components/ComparisonView.tsx` + `ComparisonViewSenado.tsx` (recalcular por método)
+- `src/components/StatsPanel.tsx` + `StatsPanelSenado.tsx` (passar método derivado)
+- `src/pages/Index.tsx` + `src/pages/Senado.tsx` (passar govMethod até ComparisonView)
+- `src/components/insights/ProjetosTab.tsx` (fallback API Senado, melhor handling Câmara)
+- `src/components/insights/EmendasOrcamentariasTab.tsx` (aviso de "ano sem dados")
+- `src/pages/Admin.tsx` (status do Portal por ano)
+- `supabase/functions/sync-emendas-transparencia/index.ts` (empty_reason + fallback ano anterior)
+- `mem://logic/alignment-calculation-rules` (atualização)
+
+Sem migrations de schema necessárias.
 
 &nbsp;
 
-Scan vulnerabilidades e bugs. Otimize código. 
+&nbsp;
 
-Aba Ao Vivo servir para o Senado também. 
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+Detecção de viradas
+
+&nbsp;
+
+Alerta automático de parlamentares com mudança >20pp entre anos.
+
+Alerta de voto atípico
+
+&nbsp;
+
+Notifica quando um parlamentar diverge do partido em 3+ votações seguidas.
