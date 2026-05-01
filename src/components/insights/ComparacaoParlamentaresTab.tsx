@@ -124,11 +124,11 @@ function alignmentLabel(score: number, bancada: string) {
   return { text: bancada === "Base Gov" ? "Dissidente do governo" : "Abaixo do esperado", tone: "oposicao" as const };
 }
 
-function PartyAlignmentCard({ p, partyAvg }: { p: Parlamentar; partyAvg: number | null }) {
+function PartyAlignmentCard({ p, partyAvg, effective }: { p: Parlamentar; partyAvg: number | null; effective: number }) {
   const bancada = getBancada(p.partido || "");
   const [lo, hi] = expectedRange(bancada);
-  const lbl = alignmentLabel(p.score, bancada);
-  const desvio = partyAvg !== null ? p.score - partyAvg : null;
+  const lbl = alignmentLabel(effective, bancada);
+  const desvio = partyAvg !== null ? effective - partyAvg : null;
   const toneClass = lbl.tone === "governo" ? "text-governo" : lbl.tone === "oposicao" ? "text-oposicao" : "text-primary";
   return (
     <div className="rounded-lg border border-border p-3 space-y-2 bg-card">
@@ -140,7 +140,7 @@ function PartyAlignmentCard({ p, partyAvg }: { p: Parlamentar; partyAvg: number 
       </div>
       <p className={`text-xs font-bold ${toneClass}`}>{lbl.text}</p>
       <div className="text-[10px] text-muted-foreground">
-        Faixa esperada: <b>{lo}–{hi}%</b> · Score real: <b>{p.score.toFixed(1)}%</b>
+        Faixa esperada: <b>{lo}–{hi}%</b> · Score real: <b>{effective.toFixed(1)}%</b>
       </div>
       {desvio !== null && (
         <div className="text-[10px] text-muted-foreground">
