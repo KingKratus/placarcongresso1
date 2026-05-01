@@ -309,10 +309,46 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
             <MiniProfile p={selectedB} rank={rankOf(allCurrentRank, selectedB)} houseRank={rankOf(houseList(selectedB), selectedB)} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {selectedA && <PartyAlignmentCard p={selectedA} partyAvg={avgFor(selectedA)} />}
-            {selectedB && <PartyAlignmentCard p={selectedB} partyAvg={avgFor(selectedB)} />}
+          {/* Toggle Tradicional/IA */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ponderação:</span>
+            <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
+              <Button size="sm" variant={weightMode === "tradicional" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("tradicional")}>
+                <Scale size={10} /> Tradicional
+              </Button>
+              <Button size="sm" variant={weightMode === "ia" ? "default" : "ghost"} className="h-7 px-2 text-[10px] gap-1" onClick={() => setWeightMode("ia")}>
+                <Brain size={10} /> IA
+              </Button>
+            </div>
+            {weightMode === "ia" && Object.keys(iaScores).length === 0 && (
+              <span className="text-[10px] text-amber-600">Sem scores IA salvos para {ano}; usando tradicional como fallback.</span>
+            )}
           </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {selectedA && <PartyAlignmentCard p={selectedA} partyAvg={avgFor(selectedA)} effective={effectiveScore(selectedA)} />}
+            {selectedB && <PartyAlignmentCard p={selectedB} partyAvg={avgFor(selectedB)} effective={effectiveScore(selectedB)} />}
+          </div>
+
+          {/* Metodologia expansível */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1 w-full justify-start"><Info size={12} /> Metodologia do cálculo</Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-[11px] leading-relaxed">
+                <p><b>Tradicional:</b> Percentual de votos do parlamentar coincidentes com a orientação do <b>Líder do Governo</b> nas votações nominais do ano. <code>score = alinhados / total × 100</code>.</p>
+                <p><b>IA (ponderada):</b> Cada voto é multiplicado pela <b>confiança da classificação temática</b> (0–1) e pelo <b>peso do tipo de proposição</b>. Pesos: <b>PEC 1.5</b>, <b>MPV 1.3</b>, <b>PLP 1.2</b>, <b>PL 1.0</b>, demais <b>0.7</b>. Fórmula: <code>score_ia = Σ(alinhado × confiança × peso) / Σ(confiança × peso)</code>.</p>
+                <p><b>Bancada esperada:</b> Base Gov <b>70–100%</b>, Centro <b>35–70%</b>, Oposição <b>0–35%</b>. Faixa derivada do partido oficial via <code>getBancada()</code>.</p>
+                <p><b>Desvio:</b> diferença em pontos percentuais (pp) entre o score do parlamentar e a média do partido na mesma casa. Desvio positivo = mais governista que o partido; negativo = mais opositor.</p>
+                <p><b>Modo IA:</b> a zona neutra também encolhe (margem 1.5pp em vez de 3pp ao redor do ponto médio 52.5%), aumentando a sensibilidade a tendências.</p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Detalhamento do partido (blocos Gov/Centro/Opo) */}
+          {selectedA && <PartyBreakdownCard p={selectedA} all={current} />}
+          {selectedB && selectedB.partido !== selectedA?.partido && <PartyBreakdownCard p={selectedB} all={current} />}
         </CardContent>
       </Card>
 
