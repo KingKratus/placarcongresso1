@@ -181,6 +181,60 @@ function MiniProfile({ p, rank, houseRank }: { p?: Parlamentar | null; rank: num
   );
 }
 
+function PartyBreakdownCard({ p, all }: { p: Parlamentar; all: Parlamentar[] }) {
+  if (!p.partido) return null;
+  const colegas = all.filter((x) => x.partido === p.partido && x.casa === p.casa);
+  if (colegas.length === 0) return null;
+  const blocos = {
+    Governo: colegas.filter((x) => x.classificacao === "Governo"),
+    Centro: colegas.filter((x) => x.classificacao === "Centro"),
+    Oposição: colegas.filter((x) => x.classificacao === "Oposição"),
+  };
+  const blocoMaior = (Object.entries(blocos) as [keyof typeof blocos, Parlamentar[]][]).sort((a, b) => b[1].length - a[1].length)[0];
+  const minhaCls = p.classificacao;
+  const dissidente = blocoMaior[1].length > 0 && minhaCls !== blocoMaior[0];
+  const avgFor = (arr: Parlamentar[]) => arr.length > 0 ? arr.reduce((s, x) => s + x.score, 0) / arr.length : 0;
+  const accent = (cls: string) => cls === "Governo" ? "text-governo border-governo/40 bg-governo/5" : cls === "Oposição" ? "text-oposicao border-oposicao/40 bg-oposicao/5" : "text-centro border-centro/40 bg-centro/5";
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-3 bg-card">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1">
+          <Users size={10} /> Detalhamento do partido — {p.partido} ({p.casa})
+        </span>
+        {dissidente ? (
+          <Badge className="text-[9px] bg-amber-500 text-white border-0">Dissidente do bloco majoritário</Badge>
+        ) : (
+          <Badge variant="outline" className="text-[9px]">Alinhado ao bloco majoritário</Badge>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        {colegas.length} colegas · Bloco majoritário do partido: <b>{blocoMaior[0]}</b> ({blocoMaior[1].length})
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {(Object.entries(blocos) as [string, Parlamentar[]][]).map(([cls, lista]) => (
+          <div key={cls} className={`rounded-md border p-2 ${accent(cls)}`}>
+            <p className="text-[9px] uppercase font-black tracking-widest">{cls}</p>
+            <p className="text-lg font-black">{lista.length}</p>
+            <p className="text-[9px] text-muted-foreground">média {avgFor(lista).toFixed(1)}%</p>
+          </div>
+        ))}
+      </div>
+      {(["Governo", "Centro", "Oposição"] as const).map((cls) => blocos[cls].length > 0 && (
+        <div key={cls} className="space-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{cls} ({blocos[cls].length})</p>
+          <div className="flex flex-wrap gap-1">
+            {blocos[cls].slice(0, 30).map((x) => (
+              <span key={x.key} className="text-[10px] bg-muted rounded-full px-2 py-0.5" title={`${x.nome} — ${x.score.toFixed(1)}%`}>
+                {x.nome.split(" ").slice(0, 2).join(" ")} <b className="ml-1">{x.score.toFixed(0)}%</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeputados, allYearsSenadores, ano }: Props) {
   const current = useMemo(() => [
     ...deputados.map(normalizeDeputado),
