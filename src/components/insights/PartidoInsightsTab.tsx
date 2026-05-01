@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Users, TrendingUp, TrendingDown, AlertCircle, Star } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getBancada } from "@/lib/bancadas";
@@ -20,9 +21,12 @@ interface Props {
 export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [partido, setPartido] = useState<string>("");
   const [savedFiliacao, setSavedFiliacao] = useState<string | null>(null);
   const [loadingSave, setLoadingSave] = useState(false);
+  const [temaDist, setTemaDist] = useState<{ tema: string; sim: number; nao: number; outros: number; total: number }[]>([]);
+  const [loadingTemas, setLoadingTemas] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -37,11 +41,11 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
 
   const merged = useMemo(() => {
     const dep = deputados.filter((d) => d.deputado_partido === partido).map((d) => ({
-      id: d.deputado_id, nome: d.deputado_nome, score: Number(d.score || 0),
+      id: d.deputado_id, nome: d.deputado_nome, score: Number(d.score || 0), uf: d.deputado_uf,
       classificacao: d.classificacao, casa: "Câmara" as const, totalVotos: d.total_votos || 0,
     }));
     const sen = senadores.filter((s) => s.senador_partido === partido).map((s) => ({
-      id: s.senador_id, nome: s.senador_nome, score: Number(s.score || 0),
+      id: s.senador_id, nome: s.senador_nome, score: Number(s.score || 0), uf: s.senador_uf,
       classificacao: s.classificacao, casa: "Senado" as const, totalVotos: s.total_votos || 0,
     }));
     return [...dep, ...sen].filter((p) => p.totalVotos > 0);
@@ -54,8 +58,52 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
     const stdev = Math.sqrt(merged.reduce((s, p) => s + (p.score - avg) ** 2, 0) / merged.length);
     const dissidentes = sorted.filter((p) => Math.abs(p.score - avg) > Math.max(15, stdev * 1.2)).slice(0, 5);
     const bancada = getBancada(partido);
-    return { sorted, avg, stdev, dissidentes, bancada, total: merged.length };
+    const blocos = {
+      Governo: sorted.filter((p) => p.classificacao === "Governo"),
+      Centro: sorted.filter((p) => p.classificacao === "Centro"),
+      Oposição: sorted.filter((p) => p.classificacao === "Oposição"),
+    };
+    return { sorted, avg, stdev, dissidentes, bancada, total: merged.length, blocos };
   }, [merged, partido]);
+
+  // Distribuição por tema: usa votacao_temas + votos do partido
+  useEffect(() => {
+    if (!partido || merged.length === 0) { setTemaDist([]); return; }
+    let cancelled = false;
+    (async () => {
+      setLoadingTemas(true);
+      const depIds = merged.filter((p) => p.casa === "Câmara").map((p) => p.id);
+      const senIds = merged.filter((p) => p.casa === "Senado").map((p) => p.id);
+      const [temasRes, depVotosRes, senVotosRes] = await Promise.all([
+        supabase.from("votacao_temas").select("votacao_id, casa, tema").eq("ano", ano).limit(5000),
+        depIds.length > 0
+          ? supabase.from("votos_deputados").select("id_votacao, voto").eq("ano", ano).in("deputado_id", depIds.slice(0, 200)).limit(20000)
+          : Promise.resolve({ data: [] as any[] }),
+        senIds.length > 0
+          ? supabase.from("votos_senadores").select("codigo_sessao_votacao, voto").eq("ano", ano).in("senador_id", senIds.slice(0, 100)).limit(10000)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      if (cancelled) return;
+      const temaMap = new Map<string, string>();
+      (temasRes.data || []).forEach((t: any) => temaMap.set(`${t.casa}-${t.votacao_id}`, t.tema));
+      const counts: Record<string, { sim: number; nao: number; outros: number }> = {};
+      const tally = (key: string, voto: string) => {
+        const tema = temaMap.get(key);
+        if (!tema) return;
+        const v = (voto || "").toLowerCase();
+        counts[tema] = counts[tema] || { sim: 0, nao: 0, outros: 0 };
+        if (v === "sim" || v === "favorável") counts[tema].sim++;
+        else if (v === "não" || v === "nao" || v === "contrário" || v === "contrario") counts[tema].nao++;
+        else counts[tema].outros++;
+      };
+      (depVotosRes.data || []).forEach((v: any) => tally(`camara-${v.id_votacao}`, v.voto));
+      (senVotosRes.data || []).forEach((v: any) => tally(`senado-${v.codigo_sessao_votacao}`, v.voto));
+      const arr = Object.entries(counts).map(([tema, c]) => ({ tema, ...c, total: c.sim + c.nao + c.outros })).filter((x) => x.total >= 5).sort((a, b) => b.total - a.total).slice(0, 10);
+      setTemaDist(arr);
+      setLoadingTemas(false);
+    })();
+    return () => { cancelled = true; };
+  }, [partido, ano, merged]);
 
   const saveFiliacao = async () => {
     if (!user || !partido) return;
