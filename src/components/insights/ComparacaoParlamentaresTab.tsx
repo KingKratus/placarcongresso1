@@ -1,12 +1,15 @@
-import { useMemo, useState } from "react";
-import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote, Flag } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { GitCompareArrows, TrendingUp, TrendingDown, Minus, Trophy, Vote, Flag, Brain, Scale, Info, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar } from "recharts";
 import { ReportEmailButton } from "@/components/ReportEmailButton";
 import { getBancada } from "@/lib/bancadas";
 import { ParlamentarBadgesTema } from "@/components/ParlamentarBadgesTema";
+import { supabase } from "@/integrations/supabase/client";
 
 const CAMARA_COLOR = "hsl(239, 84%, 67%)";
 const SENADO_COLOR = "hsl(160, 84%, 39%)";
@@ -186,6 +189,37 @@ export function ComparacaoParlamentaresTab({ deputados, senadores, allYearsDeput
 
   const [leftKey, setLeftKey] = useState("");
   const [rightKey, setRightKey] = useState("");
+  const [weightMode, setWeightMode] = useState<"tradicional" | "ia">("tradicional");
+  const [iaScores, setIaScores] = useState<Record<string, number>>({});
+
+  // Carrega scores IA das análises ponderadas
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("analises_ponderadas")
+        .select("parlamentar_id, casa, ano, score_ia")
+        .eq("ano", ano)
+        .limit(2000);
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      (data || []).forEach((r: any) => {
+        const casa = r.casa === "camara" ? "camara" : "senado";
+        map[`${casa}-${r.parlamentar_id}`] = Number(r.score_ia) || 0;
+      });
+      setIaScores(map);
+    })();
+    return () => { cancelled = true; };
+  }, [ano]);
+
+  const effectiveScore = (p: Parlamentar) => {
+    if (weightMode === "ia") {
+      const k = `${p.casa === "Câmara" ? "camara" : "senado"}-${p.id}`;
+      const ia = iaScores[k];
+      if (ia && ia > 0) return ia;
+    }
+    return p.score;
+  };
 
   const selectedA = current.find((p) => p.key === leftKey) || current[0] || null;
   const selectedB = current.find((p) => p.key === rightKey) || current.find((p) => p.key !== selectedA?.key) || null;
