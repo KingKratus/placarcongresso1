@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, Target, History, Sparkles, Tag, Brain, Scale,
 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -113,6 +114,7 @@ export function CentroTrendsCamara({ analises, ano, onDeputadoClick }: Props) {
   }, [analises, prevAnalises]);
 
   const classChanges = useMemo(() => migrations.filter((m) => m.classPrev !== m.classCurr), [migrations]);
+  const alertasMudanca = useMemo(() => migrations.filter((m) => Math.abs(m.delta) >= 20).slice(0, 5), [migrations]);
 
   // Sankey flow data: count transitions between classifications
   const sankeyFlows = useMemo(() => {
