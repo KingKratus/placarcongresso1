@@ -158,6 +158,8 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
     return migrations.filter((m) => m.classPrev !== m.classCurr);
   }, [migrations]);
 
+  const alertasMudanca = useMemo(() => migrations.filter((m) => Math.abs(m.delta) >= 20).slice(0, 5), [migrations]);
+
   // Sankey flow data
   const sankeyFlows = useMemo(() => {
     if (prevAnalises.length === 0) return [];
