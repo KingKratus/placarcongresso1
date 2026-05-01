@@ -17,6 +17,7 @@ const BodySchema = z.object({
   codigoSubfuncao: z.string().trim().max(20).optional(),
   paginas: z.number().int().min(1).max(10).default(3),
   incluirDocumentos: z.boolean().default(false),
+  tentarAnoAnterior: z.boolean().default(true),
 });
 
 type RawEmenda = Record<string, unknown>;
