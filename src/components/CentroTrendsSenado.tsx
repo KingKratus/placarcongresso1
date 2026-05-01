@@ -10,6 +10,9 @@ import {
   Minus,
   Sparkles,
   Tag,
+  Brain,
+  Scale,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,9 +47,10 @@ const CENTRO_MIN = 35;
 const CENTRO_MAX = 70;
 const CENTRO_MID = (CENTRO_MIN + CENTRO_MAX) / 2;
 
-function getTendency(score: number): "governo" | "oposicao" | "neutro" {
-  if (score >= CENTRO_MID + 3) return "governo";
-  if (score <= CENTRO_MID - 3) return "oposicao";
+function getTendency(score: number, mode: "tradicional" | "ia" = "tradicional"): "governo" | "oposicao" | "neutro" {
+  const margin = mode === "ia" ? 1.5 : 3;
+  if (score >= CENTRO_MID + margin) return "governo";
+  if (score <= CENTRO_MID - margin) return "oposicao";
   return "neutro";
 }
 
@@ -74,6 +78,7 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
   const [prevAnalises, setPrevAnalises] = useState<Analise[]>([]);
   const [loadingPrev, setLoadingPrev] = useState(false);
   const [temaFilter, setTemaFilter] = useState("all");
+  const [weightMode, setWeightMode] = useState<"tradicional" | "ia">("tradicional");
   const { temasAtivos, classifying, classify, temas: temasData } = useVotacaoTemas(ano, "senado");
   const fetchPrevYear = useCallback(async (y: number) => {
     setLoadingPrev(true);
@@ -96,9 +101,9 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
   );
 
   const { leanGov, leanOpo, neutro, chartData, avgScore } = useMemo(() => {
-    const lg = centroSenadores.filter((s) => getTendency(Number(s.score)) === "governo");
-    const lo = centroSenadores.filter((s) => getTendency(Number(s.score)) === "oposicao");
-    const n = centroSenadores.filter((s) => getTendency(Number(s.score)) === "neutro");
+    const lg = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "governo");
+    const lo = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "oposicao");
+    const n = centroSenadores.filter((s) => getTendency(Number(s.score), weightMode) === "neutro");
     const avg = centroSenadores.length > 0
       ? centroSenadores.reduce((sum, s) => sum + Number(s.score), 0) / centroSenadores.length
       : 0;
@@ -108,10 +113,13 @@ export function CentroTrendsSenado({ analises, ano, onSenadorClick }: CentroTren
       score: Number(s.score),
       partido: s.senador_partido,
       id: s.senador_id,
-      tendency: getTendency(Number(s.score)),
+      tendency: getTendency(Number(s.score), weightMode),
     }));
     return { leanGov: lg, leanOpo: lo, neutro: n, chartData: chart, avgScore: avg };
-  }, [centroSenadores]);
+  }, [centroSenadores, weightMode]);
+
+  // Alertas: maiores migrações com delta > 20pp
+  const alertasMigracao = useMemo<Migration[]>(() => [], []);
 
   // Year-over-year migrations
   const migrations = useMemo<Migration[]>(() => {
