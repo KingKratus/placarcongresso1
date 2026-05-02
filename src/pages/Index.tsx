@@ -323,7 +323,7 @@ const Index = () => {
                     <span className="text-[10px] font-bold text-primary">
                       {alignParty !== "all"
                         ? `vs Média ${alignParty} (${(partyAvgMap[alignParty] || 0).toFixed(1)}%)`
-                        : `vs ${analises.find(a => a.deputado_id === Number(alignParlamentar))?.deputado_nome?.split(" ").slice(0,2).join(" ") || "Parl."}`}
+                        : `vs ${displayAnalises.find(a => a.deputado_id === Number(alignParlamentar))?.deputado_nome?.split(" ").slice(0,2).join(" ") || "Parl."}`}
                     </span>
                     <button onClick={() => { setAlignParty("all"); setAlignParlamentar("all"); }} className="text-primary hover:text-primary/70">
                       <X size={11} />
