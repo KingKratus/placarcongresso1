@@ -684,6 +684,16 @@ export default function Insights() {
               <PartidoInsightsTab ano={ano} deputados={rawDeputados} senadores={rawSenadores} partidos={availablePartidos} />
             </TabsContent>
 
+            <TabsContent value="alertas">
+              <AlertasTab
+                ano={ano}
+                deputados={rawDeputados}
+                senadores={rawSenadores}
+                allYearsDeputados={allYearsDeputados}
+                allYearsSenadores={allYearsSenadores}
+              />
+            </TabsContent>
+
             <TabsContent value="ideias" className="space-y-4">
               <FeatureSuggestionsPanel context="insights" />
             </TabsContent>
