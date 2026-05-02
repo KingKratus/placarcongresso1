@@ -49,14 +49,14 @@ export function AlertasTab({ ano, deputados, senadores, allYearsDeputados, allYe
     const prev = ano - 1;
     const out: Alerta[] = [];
 
-    const buildShift = <T extends { ano: number; score: number | string }>(
-      list: T[],
-      idKey: keyof T,
-      nameKey: keyof T,
-      partyKey: keyof T,
+    const buildShift = (
+      list: any[],
+      idKey: string,
+      nameKey: string,
+      partyKey: string,
       casaLabel: string,
     ) => {
-      const byYear = new Map<string, Map<any, T>>();
+      const byYear = new Map<string, Map<any, any>>();
       list.forEach((r) => {
         const k = String(r.ano);
         if (!byYear.has(k)) byYear.set(k, new Map());
@@ -95,15 +95,15 @@ export function AlertasTab({ ano, deputados, senadores, allYearsDeputados, allYe
   const dissidenciaAlerts = useMemo<Alerta[]>(() => {
     const out: Alerta[] = [];
 
-    const build = <T extends { score: number | string; classificacao: string }>(
-      list: T[],
-      partyKey: keyof T,
-      idKey: keyof T,
-      nameKey: keyof T,
+    const build = (
+      list: any[],
+      partyKey: string,
+      idKey: string,
+      nameKey: string,
       casaLabel: string,
     ) => {
       const valid = list.filter((a) => a.classificacao !== "Sem Dados");
-      const byParty: Record<string, T[]> = {};
+      const byParty: Record<string, any[]> = {};
       valid.forEach((a) => {
         const p = String(a[partyKey] || "N/A");
         (byParty[p] = byParty[p] || []).push(a);
