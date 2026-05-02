@@ -357,13 +357,13 @@ const Index = () => {
               )}
             </TabsContent>
 
-            <TabsContent value="ranking" className="mt-4"><RankingTable analises={analises} /></TabsContent>
-            <TabsContent value="partidos" className="mt-4"><PartyChart analises={analises} /></TabsContent>
+            <TabsContent value="ranking" className="mt-4"><RankingTable analises={displayAnalises as any} /></TabsContent>
+            <TabsContent value="partidos" className="mt-4"><PartyChart analises={displayAnalises as any} /></TabsContent>
             <TabsContent value="comparativo" className="mt-4">
-              <ComparisonView analises={analises} onDeputyClick={(id) => navigate(`/deputado/${id}`)} />
+              <ComparisonView analises={displayAnalises as any} onDeputyClick={(id) => navigate(`/deputado/${id}`)} />
             </TabsContent>
             <TabsContent value="tendencias" className="mt-4">
-              <CentroTrendsCamara analises={analises} ano={ano} onDeputadoClick={(id) => navigate(`/deputado/${id}`)} />
+              <CentroTrendsCamara analises={displayAnalises as any} ano={ano} onDeputadoClick={(id) => navigate(`/deputado/${id}`)} />
             </TabsContent>
           </Tabs>
         </section>
