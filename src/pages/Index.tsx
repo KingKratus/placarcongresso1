@@ -25,6 +25,7 @@ import { useFavoritos } from "@/hooks/useFavoritos";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { exportAnalisesCsv } from "@/lib/exportCsv";
 import { getBancada } from "@/lib/bancadas";
+import { recomputeAnalises } from "@/lib/govMethodRecompute";
 
 const GOV_PARTY = "PT";
 
@@ -102,6 +103,14 @@ const Index = () => {
 
   const analises = periodMode === "all" && aggAnalises ? aggAnalises : yearAnalises;
 
+  // Recomputed analyses according to selected gov-method (lider vs partido-gov).
+  // When "partido-gov" is selected, score becomes similarity to PT's avg score and
+  // classification is recomputed accordingly. UI components receive `displayAnalises`.
+  const displayAnalises = useMemo(
+    () => recomputeAnalises(analises as any[], govMethod, "deputado_partido", GOV_PARTY),
+    [analises, govMethod],
+  );
+
   const handleSync = async () => {
     const runId = crypto.randomUUID();
     syncRun.startRun(runId);
@@ -115,6 +124,7 @@ const Index = () => {
   };
 
   const govPartyStats = useMemo(() => {
+    // Always derived from raw analises (líder method) so the reference avg is stable
     const ptAnalises = analises.filter((a) => (a.deputado_partido || "").toUpperCase() === GOV_PARTY);
     const govPartyAvg = ptAnalises.length > 0
       ? ptAnalises.reduce((s, a) => s + Number(a.score), 0) / ptAnalises.length
@@ -124,15 +134,15 @@ const Index = () => {
   }, [analises]);
 
   const analiseMap = useMemo(() => {
-    const map: Record<number, (typeof analises)[0]> = {};
-    analises.forEach((a) => { map[a.deputado_id] = a; });
+    const map: Record<number, any> = {};
+    displayAnalises.forEach((a) => { map[a.deputado_id] = a; });
     return map;
-  }, [analises]);
+  }, [displayAnalises]);
 
   // Compute party average scores for comparison
   const partyAvgMap = useMemo(() => {
     const map: Record<string, { sum: number; count: number }> = {};
-    analises.forEach(a => {
+    displayAnalises.forEach(a => {
       const p = a.deputado_partido || "";
       if (!map[p]) map[p] = { sum: 0, count: 0 };
       map[p].sum += Number(a.score);
@@ -141,14 +151,14 @@ const Index = () => {
     const result: Record<string, number> = {};
     Object.entries(map).forEach(([p, v]) => { result[p] = v.sum / v.count; });
     return result;
-  }, [analises]);
+  }, [displayAnalises]);
 
   // Reference parliamentarian score
   const refParlamentarScore = useMemo(() => {
     if (alignParlamentar === "all") return null;
-    const a = analises.find(a => a.deputado_id === Number(alignParlamentar));
+    const a = displayAnalises.find(a => a.deputado_id === Number(alignParlamentar));
     return a ? Number(a.score) : null;
-  }, [analises, alignParlamentar]);
+  }, [displayAnalises, alignParlamentar]);
 
   // Compute effective score for a deputy (considering alignment filters)
   const getEffectiveScore = (depId: number): number | null => {
@@ -209,7 +219,7 @@ const Index = () => {
   const sidebarContent = (
     <>
       <StatsPanel
-        analises={analises} totalDeputados={deputados.length}
+        analises={displayAnalises as any} totalDeputados={deputados.length}
         syncing={syncing} onSync={handleSync} user={user}
         lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
         syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
