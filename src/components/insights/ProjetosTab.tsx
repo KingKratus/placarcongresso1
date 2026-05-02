@@ -42,6 +42,7 @@ const VOTE_COLORS: Record<string, string> = {
 
 const PAGE_SIZE = 30;
 const API_BASE = "https://dadosabertos.camara.leg.br/api/v2";
+const SENADO_API_BASE = "https://legis.senado.leg.br/dadosabertos";
 
 interface Props {
   votacoesCamara: VotacaoCamara[];
@@ -187,6 +188,34 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     }
   }, []);
 
+  // Fallback for Senate: fetch votes directly from Senate open data when DB is empty
+  const fetchSenadoApiVotes = useCallback(async (codigoSessao: string): Promise<IndividualVote[]> => {
+    try {
+      const res = await fetch(`${SENADO_API_BASE}/dadosabertos/votacao/${codigoSessao}.json`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const votos =
+        json?.VotacaoVotoParlamentar?.Votacao?.Votos?.VotoParlamentar ||
+        json?.Votacao?.Votos?.VotoParlamentar ||
+        [];
+      const arr = Array.isArray(votos) ? votos : [votos];
+      return arr.map((v: any) => {
+        const voto = (v?.SiglaVoto || v?.DescricaoVoto || "").toString().trim();
+        const cls = classifyVote(voto);
+        return {
+          nome: v?.IdentificacaoParlamentar?.NomeParlamentar || "N/A",
+          partido: v?.IdentificacaoParlamentar?.SiglaPartidoParlamentar || "Sem Partido",
+          uf: v?.IdentificacaoParlamentar?.UfParlamentar || "",
+          voto,
+          votoClass: classifyVoteLabel(cls),
+          foto: v?.IdentificacaoParlamentar?.UrlFotoParlamentar || "",
+        };
+      });
+    } catch {
+      return [];
+    }
+  }, []);
+
   const openProjectDetail = useCallback(async (project: UnifiedProject) => {
     setSelectedProject(project);
     setVoteBreakdown(null);
@@ -302,6 +331,9 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
               foto: sen?.foto,
             };
           });
+        } else {
+          // Fallback: fetch from Senate open data
+          individualVotes = await fetchSenadoApiVotes(project.idVotacao);
         }
 
         const breakdown = buildBreakdown(
@@ -315,7 +347,7 @@ export function ProjetosTab({ votacoesCamara, votacoesSenado, ano }: Props) {
     } finally {
       setLoadingVotes(false);
     }
-  }, [ano, fetchCamaraApiVotes]);
+  }, [ano, fetchCamaraApiVotes, fetchSenadoApiVotes]);
 
   // Filtered individual votes for the dialog
   const filteredVotes = useMemo(() => {

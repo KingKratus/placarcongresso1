@@ -25,6 +25,7 @@ import { useFavoritos } from "@/hooks/useFavoritos";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { exportAnalisesSenadorCsv } from "@/lib/exportCsvSenado";
 import { getBancada } from "@/lib/bancadas";
+import { recomputeAnalises } from "@/lib/govMethodRecompute";
 
 const GOV_PARTY = "PT";
 
@@ -98,6 +99,11 @@ const Senado = () => {
 
   const analises = periodMode === "all" && aggAnalises ? aggAnalises : yearAnalises;
 
+  const displayAnalises = useMemo(
+    () => recomputeAnalises(analises as any[], govMethod, "senador_partido", GOV_PARTY),
+    [analises, govMethod],
+  );
+
   const handleSync = async () => {
     const runId = crypto.randomUUID();
     syncRun.startRun(runId);
@@ -120,14 +126,14 @@ const Senado = () => {
   }, [analises]);
 
   const analiseMap = useMemo(() => {
-    const map: Record<number, (typeof analises)[0]> = {};
-    analises.forEach((a) => { map[a.senador_id] = a; });
+    const map: Record<number, any> = {};
+    displayAnalises.forEach((a) => { map[a.senador_id] = a; });
     return map;
-  }, [analises]);
+  }, [displayAnalises]);
 
   const partyAvgMap = useMemo(() => {
     const map: Record<string, { sum: number; count: number }> = {};
-    analises.forEach(a => {
+    displayAnalises.forEach(a => {
       const p = a.senador_partido || "";
       if (!map[p]) map[p] = { sum: 0, count: 0 };
       map[p].sum += Number(a.score);
@@ -136,13 +142,13 @@ const Senado = () => {
     const result: Record<string, number> = {};
     Object.entries(map).forEach(([p, v]) => { result[p] = v.sum / v.count; });
     return result;
-  }, [analises]);
+  }, [displayAnalises]);
 
   const refParlamentarScore = useMemo(() => {
     if (alignParlamentar === "all") return null;
-    const a = analises.find(a => a.senador_id === Number(alignParlamentar));
+    const a = displayAnalises.find(a => a.senador_id === Number(alignParlamentar));
     return a ? Number(a.score) : null;
-  }, [analises, alignParlamentar]);
+  }, [displayAnalises, alignParlamentar]);
 
   const getEffectiveScore = (senId: number): number | null => {
     const analise = analiseMap[senId];
@@ -198,7 +204,7 @@ const Senado = () => {
   const sidebarContent = (
     <>
       <StatsPanelSenado
-        analises={analises} totalSenadores={senadores.length}
+        analises={displayAnalises as any} totalSenadores={senadores.length}
         syncing={syncing} onSync={handleSync} user={user}
         lastSync={lastSync} canSync={canSync} remainingSeconds={remainingSeconds}
         syncEvents={syncRun.events} syncStatus={syncRun.status} syncError={syncRun.error}
@@ -340,13 +346,13 @@ const Senado = () => {
               )}
             </TabsContent>
 
-            <TabsContent value="ranking" className="mt-4"><RankingTableSenado analises={analises} /></TabsContent>
-            <TabsContent value="partidos" className="mt-4"><PartyChartSenado analises={analises} /></TabsContent>
+            <TabsContent value="ranking" className="mt-4"><RankingTableSenado analises={displayAnalises as any} /></TabsContent>
+            <TabsContent value="partidos" className="mt-4"><PartyChartSenado analises={displayAnalises as any} /></TabsContent>
             <TabsContent value="comparativo" className="mt-4">
-              <ComparisonViewSenado analises={analises} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
+              <ComparisonViewSenado analises={displayAnalises as any} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
             </TabsContent>
             <TabsContent value="tendencias" className="mt-4">
-              <CentroTrendsSenado analises={analises} ano={ano} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
+              <CentroTrendsSenado analises={displayAnalises as any} ano={ano} onSenadorClick={(id) => navigate(`/senador/${id}`)} />
             </TabsContent>
           </Tabs>
         </section>

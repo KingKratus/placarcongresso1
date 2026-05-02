@@ -16,6 +16,7 @@ import { PartidoInsightsTab } from "@/components/insights/PartidoInsightsTab";
 import { FeatureSuggestionsPanel } from "@/components/insights/FeatureSuggestionsPanel";
 import { ComparacaoParlamentaresTab } from "@/components/insights/ComparacaoParlamentaresTab";
 import { EmendasOrcamentariasTab } from "@/components/insights/EmendasOrcamentariasTab";
+import { AlertasTab } from "@/components/insights/AlertasTab";
 import {
   EnhancedTooltip,
   topBottomTooltipRows,
@@ -33,7 +34,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
-import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark, Lightbulb, Flag } from "lucide-react";
+import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark, Lightbulb, Flag, AlertTriangle } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
 const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
@@ -449,6 +450,7 @@ export default function Insights() {
               <TabsTrigger value="ask-ai" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><MessageSquare size={14} /> IA</TabsTrigger>
               <TabsTrigger value="ao-vivo" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Radio size={14} /> Ao Vivo</TabsTrigger>
               <TabsTrigger value="meu-partido" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Flag size={14} /> Meu Partido</TabsTrigger>
+              <TabsTrigger value="alertas" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><AlertTriangle size={14} /> Alertas</TabsTrigger>
               <TabsTrigger value="ideias" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Lightbulb size={14} /> Ideias</TabsTrigger>
             </TabsList>
 
@@ -680,6 +682,16 @@ export default function Insights() {
 
             <TabsContent value="meu-partido">
               <PartidoInsightsTab ano={ano} deputados={rawDeputados} senadores={rawSenadores} partidos={availablePartidos} />
+            </TabsContent>
+
+            <TabsContent value="alertas">
+              <AlertasTab
+                ano={ano}
+                deputados={rawDeputados}
+                senadores={rawSenadores}
+                allYearsDeputados={allYearsDeputados}
+                allYearsSenadores={allYearsSenadores}
+              />
             </TabsContent>
 
             <TabsContent value="ideias" className="space-y-4">
