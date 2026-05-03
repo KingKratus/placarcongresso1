@@ -31,14 +31,19 @@ interface Props {
   senadores?: any[];
 }
 
+const PALETTE: Record<string, string> = {
+  Governo: "hsl(160, 84%, 39%)",
+  Centro: "hsl(239, 84%, 67%)",
+  Oposição: "hsl(347, 77%, 50%)",
+  "Sem Dados": "hsl(var(--muted))",
+};
+
 function getColor(val: number | null, classificacao?: string): string {
-  if (classificacao === "Governo") return "hsl(160, 84%, 39%)";
-  if (classificacao === "Oposição") return "hsl(347, 77%, 50%)";
-  if (classificacao === "Centro") return "hsl(239, 84%, 67%)";
-  if (val === null) return "hsl(var(--muted))";
-  if (val >= 70) return "hsl(160, 84%, 39%)";
-  if (val >= 36) return "hsl(239, 84%, 67%)";
-  return "hsl(347, 77%, 50%)";
+  if (classificacao && PALETTE[classificacao]) return PALETTE[classificacao];
+  if (val === null) return PALETTE["Sem Dados"];
+  if (val >= 70) return PALETTE.Governo;
+  if (val >= 36) return PALETTE.Centro;
+  return PALETTE.Oposição;
 }
 
 function getClassificacao(val: number | null): string {
