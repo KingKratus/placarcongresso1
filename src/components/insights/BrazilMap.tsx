@@ -316,6 +316,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                   })
                   .map((u) => {
                     const val = casa === "camara" ? u.camara : u.senado;
+                    const cls = casa === "camara" ? u.camaraClass : u.senadoClass;
                     return (
                       <div
                         key={u.uf}
@@ -328,7 +329,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                         <div className="flex items-center gap-2">
                           <div
                             className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: getColor(val) }}
+                            style={{ backgroundColor: getColor(val, cls) }}
                           />
                           <span className="text-xs font-semibold">{val !== null ? `${val}%` : "—"}</span>
                         </div>
