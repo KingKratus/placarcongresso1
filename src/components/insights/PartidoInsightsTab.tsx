@@ -122,14 +122,6 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
     }
   };
 
-  // Filtro de busca em "Membros"
-  const filteredSorted = useMemo(() => {
-    if (!stats) return [];
-    const q = memberSearch.trim().toLowerCase();
-    if (!q) return stats.sorted;
-    return stats.sorted.filter((p) => p.nome.toLowerCase().includes(q));
-  }, [stats, memberSearch]);
-
   const blocoColor = (cls: string) =>
     cls === "Governo" ? "bg-governo/10 text-governo border-governo/30" :
     cls === "Oposição" ? "bg-oposicao/10 text-oposicao border-oposicao/30" :
