@@ -13,7 +13,12 @@ interface BulkSyncResult {
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
-const AVAILABLE_YEARS = [CURRENT_YEAR - 3, CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR];
+// Inclui era Bolsonaro (2019-2022) e Lula (2023+) para comparações históricas
+const AVAILABLE_YEARS = (() => {
+  const ys: number[] = [];
+  for (let y = 2019; y <= CURRENT_YEAR; y++) ys.push(y);
+  return ys;
+})();
 
 interface Props {
   userId: string;
@@ -22,7 +27,7 @@ interface Props {
 export function AdminBulkSync({ userId }: Props) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [selectedYears, setSelectedYears] = useState<number[]>([...AVAILABLE_YEARS]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([CURRENT_YEAR - 1, CURRENT_YEAR]);
   const [syncCamara, setSyncCamara] = useState(true);
   const [syncSenado, setSyncSenado] = useState(true);
   const [running, setRunning] = useState(false);
