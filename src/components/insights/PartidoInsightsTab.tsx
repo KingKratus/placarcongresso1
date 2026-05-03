@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag, BarChart3, LayoutGrid, Flag, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +30,7 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
   const [loadingSave, setLoadingSave] = useState(false);
   const [temaDist, setTemaDist] = useState<{ tema: string; sim: number; nao: number; outros: number; total: number }[]>([]);
   const [loadingTemas, setLoadingTemas] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
 
   useEffect(() => {
     if (!user) return;
