@@ -146,8 +146,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
   const classCounts = useMemo(() => {
     const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
     ufData.forEach((u) => {
-      const val = casa === "camara" ? u.camara : u.senado;
-      const cls = getClassificacao(val);
+      const cls = casa === "camara" ? u.camaraClass : u.senadoClass;
       counts[cls as keyof typeof counts]++;
     });
     return counts;
@@ -201,7 +200,8 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                 const uf = getUfFromFeature(feature);
                 const data = ufMap[uf];
                 const val = data ? (casa === "camara" ? data.camara : data.senado) : null;
-                const fillColor = getColor(val);
+                const cls = data ? (casa === "camara" ? data.camaraClass : data.senadoClass) : undefined;
+                const fillColor = getColor(val, cls);
                 const isHovered = hoveredUf === uf;
                 const isSelected = selectedUf === uf;
                 const path = featureToPath(feature.geometry);
