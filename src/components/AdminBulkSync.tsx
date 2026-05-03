@@ -101,6 +101,14 @@ export function AdminBulkSync({ userId }: Props) {
       <CardContent className="space-y-3">
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Anos</span>
+          <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears([2019, 2020, 2021, 2022])}>Era Bolsonaro</Button>
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears(AVAILABLE_YEARS.filter((y) => y >= 2023))}>Era Lula</Button>
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears([...AVAILABLE_YEARS])}>Todos (2019+)</Button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {AVAILABLE_YEARS.map((year) => (
               <label key={year} className="flex items-center gap-1.5 cursor-pointer">
