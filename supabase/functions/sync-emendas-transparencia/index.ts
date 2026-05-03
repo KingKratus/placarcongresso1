@@ -18,9 +18,6 @@ const BodySchema = z.object({
   paginas: z.number().int().min(1).max(10).default(3),
   incluirDocumentos: z.boolean().default(false),
   tentarAnoAnterior: z.boolean().default(true),
-  // Faixa para varredura multi-ano. Se anoFim>anoInicio, ignora "ano" e itera.
-  anoInicio: z.number().int().min(2014).max(2100).optional(),
-  anoFim: z.number().int().min(2014).max(2100).optional(),
 });
 
 type RawEmenda = Record<string, unknown>;
