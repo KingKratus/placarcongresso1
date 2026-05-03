@@ -383,6 +383,9 @@ const Perfil = () => {
           </CardContent>
         </Card>
 
+        {/* Sync de Emendas $ — admins */}
+        {isAdmin && <EmendasSyncCard />}
+
         {/* Favorites */}
         <div>
           <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
