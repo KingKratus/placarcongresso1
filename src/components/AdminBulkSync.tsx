@@ -13,7 +13,12 @@ interface BulkSyncResult {
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
-const AVAILABLE_YEARS = [CURRENT_YEAR - 3, CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR];
+// Inclui era Bolsonaro (2019-2022) e Lula (2023+) para comparações históricas
+const AVAILABLE_YEARS = (() => {
+  const ys: number[] = [];
+  for (let y = 2019; y <= CURRENT_YEAR; y++) ys.push(y);
+  return ys;
+})();
 
 interface Props {
   userId: string;
@@ -22,7 +27,7 @@ interface Props {
 export function AdminBulkSync({ userId }: Props) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [selectedYears, setSelectedYears] = useState<number[]>([...AVAILABLE_YEARS]);
+  const [selectedYears, setSelectedYears] = useState<number[]>([CURRENT_YEAR - 1, CURRENT_YEAR]);
   const [syncCamara, setSyncCamara] = useState(true);
   const [syncSenado, setSyncSenado] = useState(true);
   const [running, setRunning] = useState(false);
@@ -96,6 +101,14 @@ export function AdminBulkSync({ userId }: Props) {
       <CardContent className="space-y-3">
         <div className="space-y-2">
           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Anos</span>
+          <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears([2019, 2020, 2021, 2022])}>Era Bolsonaro</Button>
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears(AVAILABLE_YEARS.filter((y) => y >= 2023))}>Era Lula</Button>
+            <Button type="button" size="sm" variant="outline" disabled={running} className="h-6 text-[10px] px-2"
+              onClick={() => setSelectedYears([...AVAILABLE_YEARS])}>Todos (2019+)</Button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {AVAILABLE_YEARS.map((year) => (
               <label key={year} className="flex items-center gap-1.5 cursor-pointer">

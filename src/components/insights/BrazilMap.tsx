@@ -31,14 +31,19 @@ interface Props {
   senadores?: any[];
 }
 
+const PALETTE: Record<string, string> = {
+  Governo: "hsl(160, 84%, 39%)",
+  Centro: "hsl(239, 84%, 67%)",
+  Oposição: "hsl(347, 77%, 50%)",
+  "Sem Dados": "hsl(var(--muted))",
+};
+
 function getColor(val: number | null, classificacao?: string): string {
-  if (classificacao === "Governo") return "hsl(160, 84%, 39%)";
-  if (classificacao === "Oposição") return "hsl(347, 77%, 50%)";
-  if (classificacao === "Centro") return "hsl(239, 84%, 67%)";
-  if (val === null) return "hsl(var(--muted))";
-  if (val >= 70) return "hsl(160, 84%, 39%)";
-  if (val >= 36) return "hsl(239, 84%, 67%)";
-  return "hsl(347, 77%, 50%)";
+  if (classificacao && PALETTE[classificacao]) return PALETTE[classificacao];
+  if (val === null) return PALETTE["Sem Dados"];
+  if (val >= 70) return PALETTE.Governo;
+  if (val >= 36) return PALETTE.Centro;
+  return PALETTE.Oposição;
 }
 
 function getClassificacao(val: number | null): string {
@@ -141,8 +146,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
   const classCounts = useMemo(() => {
     const counts = { Governo: 0, Centro: 0, Oposição: 0, "Sem Dados": 0 };
     ufData.forEach((u) => {
-      const val = casa === "camara" ? u.camara : u.senado;
-      const cls = getClassificacao(val);
+      const cls = casa === "camara" ? u.camaraClass : u.senadoClass;
       counts[cls as keyof typeof counts]++;
     });
     return counts;
@@ -196,7 +200,8 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                 const uf = getUfFromFeature(feature);
                 const data = ufMap[uf];
                 const val = data ? (casa === "camara" ? data.camara : data.senado) : null;
-                const fillColor = getColor(val);
+                const cls = data ? (casa === "camara" ? data.camaraClass : data.senadoClass) : undefined;
+                const fillColor = getColor(val, cls);
                 const isHovered = hoveredUf === uf;
                 const isSelected = selectedUf === uf;
                 const path = featureToPath(feature.geometry);
@@ -270,10 +275,10 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                       <span className="text-xs font-semibold text-muted-foreground">Câmara</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" style={{
-                          backgroundColor: getColor(d.camara),
+                          backgroundColor: getColor(d.camara, d.camaraClass),
                           color: "#fff", border: "none"
                         }}>
-                          {getClassificacao(d.camara)}
+                          {d.camaraClass || getClassificacao(d.camara)}
                         </Badge>
                         <span className="text-sm font-black">{d.camara !== null ? `${d.camara}%` : "—"}</span>
                       </div>
@@ -282,10 +287,10 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                       <span className="text-xs font-semibold text-muted-foreground">Senado</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" style={{
-                          backgroundColor: getColor(d.senado),
+                          backgroundColor: getColor(d.senado, d.senadoClass),
                           color: "#fff", border: "none"
                         }}>
-                          {getClassificacao(d.senado)}
+                          {d.senadoClass || getClassificacao(d.senado)}
                         </Badge>
                         <span className="text-sm font-black">{d.senado !== null ? `${d.senado}%` : "—"}</span>
                       </div>
@@ -311,6 +316,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                   })
                   .map((u) => {
                     const val = casa === "camara" ? u.camara : u.senado;
+                    const cls = casa === "camara" ? u.camaraClass : u.senadoClass;
                     return (
                       <div
                         key={u.uf}
@@ -323,7 +329,7 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                         <div className="flex items-center gap-2">
                           <div
                             className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: getColor(val) }}
+                            style={{ backgroundColor: getColor(val, cls) }}
                           />
                           <span className="text-xs font-semibold">{val !== null ? `${val}%` : "—"}</span>
                         </div>
