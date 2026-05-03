@@ -17,10 +17,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useFavoritos } from "@/hooks/useFavoritos";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { EmendasSyncCard } from "@/components/EmendasSyncCard";
 
 const Perfil = () => {
   const navigate = useNavigate();
   const [ano, setAno] = useState(new Date().getFullYear());
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const { user, signInWithGoogle, signOut } = useAuth();
   const { deputados, partidos } = useDeputados();
@@ -50,6 +52,11 @@ const Perfil = () => {
 
   // Fetch API keys on mount
   useEffect(() => { if (user) fetchApiKeys(); }, [user, fetchApiKeys]);
+
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    supabase.rpc("has_role", { _role: "admin" }).then(({ data }) => setIsAdmin(!!data));
+  }, [user]);
 
   const generateApiKey = useCallback(async () => {
     if (!user) return;
