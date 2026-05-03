@@ -275,10 +275,10 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                       <span className="text-xs font-semibold text-muted-foreground">Câmara</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" style={{
-                          backgroundColor: getColor(d.camara),
+                          backgroundColor: getColor(d.camara, d.camaraClass),
                           color: "#fff", border: "none"
                         }}>
-                          {getClassificacao(d.camara)}
+                          {d.camaraClass || getClassificacao(d.camara)}
                         </Badge>
                         <span className="text-sm font-black">{d.camara !== null ? `${d.camara}%` : "—"}</span>
                       </div>
@@ -287,10 +287,10 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                       <span className="text-xs font-semibold text-muted-foreground">Senado</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" style={{
-                          backgroundColor: getColor(d.senado),
+                          backgroundColor: getColor(d.senado, d.senadoClass),
                           color: "#fff", border: "none"
                         }}>
-                          {getClassificacao(d.senado)}
+                          {d.senadoClass || getClassificacao(d.senado)}
                         </Badge>
                         <span className="text-sm font-black">{d.senado !== null ? `${d.senado}%` : "—"}</span>
                       </div>
