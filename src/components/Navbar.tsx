@@ -28,7 +28,12 @@ interface NavbarProps {
   casa?: "camara" | "senado";
 }
 
-const ANOS = [2023, 2024, 2025, 2026];
+const CURRENT_YEAR_NB = new Date().getFullYear();
+const ANOS = (() => {
+  const ys: number[] = [];
+  for (let y = 2019; y <= CURRENT_YEAR_NB; y++) ys.push(y);
+  return ys;
+})();
 const CLASSES = [
   { value: "", label: "Todos" },
   { value: "Governo", label: "Governo" },
