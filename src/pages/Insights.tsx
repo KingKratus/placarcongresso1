@@ -35,9 +35,11 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
 import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark, Lightbulb, Flag, AlertTriangle } from "lucide-react";
+import { GovernosCompareTab } from "@/components/insights/GovernosCompareTab";
+import { History } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
-const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
+const ANOS = Array.from({ length: currentYear - 2018 }, (_, i) => 2019 + i);
 const CLASS_COLORS: Record<string, string> = {
   Governo: "hsl(160, 84%, 39%)",
   Oposição: "hsl(347, 77%, 50%)",
@@ -450,6 +452,7 @@ export default function Insights() {
               <TabsTrigger value="ask-ai" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><MessageSquare size={14} /> IA</TabsTrigger>
               <TabsTrigger value="ao-vivo" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Radio size={14} /> Ao Vivo</TabsTrigger>
               <TabsTrigger value="meu-partido" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Flag size={14} /> Meu Partido</TabsTrigger>
+              <TabsTrigger value="governos" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><History size={14} /> Governos</TabsTrigger>
               <TabsTrigger value="alertas" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><AlertTriangle size={14} /> Alertas</TabsTrigger>
               <TabsTrigger value="ideias" className="gap-1.5 shrink-0 text-xs whitespace-nowrap"><Lightbulb size={14} /> Ideias</TabsTrigger>
             </TabsList>
@@ -581,7 +584,7 @@ export default function Insights() {
 
             {/* Estados - Brazil Map */}
             <TabsContent value="estados">
-              <BrazilMap ufData={ufData} deputados={rawDeputados as any} senadores={rawSenadores as any} />
+              <BrazilMap ufData={ufData} deputados={rawDeputados as any} senadores={rawSenadores as any} ano={ano} />
             </TabsContent>
 
             <TabsContent value="comparar">
@@ -681,7 +684,11 @@ export default function Insights() {
             </TabsContent>
 
             <TabsContent value="meu-partido">
-              <PartidoInsightsTab ano={ano} deputados={rawDeputados} senadores={rawSenadores} partidos={availablePartidos} />
+              <PartidoInsightsTab ano={ano} deputados={rawDeputados} senadores={rawSenadores} partidos={availablePartidos} allYearsDeputados={allYearsDeputados as any} allYearsSenadores={allYearsSenadores as any} />
+            </TabsContent>
+
+            <TabsContent value="governos">
+              <GovernosCompareTab />
             </TabsContent>
 
             <TabsContent value="alertas">

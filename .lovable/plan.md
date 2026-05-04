@@ -1,123 +1,136 @@
 
 ## Resumo
 
-Quatro entregas independentes:
+Cinco entregas focadas em comparar governos Bolsonaro × Lula e melhorar o mapa.
 
-1. **Sync manual de Emendas $ no Perfil** (com varredura automática de anos disponíveis).
-2. **UX da aba "Meu Partido"** (mais claro, navegável, com seções colapsáveis e CTAs).
-3. **Sync histórico 2019-2022** (Bolsonaro vs. Lula) para Câmara, Senado e Emendas.
-4. **Mapa de Estados** com cores explícitas por classificação política (Governo / Centro / Oposição) em vez de só gradiente por score.
-
----
-
-## 1. Sync de Emendas $ no Perfil
-
-### UI
-- Novo card "Sincronizar Emendas Orçamentárias" em `src/pages/Perfil.tsx`, visível apenas para usuários autenticados (idealmente `has_role('admin')`, mas com fallback aberto se o usuário tiver `partido_filiacao` — escolho **somente admin** para preservar quota).
-- Botão **"Varrer todos os anos disponíveis"**: dispara loop de 2014 → ano corrente, parando quando 3 anos consecutivos retornarem 0 registros (sinal de que o Portal não publicou mais nada).
-- Botão **"Sincronizar ano específico"** com `Select` (2014-2026).
-- Mostra progresso ano-a-ano (ano corrente + nº inserido + `empty_reason`) e quota diária restante via `usePortalQuota`.
-
-### Edge Function
-- Novo modo `varredura: true` em `sync-emendas-transparencia/index.ts`:
-  - Itera anos `[anoInicio..anoFim]` (default 2014..ano atual).
-  - Para cada ano, executa o fluxo já existente; respeita `checkAndIncQuota` (interrompe se quota acabar e devolve `{ stoppedAt, reason: "quota" }`).
-  - Acumula `summary[]` por ano: `{ ano, fetched, inserted, empty_reason }`.
-  - Aborta ciclo após `consecutiveEmptyYears >= 3`.
-- Cliente chama em loop ano-a-ano (não em uma só request) para feedback incremental e para evitar timeout do edge runtime; usa `sync_runs` + `sync_run_events` já existentes para log.
+1. **Expor 2019-2022 no frontend** (selectors + queries).
+2. **Sync manual de 2020-2022** (Câmara + Senado) — 2019 já existe no banco; 2020-2022 estão zerados.
+3. **Mapa: escala tonal por cor + tooltip rico** com classificação, % e ano/recorte.
+4. **Aba "Meu Partido": seção comparativa Bolsonaro (2019-22) × Lula (2023-26)** com gráficos e variação percentual.
+5. **Comparador temático Lula × Bolsonaro** (economia, social, segurança, etc.) reaproveitando `votacao_temas`.
 
 ---
 
-## 2. UX da aba "Meu Partido" (`PartidoInsightsTab.tsx`)
+## 1. Expor 2019-2022 no frontend
 
-Problemas atuais: tudo num scroll só, filiação confusa, sem hierarquia visual.
+Hoje `ANOS` em `src/pages/Insights.tsx` começa em 2023, e `ALL_YEARS` em `src/hooks/useInsightsData.ts` está fixo `[2023..2026]`. Por isso 2019 (que já está no banco) some.
 
-Mudanças:
-- **Header sticky** com `Avatar` do partido (logo placeholder), nome, bancada (Gov/Centro/Opo), nº de parlamentares e score médio em destaque (Big Number).
-- **Auto-detect** do partido: se usuário tem `partido_filiacao` salvo, abre direto; caso contrário, mostra estado vazio com `Select` + botão "Salvar filiação".
-- **Tabs internas**: `Visão Geral` · `Membros` · `Dissidentes` · `Temas` · `Comparar com Gov/Opo`.
-  - **Membros** subdivididos por bloco (Governo/Centro/Oposição) com `Accordion` colapsável e contagem em badge — facilita mobilização (já existia, virar accordion).
-  - **Dissidentes** com card expandido (motivo da dissidência, link p/ perfil, botão "Contatar").
-  - **Temas**: gráfico de distribuição já existente, mais lista de "temas onde o partido mais se afasta da liderança".
-  - **Comparar**: mini-comparação score do partido vs. média Governo / Centro / Oposição (3 barras).
-- **Empty states** desenhados (ícone + texto + CTA) para `sem filiação`, `sem dados no ano`, `partido sem votos`.
-- **Mobile-first**: cards em grid 1-col no <640px, CTAs full-width, navegação por chips.
+- `Insights.tsx`: `const ANOS = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]` (filtrado até `currentYear`).
+- `useInsightsData.ts`: `ALL_YEARS = [2019..currentYear]` para alimentar `AlignmentTrendChart`, `AlignmentSimulation` e o novo comparador.
+- `Index.tsx` e `Senado.tsx`: idem nos seletores de ano (verificar `ANOS` local).
+- `CentroTrendsCamara/Senado`: aceitar dados pré-2023 no toggle "Comparar Governos" já existente.
 
-Arquivos: `src/components/insights/PartidoInsightsTab.tsx` (refactor), pequeno helper novo `src/components/insights/PartidoHeader.tsx`.
+## 2. Sync de 2020-2022
 
----
+Estado atual no banco:
+- `analises_deputados`: 2019 ✅, 2020-2022 ❌, 2023-2026 ✅
+- `analises_senadores`: idem
 
-## 3. Sync histórico 2019-2022 (Bolsonaro × Lula)
+Plano:
+- Ampliar `AVAILABLE_YEARS` em `AdminBulkSync.tsx` para iniciar em **2014** (cobrir gov. Dilma também) — já abrange 2019+ hoje.
+- Disparar `sync-camara` + `sync-senado` para 2020, 2021, 2022 via UI Admin (preset "Era Bolsonaro" já existe — ele vai rodar todos os 4 anos; 2019 vai re-sincronizar idempotente).
+- Após sync, rodar `classify-votacoes` para popular `votacao_temas` desses anos (necessário para o comparador temático).
 
-Hoje os anos só vão até onde foi sincronizado. Para comparar governos, precisamos garantir cobertura 2019-2026.
+Não há mudanças de schema.
 
-### Ações
-- Adicionar botão **"Sincronizar histórico 2019-2022"** em `src/pages/Admin.tsx` (ao lado dos sync atuais), que dispara em sequência:
-  - `sync-camara` para cada ano 2019..2022.
-  - `sync-senado` para cada ano 2019..2022.
-  - `classify-votacoes` (reaproveita lógica existente).
-  - `sync-emendas-transparencia` em modo `varredura` 2019..2022.
-- Mostra progresso via `SyncLogViewer` existente.
-- Adicionar **comparador "Era Bolsonaro (2019-2022) vs Era Lula (2023-2026)"** na aba Tendências (`CentroTrendsCamara` e `CentroTrendsSenado`):
-  - Toggle "Comparar Governos" mostra duas linhas/áreas agregadas em vez do histórico anual.
-  - Reaproveita `analises_deputados` / `analises_senadores` filtrando por intervalo.
+## 3. Mapa: escala tonal + tooltip
 
-Nenhuma migration nova — só sync de dados em tabelas já existentes.
+**Problema reportado**: a paleta atual pintou estados que deveriam ser azuis (Centro) de verde (Governo) porque `getColor` cai no fallback de threshold quando `classificacao` está faltando. Além disso, o usuário quer **variação tonal dentro da cor**, não 3 cores chapadas.
 
----
+Mudanças em `src/components/insights/BrazilMap.tsx`:
 
-## 4. Mapa de Estados — cores por classificação
+- **Escala HSL com lightness modulada pela %**:
+  ```ts
+  // Governo (verde): 70-100% → lightness 50% → 25%
+  // Centro (azul):  35-70%  → lightness 65% → 40%
+  // Oposição (vermelho): 0-35% → lightness 65% → 40%
+  function tonalColor(val: number | null): string {
+    if (val === null) return "hsl(var(--muted))";
+    if (val >= 70) {
+      const t = (val - 70) / 30;            // 0..1
+      const l = 50 - t * 25;                // mais alinhado = mais escuro
+      return `hsl(160, 84%, ${l}%)`;
+    }
+    if (val >= 35) {
+      const t = (val - 35) / 35;
+      const l = 65 - t * 25;
+      return `hsl(239, 84%, ${l}%)`;
+    }
+    const t = (35 - val) / 35;              // mais oposto = mais escuro
+    const l = 65 - t * 25;
+    return `hsl(347, 77%, ${l}%)`;
+  }
+  ```
+- Remover o fallback que misturava classificação ausente com threshold (causa do "verde indevido"). Agora a cor sai sempre da % real; a classificação só serve para legenda/tooltip.
 
-Em `src/components/insights/BrazilMap.tsx`, hoje `getColor(val)` mapeia por threshold de score, mas a UI atual ainda confunde por usar a mesma escala em hover/legend. Mudanças:
+- **Tooltip nativo SVG** (HoverCard ou `<title>` + overlay flutuante):
+  - Implementar com `@radix-ui/react-hover-card` envolvendo cada `<path>`.
+  - Conteúdo:
+    ```
+    Estado: SP
+    Câmara — Centro · 58%
+    Senado — Governo · 74%
+    Recorte: 2025 (Câmara + Senado)
+    ```
+  - Receber `ano` via prop em `<BrazilMap ano={ano} />` e exibir.
+  - Toque em mobile: `onTouchStart` mostra tooltip por 3s antes de selecionar.
 
-- Renomear `getColor` para tomar **classificação calculada** como input principal (`Governo`/`Centro`/`Oposição`/`Sem Dados`) e cair para o threshold de score só como fallback.
-- **Paleta explícita** (alinhada com o resto do app):
-  - Governo: `hsl(160 84% 39%)` (verde)
-  - Centro: `hsl(239 84% 67%)` (azul/índigo)
-  - Oposição: `hsl(347 77% 50%)` (vermelho)
-  - Sem Dados: `hsl(var(--muted))`
-- **Pré-calcular classificação por UF** no `Insights.tsx` (já existe `ufData`, adicionar `camaraClass`/`senadoClass` de fato — campos existem na interface mas não estão sendo populados; popular agregando `classificacao` modal por UF dos `analises_*`).
-- Legenda passa a refletir contagem por classificação por casa selecionada (já tem, validar coerência).
-- Tooltip: mostra "Classificação predominante" + score médio.
-- Aplicar mesma paleta no painel lateral e na lista "Todos os Estados".
+- Legenda passa a mostrar **gradiente** (faixa horizontal) por bloco em vez de quadradinho fixo, deixando claro que há intensidade.
+
+## 4. "Meu Partido": comparador 2019-22 × 2023-26
+
+Refactor leve em `src/components/insights/PartidoInsightsTab.tsx`:
+
+- Nova aba interna **"Bolsonaro × Lula"** (ao lado de Visão Geral / Membros / Dissidentes / Temas / Ranking).
+- Usa `allYearsDeputados`/`allYearsSenadores` filtrado por `partido === filiacao`.
+- Conteúdo:
+  - **Big numbers**: Score médio Bolsonaro (média 2019-2022) × Lula (média 2023-2026) + Δ percentual.
+  - **Distribuição de classificações**: barras empilhadas Gov/Centro/Opo por era.
+  - **Linha do tempo anual**: line chart com pontos por ano, duas zonas sombreadas (azul claro 2019-22, amarelo claro 2023-26).
+  - **Top dissidentes da era Lula** (parlamentares cujo score caiu/subiu mais entre eras).
+- Empty state quando o partido não tem registros pré-2023 ("Partido sem dados em 2019-22 — sincronize via Admin").
+
+Helper novo: `src/lib/governmentEras.ts` com `eraDe(ano)` e médias por era.
+
+## 5. Comparador temático Lula × Bolsonaro
+
+Nova aba em `Insights.tsx` chamada **"Governos"** (próxima a Tendências):
+
+- Fonte: `votacao_temas` + `votos_deputados`/`votos_senadores` + `orientacoes`.
+- UI:
+  - Toggle de tema (Economia, Social, Segurança, Meio Ambiente, Direitos Humanos, etc. — temas existentes em `votacao_temas`).
+  - Para cada tema, dois cards lado-a-lado:
+    - **Era Bolsonaro 2019-22**: nº votações classificadas, % aprovadas, alinhamento médio com governo da época.
+    - **Era Lula 2023-26**: idem.
+    - Δ em % para destacar mudança.
+  - Mini ranking de partidos com maior shift entre eras no tema.
+- Reaproveita `get_monthly_alignment` mas estendido: precisaríamos de um helper SQL ou agregação client-side por tema/ano.
+
+Decisão: agregação **client-side** (sem nova função SQL) usando `useInsightsData` já paginado; performance OK pois temas são poucos.
 
 ---
 
 ## Detalhes técnicos
 
 ### Arquivos editados
-- `supabase/functions/sync-emendas-transparencia/index.ts` — novo modo `varredura` e `empty_reason` por ano.
-- `src/pages/Perfil.tsx` — card "Sincronizar Emendas" (admin-gated).
-- `src/pages/Admin.tsx` — botão "Sync histórico 2019-2022".
-- `src/components/insights/PartidoInsightsTab.tsx` — refactor de UX (tabs internas + accordions + header).
-- `src/components/insights/PartidoHeader.tsx` — novo componente.
-- `src/components/insights/BrazilMap.tsx` — paleta por classificação + cálculo no Insights.
-- `src/pages/Insights.tsx` — popular `camaraClass`/`senadoClass` no `ufData`.
-- `src/components/CentroTrendsCamara.tsx` / `CentroTrendsSenado.tsx` — toggle "Comparar Governos (2019-22 × 2023-26)".
+- `src/pages/Insights.tsx` — `ANOS` 2019+, nova aba "Governos", passar `ano` ao `BrazilMap`.
+- `src/pages/Index.tsx`, `src/pages/Senado.tsx` — idem `ANOS`.
+- `src/hooks/useInsightsData.ts` — `ALL_YEARS` 2019+.
+- `src/components/insights/BrazilMap.tsx` — `tonalColor`, HoverCard tooltip, prop `ano`.
+- `src/components/insights/PartidoInsightsTab.tsx` — nova sub-aba "Bolsonaro × Lula".
+- `src/lib/governmentEras.ts` (novo) — helpers `eraDe(ano)`, `mediasPorEra(...)`.
+- `src/components/insights/GovernosCompareTab.tsx` (novo) — comparador temático.
+- `src/components/AdminBulkSync.tsx` — preset "2020-2022 (gap)" para fechar lacuna rapidamente.
 
-### Loop de varredura (cliente)
-```ts
-for (let ano = 2014; ano <= currentYear; ano++) {
-  const r = await supabase.functions.invoke("sync-emendas-transparencia", {
-    body: { ano, paginas: 5, varredura: false },
-  });
-  setProgress({ ano, ...r.data });
-  if (r.data?.fetched === 0) emptyStreak++; else emptyStreak = 0;
-  if (emptyStreak >= 3) break;
-  if (r.data?.quota?.remaining < 5) break;
-}
-```
-
-### Cores no mapa
-```ts
-const PALETTE = {
-  Governo: "hsl(160 84% 39%)",
-  Centro: "hsl(239 84% 67%)",
-  Oposição: "hsl(347 77% 50%)",
-  "Sem Dados": "hsl(var(--muted))",
-};
-function colorFor(classification: string) { return PALETTE[classification] ?? PALETTE["Sem Dados"]; }
-```
+### Sync data (manual, via UI Admin após deploy)
+- Admin clica "Era Bolsonaro" → roda 2019-2022 Câmara+Senado.
+- Em seguida: rodar `classify-votacoes` para os mesmos anos.
 
 ### Sem migrations
-Toda a entrega usa as tabelas existentes (`emendas_orcamentarias_transparencia`, `sync_runs`, `analises_*`, `profiles.partido_filiacao`).
+Todo o trabalho usa tabelas existentes.
+
+### Acceptance
+- Selectors mostram 2019-2026.
+- Mapa: SP score 58% aparece azul-médio (não verde); tooltip mostra "Centro · 58% · 2025".
+- Aba "Meu Partido" → "Bolsonaro × Lula" mostra gráfico com 2 eras (após sync 2020-22).
+- Aba "Governos" lista temas com Δ% entre eras.

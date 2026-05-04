@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ParlamentarContact } from "@/components/ParlamentarContact";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 const STATE_TO_UF: Record<string, string> = {
   "Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
@@ -29,27 +30,40 @@ interface Props {
   ufData: UfDataItem[];
   deputados?: any[];
   senadores?: any[];
+  ano?: number;
 }
 
 const PALETTE: Record<string, string> = {
   Governo: "hsl(160, 84%, 39%)",
-  Centro: "hsl(239, 84%, 67%)",
+  Centro: "hsl(239, 84%, 60%)",
   Oposição: "hsl(347, 77%, 50%)",
   "Sem Dados": "hsl(var(--muted))",
 };
 
-function getColor(val: number | null, classificacao?: string): string {
-  if (classificacao && PALETTE[classificacao]) return PALETTE[classificacao];
-  if (val === null) return PALETTE["Sem Dados"];
-  if (val >= 70) return PALETTE.Governo;
-  if (val >= 36) return PALETTE.Centro;
-  return PALETTE.Oposição;
+// Tonal scale: same hue per bloc, lightness varies with intensity.
+// Mais alinhado/oposto = mais escuro (mais saturado visualmente).
+function getColor(val: number | null, _classificacao?: string): string {
+  if (val === null || isNaN(val as any)) return PALETTE["Sem Dados"];
+  if (val >= 70) {
+    const t = Math.min(1, (val - 70) / 30);
+    const l = 55 - t * 28; // 55% → 27%
+    return `hsl(160, 84%, ${l}%)`;
+  }
+  if (val >= 35) {
+    const t = Math.min(1, (val - 35) / 35);
+    // Centro: tonalidade vai do azul-claro (sem dados / pouco centrista) ao azul-médio
+    const l = 70 - t * 25; // 70% → 45%
+    return `hsl(239, 84%, ${l}%)`;
+  }
+  const t = Math.min(1, (35 - val) / 35);
+  const l = 65 - t * 28; // 65% → 37%
+  return `hsl(347, 77%, ${l}%)`;
 }
 
 function getClassificacao(val: number | null): string {
   if (val === null) return "Sem Dados";
   if (val >= 70) return "Governo";
-  if (val >= 36) return "Centro";
+  if (val >= 35) return "Centro";
   return "Oposição";
 }
 
@@ -91,7 +105,7 @@ interface GeoFeature {
   geometry: any;
 }
 
-export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
+export function BrazilMap({ ufData, deputados = [], senadores = [], ano }: Props) {
   const [geojson, setGeojson] = useState<GeoFeature[] | null>(null);
   const [selectedUf, setSelectedUf] = useState<string | null>(null);
   const [hoveredUf, setHoveredUf] = useState<string | null>(null);
@@ -172,23 +186,26 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
       </Tabs>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(160, 84%, 39%)" }} />
-          <span className="text-xs font-semibold">Governo ({classCounts.Governo})</span>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-3 text-[10px] sm:text-xs">
+          {([
+            { label: "Oposição", count: classCounts.Oposição, gradient: "linear-gradient(to right, hsl(347,77%,65%), hsl(347,77%,37%))" },
+            { label: "Centro", count: classCounts.Centro, gradient: "linear-gradient(to right, hsl(239,84%,70%), hsl(239,84%,45%))" },
+            { label: "Governo", count: classCounts.Governo, gradient: "linear-gradient(to right, hsl(160,84%,55%), hsl(160,84%,27%))" },
+          ]).map((b) => (
+            <div key={b.label} className="flex items-center gap-1.5">
+              <div className="w-12 h-3 rounded-sm" style={{ background: b.gradient }} />
+              <span className="font-semibold">{b.label} ({b.count})</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm bg-muted" />
+            <span className="font-semibold">Sem Dados ({classCounts["Sem Dados"]})</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(239, 84%, 67%)" }} />
-          <span className="text-xs font-semibold">Centro ({classCounts.Centro})</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(347, 77%, 50%)" }} />
-          <span className="text-xs font-semibold">Oposição ({classCounts.Oposição})</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-sm bg-muted" />
-          <span className="text-xs font-semibold">Sem Dados ({classCounts["Sem Dados"]})</span>
-        </div>
+        <p className="text-[9px] text-muted-foreground">
+          Tonalidade indica intensidade — mais escuro = mais alinhado dentro do bloco. Recorte: <span className="font-bold">{casa === "camara" ? "Câmara" : "Senado"}{ano ? ` · ${ano}` : ""}</span>
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -201,24 +218,51 @@ export function BrazilMap({ ufData, deputados = [], senadores = [] }: Props) {
                 const data = ufMap[uf];
                 const val = data ? (casa === "camara" ? data.camara : data.senado) : null;
                 const cls = data ? (casa === "camara" ? data.camaraClass : data.senadoClass) : undefined;
-                const fillColor = getColor(val, cls);
+                const fillColor = getColor(val);
                 const isHovered = hoveredUf === uf;
                 const isSelected = selectedUf === uf;
                 const path = featureToPath(feature.geometry);
-
+                const camCls = data?.camaraClass || getClassificacao(data?.camara ?? null);
+                const senCls = data?.senadoClass || getClassificacao(data?.senado ?? null);
                 return (
-                  <path
-                    key={`${uf}-${i}`}
-                    d={path}
-                    fill={fillColor}
-                    stroke="hsl(var(--background))"
-                    strokeWidth={isSelected ? 3 : 1.5}
-                    opacity={isHovered ? 0.85 : 1}
-                    className="cursor-pointer transition-opacity"
-                    onClick={() => setSelectedUf(uf === selectedUf ? null : uf)}
-                    onMouseEnter={() => setHoveredUf(uf)}
-                    onMouseLeave={() => setHoveredUf(null)}
-                  />
+                  <HoverCard key={`${uf}-${i}`} openDelay={80} closeDelay={50}>
+                    <HoverCardTrigger asChild>
+                      <path
+                        d={path}
+                        fill={fillColor}
+                        stroke="hsl(var(--background))"
+                        strokeWidth={isSelected ? 3 : 1.5}
+                        opacity={isHovered ? 0.85 : 1}
+                        className="cursor-pointer transition-opacity"
+                        onClick={() => setSelectedUf(uf === selectedUf ? null : uf)}
+                        onMouseEnter={() => setHoveredUf(uf)}
+                        onMouseLeave={() => setHoveredUf(null)}
+                      >
+                        <title>{`${uf} — ${casa === "camara" ? camCls : senCls} · ${val ?? "—"}%${ano ? ` (${ano})` : ""}`}</title>
+                      </path>
+                    </HoverCardTrigger>
+                    <HoverCardContent side="top" className="w-56 p-3 text-xs space-y-1.5 z-50">
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-sm">{uf}</span>
+                        {ano && <Badge variant="outline" className="text-[9px]">{ano}</Badge>}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Câmara</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(data?.camara ?? null) }} />
+                          <span className="font-bold">{camCls} · {data?.camara ?? "—"}{data?.camara != null ? "%" : ""}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Senado</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(data?.senado ?? null) }} />
+                          <span className="font-bold">{senCls} · {data?.senado ?? "—"}{data?.senado != null ? "%" : ""}</span>
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground pt-1 border-t border-border">Clique para fixar e ver parlamentares.</p>
+                    </HoverCardContent>
+                  </HoverCard>
                 );
               })}
               {/* State labels */}

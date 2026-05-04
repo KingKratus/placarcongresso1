@@ -7,7 +7,12 @@ type AnaliseSenador = Tables<"analises_senadores">;
 export type VotacaoCamara = Tables<"votacoes">;
 export type VotacaoSenado = Tables<"votacoes_senado">;
 
-const ALL_YEARS = [2023, 2024, 2025, 2026];
+const CURRENT_YEAR = new Date().getFullYear();
+const ALL_YEARS = (() => {
+  const ys: number[] = [];
+  for (let y = 2019; y <= CURRENT_YEAR; y++) ys.push(y);
+  return ys;
+})();
 
 async function fetchAllPages<T>(
   query: () => any,

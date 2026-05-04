@@ -64,7 +64,7 @@ const Senado = () => {
       const { data } = await supabase
         .from("analises_senadores")
         .select("*")
-        .in("ano", [2023, 2024, 2025, 2026])
+        .in("ano", Array.from({ length: new Date().getFullYear() - 2018 }, (_, i) => 2019 + i))
         .limit(5000);
       if (cancelled) return;
       const byId: Record<number, any> = {};

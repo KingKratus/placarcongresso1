@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag, BarChart3, LayoutGrid, Flag, Search } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag, BarChart3, LayoutGrid, Flag, Search, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,20 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, LineChart, Line, ReferenceArea } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getBancada } from "@/lib/bancadas";
 import { useToast } from "@/hooks/use-toast";
+import { statsByEra, deltaPct, ERA_COLORS, eraDe } from "@/lib/governmentEras";
 
 interface Props {
   ano: number;
   deputados: any[];
   senadores: any[];
   partidos: string[];
+  allYearsDeputados?: any[];
+  allYearsSenadores?: any[];
 }
 
-export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Props) {
+export function PartidoInsightsTab({ ano, deputados, senadores, partidos, allYearsDeputados = [], allYearsSenadores = [] }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -69,6 +72,32 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
     };
     return { sorted, avg, stdev, dissidentes, bancada, total: merged.length, blocos };
   }, [merged, partido]);
+
+  // ===== Era stats (Bolsonaro 2019-22 × Lula 2023-26) =====
+  const eraData = useMemo(() => {
+    if (!partido) return null;
+    const dep = (allYearsDeputados || []).filter((d: any) => d.deputado_partido === partido)
+      .map((d: any) => ({ ano: d.ano, score: Number(d.score) || 0, total_votos: Number(d.total_votos) || 0, classificacao: d.classificacao }));
+    const sen = (allYearsSenadores || []).filter((s: any) => s.senador_partido === partido)
+      .map((s: any) => ({ ano: s.ano, score: Number(s.score) || 0, total_votos: Number(s.total_votos) || 0, classificacao: s.classificacao }));
+    const all = [...dep, ...sen];
+    if (all.length === 0) return null;
+    const buckets = statsByEra(all);
+    const yearMap: Record<number, { sum: number; w: number }> = {};
+    all.forEach((r) => {
+      yearMap[r.ano] = yearMap[r.ano] || { sum: 0, w: 0 };
+      const w = r.total_votos || 1;
+      yearMap[r.ano].sum += r.score * w;
+      yearMap[r.ano].w += w;
+    });
+    const timeline = Object.entries(yearMap)
+      .map(([ano, v]) => ({ ano: Number(ano), score: v.w > 0 ? Math.round((v.sum / v.w) * 10) / 10 : 0, era: eraDe(Number(ano)) }))
+      .sort((a, b) => a.ano - b.ano);
+    const delta = deltaPct(buckets.Lula.scoreAvg, buckets.Bolsonaro.scoreAvg);
+    const hasBolso = buckets.Bolsonaro.parlamentares > 0;
+    const hasLula = buckets.Lula.parlamentares > 0;
+    return { buckets, timeline, delta, hasBolso, hasLula };
+  }, [partido, allYearsDeputados, allYearsSenadores]);
 
   // Distribuição por tema: usa votacao_temas + votos do partido
   useEffect(() => {
@@ -199,6 +228,7 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
             <TabsTrigger value="dissidentes" className="gap-1"><AlertCircle size={12} /> Dissidentes</TabsTrigger>
             <TabsTrigger value="temas" className="gap-1"><Tag size={12} /> Temas</TabsTrigger>
             <TabsTrigger value="ranking" className="gap-1"><BarChart3 size={12} /> Ranking</TabsTrigger>
+            <TabsTrigger value="eras" className="gap-1"><History size={12} /> Bolsonaro × Lula</TabsTrigger>
           </TabsList>
 
           {/* ====== Visão geral ====== */}
@@ -343,6 +373,88 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ====== Bolsonaro × Lula ====== */}
+          <TabsContent value="eras" className="space-y-3 mt-3">
+            {!eraData ? (
+              <Card><CardContent className="py-8 text-center text-xs text-muted-foreground">
+                Sem dados históricos para {partido}.
+              </CardContent></Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Card className="border-l-4" style={{ borderLeftColor: ERA_COLORS.Bolsonaro }}>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Era Bolsonaro · 2019-22</p>
+                      <p className="text-2xl font-black mt-1">{eraData.buckets.Bolsonaro.scoreAvg.toFixed(1)}%</p>
+                      <p className="text-[10px] text-muted-foreground">{eraData.buckets.Bolsonaro.parlamentares} reg. · {eraData.buckets.Bolsonaro.totalVotos} votos</p>
+                      {!eraData.hasBolso && <p className="text-[9px] text-amber-600 mt-1">Sincronize 2019-2022 via Admin para popular este recorte.</p>}
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4" style={{ borderLeftColor: ERA_COLORS.Lula }}>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Era Lula · 2023-26</p>
+                      <p className="text-2xl font-black mt-1">{eraData.buckets.Lula.scoreAvg.toFixed(1)}%</p>
+                      <p className="text-[10px] text-muted-foreground">{eraData.buckets.Lula.parlamentares} reg. · {eraData.buckets.Lula.totalVotos} votos</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Variação</p>
+                      <p className={`text-2xl font-black mt-1 ${eraData.delta.abs > 0 ? "text-governo" : eraData.delta.abs < 0 ? "text-oposicao" : ""}`}>
+                        {eraData.delta.abs > 0 ? "+" : ""}{eraData.delta.abs.toFixed(1)}pp
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {eraData.delta.rel != null ? `${eraData.delta.rel > 0 ? "+" : ""}${eraData.delta.rel.toFixed(1)}% relativo` : "—"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Score médio por ano</CardTitle></CardHeader>
+                  <CardContent>
+                    {eraData.timeline.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-6 text-center">Sem série temporal disponível.</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <LineChart data={eraData.timeline}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(v: any) => `${v}%`} />
+                          <ReferenceArea x1={2019} x2={2022} fill={ERA_COLORS.Bolsonaro} fillOpacity={0.08} label={{ value: "Bolsonaro", fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                          <ReferenceArea x1={2023} x2={2026} fill={ERA_COLORS.Lula} fillOpacity={0.08} label={{ value: "Lula", fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                          <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição de classificações por era</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={[
+                        { era: "Bolsonaro", ...eraData.buckets.Bolsonaro.classBreakdown },
+                        { era: "Lula", ...eraData.buckets.Lula.classBreakdown },
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="era" tick={{ fontSize: 11 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="Governo" stackId="a" fill="hsl(var(--governo))" />
+                        <Bar dataKey="Centro" stackId="a" fill="hsl(239, 84%, 60%)" />
+                        <Bar dataKey="Oposição" stackId="a" fill="hsl(var(--oposicao))" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       )}
