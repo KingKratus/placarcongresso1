@@ -374,6 +374,88 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos, allYea
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* ====== Bolsonaro × Lula ====== */}
+          <TabsContent value="eras" className="space-y-3 mt-3">
+            {!eraData ? (
+              <Card><CardContent className="py-8 text-center text-xs text-muted-foreground">
+                Sem dados históricos para {partido}.
+              </CardContent></Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Card className="border-l-4" style={{ borderLeftColor: ERA_COLORS.Bolsonaro }}>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Era Bolsonaro · 2019-22</p>
+                      <p className="text-2xl font-black mt-1">{eraData.buckets.Bolsonaro.scoreAvg.toFixed(1)}%</p>
+                      <p className="text-[10px] text-muted-foreground">{eraData.buckets.Bolsonaro.parlamentares} reg. · {eraData.buckets.Bolsonaro.totalVotos} votos</p>
+                      {!eraData.hasBolso && <p className="text-[9px] text-amber-600 mt-1">Sincronize 2019-2022 via Admin para popular este recorte.</p>}
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4" style={{ borderLeftColor: ERA_COLORS.Lula }}>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Era Lula · 2023-26</p>
+                      <p className="text-2xl font-black mt-1">{eraData.buckets.Lula.scoreAvg.toFixed(1)}%</p>
+                      <p className="text-[10px] text-muted-foreground">{eraData.buckets.Lula.parlamentares} reg. · {eraData.buckets.Lula.totalVotos} votos</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-3">
+                      <p className="text-[9px] uppercase font-bold text-muted-foreground">Variação</p>
+                      <p className={`text-2xl font-black mt-1 ${eraData.delta.abs > 0 ? "text-governo" : eraData.delta.abs < 0 ? "text-oposicao" : ""}`}>
+                        {eraData.delta.abs > 0 ? "+" : ""}{eraData.delta.abs.toFixed(1)}pp
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {eraData.delta.rel != null ? `${eraData.delta.rel > 0 ? "+" : ""}${eraData.delta.rel.toFixed(1)}% relativo` : "—"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Score médio por ano</CardTitle></CardHeader>
+                  <CardContent>
+                    {eraData.timeline.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-6 text-center">Sem série temporal disponível.</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <LineChart data={eraData.timeline}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="ano" tick={{ fontSize: 11 }} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(v: any) => `${v}%`} />
+                          <ReferenceArea x1={2019} x2={2022} fill={ERA_COLORS.Bolsonaro} fillOpacity={0.08} label={{ value: "Bolsonaro", fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                          <ReferenceArea x1={2023} x2={2026} fill={ERA_COLORS.Lula} fillOpacity={0.08} label={{ value: "Lula", fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                          <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição de classificações por era</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={[
+                        { era: "Bolsonaro", ...eraData.buckets.Bolsonaro.classBreakdown },
+                        { era: "Lula", ...eraData.buckets.Lula.classBreakdown },
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="era" tick={{ fontSize: 11 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="Governo" stackId="a" fill="hsl(var(--governo))" />
+                        <Bar dataKey="Centro" stackId="a" fill="hsl(239, 84%, 60%)" />
+                        <Bar dataKey="Oposição" stackId="a" fill="hsl(var(--oposicao))" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </TabsContent>
         </Tabs>
       )}
     </div>
