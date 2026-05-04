@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag, BarChart3, LayoutGrid, Flag, Search } from "lucide-react";
+import { Users, TrendingUp, TrendingDown, AlertCircle, Star, ExternalLink, Tag, BarChart3, LayoutGrid, Flag, Search, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,20 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, LineChart, Line, ReferenceArea } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getBancada } from "@/lib/bancadas";
 import { useToast } from "@/hooks/use-toast";
+import { statsByEra, deltaPct, ERA_COLORS, eraDe } from "@/lib/governmentEras";
 
 interface Props {
   ano: number;
   deputados: any[];
   senadores: any[];
   partidos: string[];
+  allYearsDeputados?: any[];
+  allYearsSenadores?: any[];
 }
 
-export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Props) {
+export function PartidoInsightsTab({ ano, deputados, senadores, partidos, allYearsDeputados = [], allYearsSenadores = [] }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -69,6 +72,32 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
     };
     return { sorted, avg, stdev, dissidentes, bancada, total: merged.length, blocos };
   }, [merged, partido]);
+
+  // ===== Era stats (Bolsonaro 2019-22 × Lula 2023-26) =====
+  const eraData = useMemo(() => {
+    if (!partido) return null;
+    const dep = (allYearsDeputados || []).filter((d: any) => d.deputado_partido === partido)
+      .map((d: any) => ({ ano: d.ano, score: Number(d.score) || 0, total_votos: Number(d.total_votos) || 0, classificacao: d.classificacao }));
+    const sen = (allYearsSenadores || []).filter((s: any) => s.senador_partido === partido)
+      .map((s: any) => ({ ano: s.ano, score: Number(s.score) || 0, total_votos: Number(s.total_votos) || 0, classificacao: s.classificacao }));
+    const all = [...dep, ...sen];
+    if (all.length === 0) return null;
+    const buckets = statsByEra(all);
+    const yearMap: Record<number, { sum: number; w: number }> = {};
+    all.forEach((r) => {
+      yearMap[r.ano] = yearMap[r.ano] || { sum: 0, w: 0 };
+      const w = r.total_votos || 1;
+      yearMap[r.ano].sum += r.score * w;
+      yearMap[r.ano].w += w;
+    });
+    const timeline = Object.entries(yearMap)
+      .map(([ano, v]) => ({ ano: Number(ano), score: v.w > 0 ? Math.round((v.sum / v.w) * 10) / 10 : 0, era: eraDe(Number(ano)) }))
+      .sort((a, b) => a.ano - b.ano);
+    const delta = deltaPct(buckets.Lula.scoreAvg, buckets.Bolsonaro.scoreAvg);
+    const hasBolso = buckets.Bolsonaro.parlamentares > 0;
+    const hasLula = buckets.Lula.parlamentares > 0;
+    return { buckets, timeline, delta, hasBolso, hasLula };
+  }, [partido, allYearsDeputados, allYearsSenadores]);
 
   // Distribuição por tema: usa votacao_temas + votos do partido
   useEffect(() => {
@@ -199,6 +228,7 @@ export function PartidoInsightsTab({ ano, deputados, senadores, partidos }: Prop
             <TabsTrigger value="dissidentes" className="gap-1"><AlertCircle size={12} /> Dissidentes</TabsTrigger>
             <TabsTrigger value="temas" className="gap-1"><Tag size={12} /> Temas</TabsTrigger>
             <TabsTrigger value="ranking" className="gap-1"><BarChart3 size={12} /> Ranking</TabsTrigger>
+            <TabsTrigger value="eras" className="gap-1"><History size={12} /> Bolsonaro × Lula</TabsTrigger>
           </TabsList>
 
           {/* ====== Visão geral ====== */}
