@@ -37,7 +37,7 @@ import {
 import { TrendingUp, BarChart2, Map, GitCompareArrows, Activity, SlidersHorizontal, FileText, Radio, Sparkles, MessageSquare, Tags, Vote, Users, Landmark, Lightbulb, Flag, AlertTriangle } from "lucide-react";
 
 const currentYear = new Date().getFullYear();
-const ANOS = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
+const ANOS = Array.from({ length: currentYear - 2018 }, (_, i) => 2019 + i);
 const CLASS_COLORS: Record<string, string> = {
   Governo: "hsl(160, 84%, 39%)",
   Oposição: "hsl(347, 77%, 50%)",
