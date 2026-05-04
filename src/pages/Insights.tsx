@@ -581,7 +581,7 @@ export default function Insights() {
 
             {/* Estados - Brazil Map */}
             <TabsContent value="estados">
-              <BrazilMap ufData={ufData} deputados={rawDeputados as any} senadores={rawSenadores as any} />
+              <BrazilMap ufData={ufData} deputados={rawDeputados as any} senadores={rawSenadores as any} ano={ano} />
             </TabsContent>
 
             <TabsContent value="comparar">
